@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vultr-dns-mcp"
-version = "1.0.1"
+version = "1.0.2"
 description = "A comprehensive Model Context Protocol (MCP) server for managing Vultr DNS records"
 readme = "README.md"
 license = {text = "MIT"}
@@ -82,6 +82,7 @@ Changelog = "https://github.com/rsp2k/vultr-dns-mcp/blob/main/CHANGELOG.md"
 [project.scripts]
 vultr-dns-mcp = "vultr_dns_mcp.cli:main"
 vultr-dns-server = "vultr_dns_mcp.cli:server_command"
+vultr-mcp-server = "vultr_dns_mcp.fastmcp_server:run_server"
 
 [tool.setuptools.packages.find]
 where = ["src"]

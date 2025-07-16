@@ -35,12 +35,12 @@ def create_vultr_mcp_server(api_key: Optional[str] = None) -> FastMCP:
     # Initialize Vultr client
     vultr_client = VultrDNSServer(api_key)
     
-    @mcp.tool
+    @mcp.resource("dns://domains")
     async def list_dns_domains() -> List[Dict[str, Any]]:
         """List all DNS domains in your Vultr account."""
         return await vultr_client.list_domains()
     
-    @mcp.tool
+    @mcp.resource("dns://domains/{domain}")
     async def get_dns_domain(domain: str) -> Dict[str, Any]:
         """Get details for a specific DNS domain.
         
@@ -70,7 +70,7 @@ def create_vultr_mcp_server(api_key: Optional[str] = None) -> FastMCP:
         await vultr_client.delete_domain(domain)
         return {"status": "success", "message": f"Domain {domain} deleted successfully"}
     
-    @mcp.tool
+    @mcp.resource("dns://domains/{domain}/records")
     async def list_dns_records(domain: str) -> List[Dict[str, Any]]:
         """List all DNS records for a domain.
         
@@ -79,7 +79,7 @@ def create_vultr_mcp_server(api_key: Optional[str] = None) -> FastMCP:
         """
         return await vultr_client.list_records(domain)
     
-    @mcp.tool
+    @mcp.resource("dns://domains/{domain}/records/{record_id}")
     async def get_dns_record(domain: str, record_id: str) -> Dict[str, Any]:
         """Get details for a specific DNS record.
         
@@ -161,7 +161,7 @@ def create_vultr_mcp_server(api_key: Optional[str] = None) -> FastMCP:
         """
         return await vultr_client.validate_record(record_type, name, data, ttl, priority)
     
-    @mcp.tool
+    @mcp.resource("dns://domains/{domain}/analysis")
     async def analyze_dns_records(domain: str) -> Dict[str, Any]:
         """Analyze DNS records for a domain and provide recommendations.
         

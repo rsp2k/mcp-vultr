@@ -47,7 +47,7 @@ def server(ctx: click.Context):
     click.echo(f"🔄 Press Ctrl+C to stop")
     
     try:
-        asyncio.run(run_server(api_key))
+        run_server(api_key)
     except KeyboardInterrupt:
         click.echo("\n👋 Server stopped")
     except Exception as e:

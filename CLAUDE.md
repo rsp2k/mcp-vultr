@@ -24,7 +24,9 @@ vultr-dns-mcp domains list
 vultr-dns-mcp records list example.com
 
 # As MCP server
-uv run python -m vultr_dns_mcp
+vultr-mcp-server
+# or using Python module
+python -m vultr_dns_mcp
 ```
 
 ## Development Setup
@@ -135,6 +137,7 @@ vultr-dns-mcp/
 - Built on FastMCP 2.0 framework for better Claude Desktop compatibility
 - All tools use proper async/await patterns
 - 12 comprehensive DNS management tools
+- **Important**: FastMCP's `run()` method is synchronous, not async. Do not wrap with `asyncio.run()`
 
 ### MCP Tools (12 total)
 - Domain management: list, create, delete, get details
@@ -167,7 +170,8 @@ vultr-dns-mcp/
 - **FEATURE**: Added HTTP request timeouts (30s total, 10s connect)
 - **FEATURE**: Full uv package manager integration throughout project
 - **FEATURE**: Created comprehensive Claude Desktop setup documentation
-- **FIX**: Resolved event loop issues with proper async/await patterns
+- **FIX**: Resolved event loop issues - FastMCP 2.0 uses synchronous `run()` method
+- **FEATURE**: Added `vultr-mcp-server` console script entry point for easier Claude Desktop integration
 - **IMPROVEMENT**: Enhanced README with professional structure and badges
 - **IMPROVEMENT**: Added test suite for validating all improvements
 
@@ -233,7 +237,7 @@ Use the GitHub Actions "Publish to PyPI" workflow with manual trigger.
 ### Common Issues
 - **ImportError**: Run `uv sync` or `pip install -e .` from repository root
 - **AsyncioError**: FastMCP handles async properly, ensure tools use `async def`
-- **Event Loop Error**: Use `await` instead of `asyncio.run()` in FastMCP tools
+- **Event Loop Error**: FastMCP 2.0's `run()` method is synchronous - do NOT use `asyncio.run()`
 - **MCP Connection**: Ensure Claude Desktop config uses absolute Python path
 - **API Errors**: Verify VULTR_API_KEY environment variable is set
 
@@ -263,8 +267,8 @@ python -c "from vultr_dns_mcp.server import create_mcp_server"
 {
   "mcpServers": {
     "vultr-dns": {
-      "command": "/path/to/python",
-      "args": ["-m", "vultr_dns_mcp"],
+      "command": "vultr-mcp-server",
+      "args": [],
       "env": {
         "VULTR_API_KEY": "your-api-key"
       }
