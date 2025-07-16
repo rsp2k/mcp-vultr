@@ -24,7 +24,7 @@ vultr-dns-mcp domains list
 vultr-dns-mcp records list example.com
 
 # As MCP server
-uv run python -m vultr_dns_mcp.server --api-key YOUR_API_KEY
+uv run python -m vultr_dns_mcp
 ```
 
 ## Development Setup
@@ -116,27 +116,42 @@ Following FastMCP testing best practices:
 ```
 vultr-dns-mcp/
 ├── src/vultr_dns_mcp/
+│   ├── __init__.py         # Package initialization with exports
+│   ├── __main__.py         # Module entry point for python -m
 │   ├── client.py           # High-level DNS client
-│   ├── server.py           # Core Vultr API client
-│   ├── mcp_server.py       # MCP server implementation
+│   ├── server.py           # Core Vultr API client with exceptions
+│   ├── fastmcp_server.py   # FastMCP server implementation
 │   └── cli.py              # Command-line interface
 ├── tests/                  # Comprehensive test suite
-├── docs/                   # Documentation
-└── pyproject.toml          # Project configuration
+├── CLAUDE.md              # This documentation file
+├── CLAUDE_DESKTOP_SETUP.md # Claude Desktop integration guide
+├── README.md              # Professional project documentation
+└── pyproject.toml         # Project configuration with FastMCP
 ```
 
 ## Key Features
+
+### FastMCP Server Implementation
+- Built on FastMCP 2.0 framework for better Claude Desktop compatibility
+- All tools use proper async/await patterns
+- 12 comprehensive DNS management tools
 
 ### MCP Tools (12 total)
 - Domain management: list, create, delete, get details
 - DNS record operations: CRUD for all record types
 - Validation: Pre-creation validation with suggestions
 - Analysis: Configuration analysis with security recommendations
+- Setup utilities: Quick website and email DNS configuration
 
-### MCP Resources
-- Domain discovery endpoints
-- DNS record resources
-- Configuration capabilities
+### Enhanced Error Handling
+- Custom exception hierarchy: VultrAPIError, VultrAuthError, VultrRateLimitError, etc.
+- HTTP timeout configuration (30s total, 10s connect)
+- Specific error types based on HTTP status codes
+
+### Modern Development Features
+- Full uv package manager integration
+- IPv6 validation using Python's ipaddress module
+- Comprehensive test coverage with improvement validation
 
 ### CLI Commands
 - Domain operations: `domains list|create|delete|get`
@@ -146,9 +161,15 @@ vultr-dns-mcp/
 ## Version History
 
 ### Current: 1.0.1
-- Fixed FastMCP server initialization
-- Corrected MCP server creation for current FastMCP version
-- Simplified initialization to use only name parameter
+- **MAJOR**: Migrated from low-level MCP to FastMCP 2.0 framework
+- **FEATURE**: Added custom exception hierarchy for better error handling
+- **FEATURE**: Replaced basic IPv6 validation with Python's ipaddress module
+- **FEATURE**: Added HTTP request timeouts (30s total, 10s connect)
+- **FEATURE**: Full uv package manager integration throughout project
+- **FEATURE**: Created comprehensive Claude Desktop setup documentation
+- **FIX**: Resolved event loop issues with proper async/await patterns
+- **IMPROVEMENT**: Enhanced README with professional structure and badges
+- **IMPROVEMENT**: Added test suite for validating all improvements
 
 ### 1.0.0 - Initial Release
 - Complete MCP server implementation
@@ -210,10 +231,11 @@ Use the GitHub Actions "Publish to PyPI" workflow with manual trigger.
 ## Troubleshooting
 
 ### Common Issues
-- **ImportError**: Run `pip install -e .` from repository root
-- **AsyncioError**: Ensure `asyncio_mode = "auto"` in pyproject.toml
-- **MockError**: Check that test fixtures are properly configured
-- **API Errors**: Verify VULTR_API_KEY environment variable
+- **ImportError**: Run `uv sync` or `pip install -e .` from repository root
+- **AsyncioError**: FastMCP handles async properly, ensure tools use `async def`
+- **Event Loop Error**: Use `await` instead of `asyncio.run()` in FastMCP tools
+- **MCP Connection**: Ensure Claude Desktop config uses absolute Python path
+- **API Errors**: Verify VULTR_API_KEY environment variable is set
 
 ### Test Debugging
 ```bash
@@ -231,6 +253,28 @@ pytest tests/test_mcp_server.py::TestMCPTools::test_list_dns_domains_tool -vvv
 pytest --collect-only tests/
 python -c "from vultr_dns_mcp.server import create_mcp_server"
 ```
+
+## Claude Desktop Integration
+
+### Quick Setup
+1. Install the package: `pip install vultr-dns-mcp`
+2. Add to Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+```json
+{
+  "mcpServers": {
+    "vultr-dns": {
+      "command": "/path/to/python",
+      "args": ["-m", "vultr_dns_mcp"],
+      "env": {
+        "VULTR_API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+3. Restart Claude Desktop
+
+For detailed setup instructions, see `CLAUDE_DESKTOP_SETUP.md`.
 
 ## Support & Documentation
 
