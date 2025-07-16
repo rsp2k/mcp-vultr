@@ -18,8 +18,8 @@ def run_tests(test_type="all", verbose=False, coverage=False, fast=False):
     # Change to package directory
     package_dir = Path(__file__).parent
     
-    # Base pytest command
-    cmd = ["python", "-m", "pytest"]
+    # Base pytest command using uv run
+    cmd = ["uv", "run", "pytest"]
     
     # Add verbosity
     if verbose:
@@ -73,7 +73,7 @@ def run_tests(test_type="all", verbose=False, coverage=False, fast=False):
         return result.returncode == 0
         
     except FileNotFoundError:
-        print("❌ Error: pytest not found. Install with: pip install pytest")
+        print("❌ Error: pytest not found. Install with: uv add pytest")
         return False
     except Exception as e:
         print(f"❌ Error running tests: {e}")
@@ -86,10 +86,10 @@ def run_linting():
     print("=" * 50)
     
     checks = [
-        (["python", "-m", "black", "--check", "src", "tests"], "Black formatting"),
-        (["python", "-m", "isort", "--check", "src", "tests"], "Import sorting"),
-        (["python", "-m", "flake8", "src", "tests"], "Flake8 linting"),
-        (["python", "-m", "mypy", "src"], "Type checking")
+        (["uv", "run", "black", "--check", "src", "tests"], "Black formatting"),
+        (["uv", "run", "isort", "--check", "src", "tests"], "Import sorting"),
+        (["uv", "run", "flake8", "src", "tests"], "Flake8 linting"),
+        (["uv", "run", "mypy", "src"], "Type checking")
     ]
     
     all_passed = True
@@ -209,9 +209,9 @@ def main():
     if success:
         print("🎉 All checks passed!")
         print("\n📚 Next steps:")
-        print("  • Run 'python -m build' to build the package")
-        print("  • Run 'python -m twine check dist/*' to validate")
-        print("  • Upload to PyPI with 'python -m twine upload dist/*'")
+        print("  • Run 'uv build' to build the package")
+        print("  • Run 'uv run twine check dist/*' to validate")
+        print("  • Upload to PyPI with 'uv run twine upload dist/*'")
     else:
         print("❌ Some checks failed. Please fix the issues above.")
         sys.exit(1)

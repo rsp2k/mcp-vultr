@@ -3,7 +3,14 @@
 import pytest
 import httpx
 from unittest.mock import AsyncMock, patch
-from vultr_dns_mcp.server import VultrDNSServer
+from vultr_dns_mcp.server import (
+    VultrDNSServer,
+    VultrAPIError,
+    VultrAuthError,
+    VultrRateLimitError,
+    VultrResourceNotFoundError,
+    VultrValidationError
+)
 
 
 @pytest.mark.unit
@@ -74,10 +81,11 @@ class TestVultrDNSServer:
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.request.return_value = mock_response
             
-            with pytest.raises(Exception) as exc_info:
+            with pytest.raises(VultrValidationError) as exc_info:
                 await server._make_request("GET", "/test")
             
-            assert "Vultr API error 400: Bad Request" in str(exc_info.value)
+            assert exc_info.value.status_code == 400
+            assert "Bad Request" in str(exc_info.value)
     
     @pytest.mark.asyncio
     async def test_make_request_error_401(self, mock_api_key):
@@ -91,10 +99,11 @@ class TestVultrDNSServer:
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.request.return_value = mock_response
             
-            with pytest.raises(Exception) as exc_info:
+            with pytest.raises(VultrAuthError) as exc_info:
                 await server._make_request("GET", "/test")
             
-            assert "Vultr API error 401: Unauthorized" in str(exc_info.value)
+            assert exc_info.value.status_code == 401
+            assert "Invalid API key" in str(exc_info.value)
     
     @pytest.mark.asyncio
     async def test_make_request_error_500(self, mock_api_key):
@@ -108,10 +117,11 @@ class TestVultrDNSServer:
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.request.return_value = mock_response
             
-            with pytest.raises(Exception) as exc_info:
+            with pytest.raises(VultrAPIError) as exc_info:
                 await server._make_request("GET", "/test")
             
-            assert "Vultr API error 500: Internal Server Error" in str(exc_info.value)
+            assert exc_info.value.status_code == 500
+            assert "Internal Server Error" in str(exc_info.value)
 
 
 @pytest.mark.unit
@@ -448,10 +458,105 @@ class TestErrorScenarios:
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.request.return_value = mock_response
             
-            with pytest.raises(Exception) as exc_info:
+            with pytest.raises(VultrRateLimitError) as exc_info:
                 await server._make_request("GET", "/domains")
             
+            assert exc_info.value.status_code == 429
             assert "Rate limit exceeded" in str(exc_info.value)
+    
+    @pytest.mark.asyncio
+    async def test_not_found_error(self, mock_api_key):
+        """Test handling of 404 Not Found error."""
+        server = VultrDNSServer(mock_api_key)
+        
+        mock_response = AsyncMock()
+        mock_response.status_code = 404
+        mock_response.text = "Domain not found"
+        
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_client.return_value.__aenter__.return_value.request.return_value = mock_response
+            
+            with pytest.raises(VultrResourceNotFoundError) as exc_info:
+                await server._make_request("GET", "/domains/nonexistent.com")
+            
+            assert exc_info.value.status_code == 404
+            assert "Resource not found" in str(exc_info.value)
+    
+    @pytest.mark.asyncio
+    async def test_forbidden_error(self, mock_api_key):
+        """Test handling of 403 Forbidden error."""
+        server = VultrDNSServer(mock_api_key)
+        
+        mock_response = AsyncMock()
+        mock_response.status_code = 403
+        mock_response.text = "Forbidden"
+        
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_client.return_value.__aenter__.return_value.request.return_value = mock_response
+            
+            with pytest.raises(VultrAuthError) as exc_info:
+                await server._make_request("GET", "/domains")
+            
+            assert exc_info.value.status_code == 403
+            assert "Insufficient permissions" in str(exc_info.value)
+    
+    @pytest.mark.asyncio
+    async def test_validation_error_422(self, mock_api_key):
+        """Test handling of 422 Unprocessable Entity error."""
+        server = VultrDNSServer(mock_api_key)
+        
+        mock_response = AsyncMock()
+        mock_response.status_code = 422
+        mock_response.text = "Invalid domain format"
+        
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_client.return_value.__aenter__.return_value.request.return_value = mock_response
+            
+            with pytest.raises(VultrValidationError) as exc_info:
+                await server._make_request("POST", "/domains")
+            
+            assert exc_info.value.status_code == 422
+            assert "Invalid domain format" in str(exc_info.value)
+
+
+@pytest.mark.unit
+class TestExceptionProperties:
+    """Test custom exception properties and behavior."""
+    
+    def test_vultr_api_error_properties(self):
+        """Test VultrAPIError has correct properties."""
+        error = VultrAPIError(500, "Server Error")
+        assert error.status_code == 500
+        assert error.message == "Server Error"
+        assert str(error) == "Vultr API error 500: Server Error"
+    
+    def test_vultr_auth_error_inheritance(self):
+        """Test VultrAuthError inherits from VultrAPIError."""
+        error = VultrAuthError(401, "Unauthorized")
+        assert isinstance(error, VultrAPIError)
+        assert error.status_code == 401
+        assert error.message == "Unauthorized"
+    
+    def test_vultr_rate_limit_error_inheritance(self):
+        """Test VultrRateLimitError inherits from VultrAPIError."""
+        error = VultrRateLimitError(429, "Too Many Requests")
+        assert isinstance(error, VultrAPIError)
+        assert error.status_code == 429
+        assert error.message == "Too Many Requests"
+    
+    def test_vultr_not_found_error_inheritance(self):
+        """Test VultrResourceNotFoundError inherits from VultrAPIError."""
+        error = VultrResourceNotFoundError(404, "Not Found")
+        assert isinstance(error, VultrAPIError)
+        assert error.status_code == 404
+        assert error.message == "Not Found"
+    
+    def test_vultr_validation_error_inheritance(self):
+        """Test VultrValidationError inherits from VultrAPIError."""
+        error = VultrValidationError(400, "Bad Request")
+        assert isinstance(error, VultrAPIError)
+        assert error.status_code == 400
+        assert error.message == "Bad Request"
 
 
 if __name__ == "__main__":

@@ -23,7 +23,16 @@ Main functions:
     run_server: Convenience function to run the MCP server
 """
 
-from .server import VultrDNSServer, create_mcp_server, run_server
+from .server import (
+    VultrDNSServer, 
+    create_mcp_server, 
+    run_server,
+    VultrAPIError,
+    VultrAuthError,
+    VultrRateLimitError,
+    VultrResourceNotFoundError,
+    VultrValidationError
+)
 from .client import VultrDNSClient
 from ._version import __version__, __version_info__
 
@@ -32,6 +41,11 @@ __all__ = [
     "VultrDNSClient", 
     "create_mcp_server",
     "run_server",
+    "VultrAPIError",
+    "VultrAuthError",
+    "VultrRateLimitError", 
+    "VultrResourceNotFoundError",
+    "VultrValidationError",
     "__version__",
     "__version_info__"
 ]

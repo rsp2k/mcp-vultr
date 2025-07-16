@@ -5,6 +5,7 @@ This module contains the main VultrDNSServer class and MCP server implementation
 for managing DNS records through the Vultr API.
 """
 
+import ipaddress
 import os
 import re
 from typing import Any, Dict, List, Optional
@@ -14,6 +15,35 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Resource, Tool, TextContent
 from pydantic import BaseModel
+
+
+class VultrAPIError(Exception):
+    """Base exception for Vultr API errors."""
+    
+    def __init__(self, status_code: int, message: str):
+        self.status_code = status_code
+        self.message = message
+        super().__init__(f"Vultr API error {status_code}: {message}")
+
+
+class VultrAuthError(VultrAPIError):
+    """Raised when API authentication fails (401, 403)."""
+    pass
+
+
+class VultrRateLimitError(VultrAPIError):
+    """Raised when API rate limit is exceeded (429)."""
+    pass
+
+
+class VultrResourceNotFoundError(VultrAPIError):
+    """Raised when requested resource is not found (404)."""
+    pass
+
+
+class VultrValidationError(VultrAPIError):
+    """Raised when request validation fails (400, 422)."""
+    pass
 
 
 class VultrDNSServer:
@@ -48,7 +78,10 @@ class VultrDNSServer:
         """Make an HTTP request to the Vultr API."""
         url = f"{self.API_BASE}{endpoint}"
         
-        async with httpx.AsyncClient() as client:
+        # Configure timeout: 30 seconds total, 10 seconds to connect
+        timeout = httpx.Timeout(30.0, connect=10.0)
+        
+        async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.request(
                 method=method,
                 url=url,
@@ -57,7 +90,19 @@ class VultrDNSServer:
             )
             
             if response.status_code not in [200, 201, 204]:
-                raise Exception(f"Vultr API error {response.status_code}: {response.text}")
+                # Raise specific exceptions based on status code
+                if response.status_code == 401:
+                    raise VultrAuthError(response.status_code, "Invalid API key")
+                elif response.status_code == 403:
+                    raise VultrAuthError(response.status_code, "Insufficient permissions")
+                elif response.status_code == 404:
+                    raise VultrResourceNotFoundError(response.status_code, "Resource not found")
+                elif response.status_code == 429:
+                    raise VultrRateLimitError(response.status_code, "Rate limit exceeded")
+                elif response.status_code in [400, 422]:
+                    raise VultrValidationError(response.status_code, response.text)
+                else:
+                    raise VultrAPIError(response.status_code, response.text)
             
             if response.status_code == 204:
                 return {}
@@ -592,15 +637,32 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                 
                 # Record-specific validation
                 if record_type == 'A':
-                    ipv4_pattern = r'^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
-                    if not re.match(ipv4_pattern, data):
+                    try:
+                        ipaddress.IPv4Address(data)
+                    except ipaddress.AddressValueError:
                         validation_result["valid"] = False
                         validation_result["errors"].append("Invalid IPv4 address format")
                 
                 elif record_type == 'AAAA':
-                    if '::' in data and data.count('::') > 1:
+                    try:
+                        ipv6_addr = ipaddress.IPv6Address(data)
+                        # Add helpful suggestions for IPv6 addresses
+                        if ipv6_addr.ipv4_mapped:
+                            validation_result["suggestions"].append("Consider using a native IPv6 address instead of IPv4-mapped format")
+                        elif ipv6_addr.compressed != data:
+                            validation_result["suggestions"].append(f"Consider using compressed format: {ipv6_addr.compressed}")
+                        
+                        # Check for common special addresses
+                        if ipv6_addr.is_loopback:
+                            validation_result["warnings"].append("This is the IPv6 loopback address (::1)")
+                        elif ipv6_addr.is_link_local:
+                            validation_result["warnings"].append("This is an IPv6 link-local address (fe80::/10)")
+                        elif ipv6_addr.is_private:
+                            validation_result["warnings"].append("This is an IPv6 private address")
+                            
+                    except ipaddress.AddressValueError as e:
                         validation_result["valid"] = False
-                        validation_result["errors"].append("Invalid IPv6 address: multiple :: sequences")
+                        validation_result["errors"].append(f"Invalid IPv6 address: {str(e)}")
                 
                 elif record_type == 'CNAME':
                     if name == '@' or name == '':

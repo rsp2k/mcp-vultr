@@ -361,6 +361,94 @@ class TestValidationLogic:
                 "priority": 10
             })
             assert result is not None
+    
+    @pytest.mark.asyncio
+    async def test_aaaa_record_validation(self, mcp_server):
+        """Test comprehensive AAAA (IPv6) record validation logic."""
+        async with ClientSession(mcp_server) as session:
+            # Valid IPv6 addresses
+            valid_ipv6_addresses = [
+                "2001:db8::1",                    # Standard format
+                "2001:0db8:0000:0000:0000:0000:0000:0001",  # Full format
+                "::",                             # All zeros
+                "::1",                            # Loopback
+                "fe80::1",                        # Link-local
+                "2001:db8:85a3::8a2e:370:7334",  # Mixed compression
+                "::ffff:192.0.2.1",              # IPv4-mapped
+            ]
+            
+            for ipv6_addr in valid_ipv6_addresses:
+                result = await session.call_tool("validate_dns_record", {
+                    "record_type": "AAAA",
+                    "name": "www",
+                    "data": ipv6_addr
+                })
+                assert result is not None
+                # Parse the result to check validation passed
+                import json
+                parsed = json.loads(result[0].text.replace("'", '"'))
+                assert parsed["validation"]["valid"] == True, f"Failed to validate {ipv6_addr}"
+            
+            # Invalid IPv6 addresses
+            invalid_ipv6_addresses = [
+                "2001:db8::1::2",                 # Multiple ::
+                "2001:db8:85a3::8a2e::7334",      # Multiple ::
+                "gggg::1",                        # Invalid hex
+                "2001:db8:85a3:0:0:8a2e:370g:7334",  # Invalid character
+                "2001:db8:85a3:0:0:8a2e:370:7334:extra",  # Too many groups
+                "",                               # Empty
+                "192.168.1.1",                   # IPv4 instead of IPv6
+            ]
+            
+            for ipv6_addr in invalid_ipv6_addresses:
+                result = await session.call_tool("validate_dns_record", {
+                    "record_type": "AAAA", 
+                    "name": "www",
+                    "data": ipv6_addr
+                })
+                assert result is not None
+                # Parse the result to check validation failed
+                import json
+                parsed = json.loads(result[0].text.replace("'", '"'))
+                assert parsed["validation"]["valid"] == False, f"Should have failed to validate {ipv6_addr}"
+    
+    @pytest.mark.asyncio
+    async def test_ipv6_suggestions_and_warnings(self, mcp_server):
+        """Test that IPv6 validation provides helpful suggestions and warnings."""
+        async with ClientSession(mcp_server) as session:
+            # Test IPv4-mapped suggestion
+            result = await session.call_tool("validate_dns_record", {
+                "record_type": "AAAA",
+                "name": "www", 
+                "data": "::ffff:192.0.2.1"
+            })
+            assert result is not None
+            import json
+            parsed = json.loads(result[0].text.replace("'", '"'))
+            suggestions = parsed["validation"]["suggestions"]
+            assert any("IPv4-mapped" in s for s in suggestions)
+            
+            # Test compression suggestion
+            result = await session.call_tool("validate_dns_record", {
+                "record_type": "AAAA",
+                "name": "www",
+                "data": "2001:0db8:0000:0000:0000:0000:0000:0001"
+            })
+            assert result is not None
+            parsed = json.loads(result[0].text.replace("'", '"'))
+            suggestions = parsed["validation"]["suggestions"]
+            assert any("compressed format" in s for s in suggestions)
+            
+            # Test loopback warning
+            result = await session.call_tool("validate_dns_record", {
+                "record_type": "AAAA",
+                "name": "www",
+                "data": "::1"
+            })
+            assert result is not None
+            parsed = json.loads(result[0].text.replace("'", '"'))
+            warnings = parsed["validation"]["warnings"]
+            assert any("loopback" in w for w in warnings)
 
 
 if __name__ == "__main__":

@@ -1,177 +1,253 @@
-# Vultr DNS MCP Test Suite - Complete Fix Package
+# Vultr DNS MCP
 
-## 🎯 Quick Solution
+A comprehensive Model Context Protocol (MCP) server for managing Vultr DNS records through natural language interfaces.
 
-I've analyzed the broken tests in the vultr-dns-mcp repository and created a complete fix package. Here's how to apply it:
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
 
-### One-Command Fix (if you have access to this directory):
+## Features
+
+- **Complete MCP Server**: Full Model Context Protocol implementation with 12 tools and 3 resources
+- **Comprehensive DNS Management**: Support for all major record types (A, AAAA, CNAME, MX, TXT, NS, SRV)
+- **Intelligent Validation**: Pre-creation validation with helpful suggestions and warnings
+- **Configuration Analysis**: DNS setup analysis with security recommendations
+- **CLI Interface**: Complete command-line tool for direct DNS operations
+- **High-Level Client**: Convenient Python API for common operations
+- **Modern Development**: Fast development workflow with uv support
+
+## Quick Start
+
+### Installation
+
 ```bash
-# From your vultr-dns-mcp repository root:
-bash /home/rpm/claude/vultr-dns-mcp-fix/fix_tests.sh
+# Using uv (recommended - fast and modern)
+uv add vultr-dns-mcp
+
+# Or using pip
+pip install vultr-dns-mcp
 ```
 
-### Manual Fix (recommended):
+### Basic Usage
+
 ```bash
-# 1. Navigate to your repository
-cd /path/to/vultr-dns-mcp
+# Set your Vultr API key
+export VULTR_API_KEY="your-api-key"
 
-# 2. Backup current files
-cp tests/conftest.py tests/conftest.py.backup
-cp tests/test_mcp_server.py tests/test_mcp_server.py.backup
+# List domains
+vultr-dns-mcp domains list
 
-# 3. Copy fixed files
-cp /home/rpm/claude/vultr-dns-mcp-fix/fixed_conftest.py tests/conftest.py
-cp /home/rpm/claude/vultr-dns-mcp-fix/fixed_test_mcp_server.py tests/test_mcp_server.py
+# List DNS records
+vultr-dns-mcp records list example.com
 
-# 4. Install dependencies
+# Set up basic website DNS
+vultr-dns-mcp setup-website example.com 192.168.1.100
+
+# Run as MCP server
+uv run python -m vultr_dns_mcp.server
+```
+
+### Python API
+
+```python
+import asyncio
+from vultr_dns_mcp import VultrDNSClient
+
+async def main():
+    client = VultrDNSClient("your-api-key")
+    
+    # List domains
+    domains = await client.domains()
+    
+    # Add DNS records
+    await client.add_a_record("example.com", "www", "192.168.1.100")
+    await client.add_mx_record("example.com", "@", "mail.example.com", 10)
+    
+    # Get domain summary
+    summary = await client.get_domain_summary("example.com")
+    print(f"Domain has {summary['total_records']} records")
+
+asyncio.run(main())
+```
+
+### MCP Integration
+
+This package provides a complete MCP server that can be integrated with MCP-compatible clients:
+
+```python
+from vultr_dns_mcp import create_mcp_server, run_server
+
+# Create server
+server = create_mcp_server("your-api-key")
+
+# Run server
+await run_server("your-api-key")
+```
+
+## Development
+
+### Prerequisites
+
+- Python 3.10+
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- Vultr API key
+
+### Setup with uv (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/rsp2k/vultr-dns-mcp.git
+cd vultr-dns-mcp
+
+# Install dependencies
+uv sync --extra dev
+
+# Run tests
+uv run pytest
+
+# Run comprehensive test suite
+uv run python run_tests.py --all-checks
+
+# Format code
+uv run black src tests
+uv run isort src tests
+
+# Type checking
+uv run mypy src
+```
+
+### Setup with pip (Traditional)
+
+```bash
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install in development mode
 pip install -e .[dev]
 
-# 5. Run tests
-pytest tests/ -v
+# Run tests
+pytest
+
+# Run comprehensive test suite
+python run_tests.py --all-checks
 ```
 
-## 🔍 Problems Identified & Fixed
+## MCP Tools Available
 
-| Issue | Severity | Status | Fix Applied |
-|-------|----------|--------|------------|
-| Import path problems | 🔴 Critical | ✅ Fixed | Updated all import statements |
-| Async/await patterns | 🔴 Critical | ✅ Fixed | Fixed FastMCP Client usage |
-| Mock configuration | 🟡 Medium | ✅ Fixed | Complete API response mocks |
-| Test data structure | 🟡 Medium | ✅ Fixed | Updated fixtures to match API |
-| Error handling gaps | 🟢 Low | ✅ Fixed | Added comprehensive error tests |
+| Tool | Description |
+|------|-------------|
+| `list_dns_domains` | List all DNS domains |
+| `get_dns_domain` | Get domain details |
+| `create_dns_domain` | Create new domain |
+| `delete_dns_domain` | Delete domain and all records |
+| `list_dns_records` | List records for a domain |
+| `get_dns_record` | Get specific record details |
+| `create_dns_record` | Create new DNS record |
+| `update_dns_record` | Update existing record |
+| `delete_dns_record` | Delete DNS record |
+| `validate_dns_record` | Validate record before creation |
+| `analyze_dns_records` | Analyze domain configuration |
 
-## 📁 Files in This Fix Package
-
-### Core Fixes
-- **`fixed_conftest.py`** - Updated test configuration with proper mocks
-- **`fixed_test_mcp_server.py`** - All MCP server tests with correct async patterns
-- **`fix_tests.sh`** - Automated installer script
-
-### Documentation
-- **`FINAL_SOLUTION.md`** - Complete solution overview
-- **`COMPLETE_FIX_GUIDE.md`** - Detailed fix documentation
-
-### Utilities
-- **`analyze_test_issues.py`** - Issue analysis script
-- **`comprehensive_test_fix.py`** - Complete fix generator
-- **`create_fixes.py`** - Simple fix creator
-
-## 🚀 What Gets Fixed
-
-### Before (Broken):
-```python
-# Incorrect async pattern
-async def test_tool(self, mcp_server):
-    result = await client.call_tool("tool_name", {})
-    # ❌ Missing proper async context
-    # ❌ No mock configuration  
-    # ❌ Incomplete error handling
-```
-
-### After (Fixed):
-```python
-@pytest.mark.asyncio
-async def test_tool(self, mock_vultr_client):
-    with patch('vultr_dns_mcp.server.VultrDNSServer', return_value=mock_vultr_client):
-        server = create_mcp_server("test-api-key")
-        async with Client(server) as client:  # ✅ Proper context manager
-            result = await client.call_tool("tool_name", {})
-            assert result is not None  # ✅ Proper assertions
-            mock_vultr_client.method.assert_called_once()  # ✅ Mock verification
-```
-
-## 🧪 Expected Test Results
-
-After applying the fixes, you should see:
+## CLI Commands
 
 ```bash
-$ pytest tests/test_mcp_server.py -v
+# Domain management
+vultr-dns-mcp domains list
+vultr-dns-mcp domains info example.com
+vultr-dns-mcp domains create newdomain.com 192.168.1.100
 
-tests/test_mcp_server.py::TestMCPServerBasics::test_server_creation PASSED
-tests/test_mcp_server.py::TestMCPTools::test_list_dns_domains_tool PASSED  
-tests/test_mcp_server.py::TestMCPTools::test_get_dns_domain_tool PASSED
-tests/test_mcp_server.py::TestMCPTools::test_create_dns_domain_tool PASSED
-tests/test_mcp_server.py::TestMCPResources::test_domains_resource PASSED
-tests/test_mcp_server.py::TestMCPIntegration::test_complete_domain_workflow PASSED
-tests/test_mcp_server.py::TestValidationLogic::test_a_record_validation PASSED
+# Record management
+vultr-dns-mcp records list example.com
+vultr-dns-mcp records add example.com A www 192.168.1.100
+vultr-dns-mcp records delete example.com record-id
 
-========================== 25 passed in 2.34s ==========================
+# Setup utilities
+vultr-dns-mcp setup-website example.com 192.168.1.100
+vultr-dns-mcp setup-email example.com mail.example.com
+
+# Start MCP server
+vultr-dns-mcp server
 ```
 
-## 🔧 Key Technical Fixes
+## Testing
 
-### 1. Fixed Async Patterns
-- Proper `@pytest.mark.asyncio` usage
-- Correct `async with Client(server) as client:` context managers
-- Fixed await patterns throughout
+This project follows FastMCP testing best practices with comprehensive test coverage:
 
-### 2. Improved Mock Configuration  
-- Complete `AsyncMock` setup with proper specs
-- All Vultr API methods properly mocked
-- Realistic API response structures
+```bash
+# Run all tests (uv)
+uv run pytest
 
-### 3. Better Error Handling
-- Comprehensive error scenario testing
-- Graceful handling of API failures
-- Proper exception testing patterns
+# Run specific test categories
+uv run pytest -m unit          # Unit tests
+uv run pytest -m integration   # Integration tests  
+uv run pytest -m mcp          # MCP-specific tests
 
-### 4. Updated Dependencies
-- Fixed pytest-asyncio configuration
-- Proper FastMCP version requirements
-- Added missing test dependencies
+# With coverage
+uv run pytest --cov=vultr_dns_mcp --cov-report=html
 
-## 🆘 Troubleshooting
+# Full validation suite
+uv run python run_tests.py --all-checks
+```
 
-### If tests still fail:
+## Contributing
 
-1. **Check installation**:
-   ```bash
-   pip list | grep -E "(pytest|fastmcp|httpx)"
-   ```
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Run the test suite (`uv run python run_tests.py --all-checks`)
+5. Commit your changes (`git commit -m 'Add amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
 
-2. **Verify imports**:
-   ```bash
-   python -c "from vultr_dns_mcp.server import create_mcp_server"
-   ```
+## Error Handling
 
-3. **Run single test**:
-   ```bash
-   pytest tests/test_mcp_server.py::TestMCPTools::test_list_dns_domains_tool -vvv
-   ```
+The package provides specific exception types for better error handling:
 
-4. **Check pytest config**:
-   ```bash
-   pytest --collect-only tests/
-   ```
+```python
+from vultr_dns_mcp import (
+    VultrAPIError,
+    VultrAuthError,
+    VultrRateLimitError,
+    VultrResourceNotFoundError,
+    VultrValidationError
+)
 
-### Common Issues:
-- **ImportError**: Run `pip install -e .` from repository root
-- **AsyncioError**: Ensure `asyncio_mode = "auto"` in pyproject.toml
-- **MockError**: Check that fixed_conftest.py was properly copied
+try:
+    await client.get_domain("example.com")
+except VultrAuthError:
+    print("Invalid API key or insufficient permissions")
+except VultrResourceNotFoundError:
+    print("Domain not found")
+except VultrRateLimitError:
+    print("Rate limit exceeded, please try again later")
+except VultrAPIError as e:
+    print(f"API error {e.status_code}: {e.message}")
+```
 
-## 📊 Success Metrics
+## Configuration
 
-You'll know the fix worked when:
-- ✅ Zero test failures in MCP test suite
-- ✅ All async tests run without warnings  
-- ✅ Mock verification passes
-- ✅ Coverage >80% on core modules
-- ✅ Integration tests complete end-to-end
+Set your Vultr API key via environment variable:
 
-## 🎉 Summary
+```bash
+export VULTR_API_KEY="your-vultr-api-key"
+```
 
-This fix package addresses all the major issues in the vultr-dns-mcp test suite:
+Or pass directly to the client:
 
-1. **Fixes critical async/await patterns** that were causing test failures
-2. **Provides comprehensive mock configuration** matching the Vultr API
-3. **Adds proper error handling tests** for robustness
-4. **Updates all import statements** to work correctly
-5. **Includes complete documentation** for maintenance
+```python
+client = VultrDNSClient("your-api-key")
+server = create_mcp_server("your-api-key")
+```
 
-The fixed test suite follows FastMCP best practices and provides reliable, maintainable tests for the Vultr DNS MCP server functionality.
+## License
 
----
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-**Quick Start**: Copy `fixed_conftest.py` and `fixed_test_mcp_server.py` to your `tests/` directory, install dependencies with `pip install -e .[dev]`, and run `pytest tests/ -v`. 
+## Links
 
-**Need Help?** Check `FINAL_SOLUTION.md` for detailed instructions or `COMPLETE_FIX_GUIDE.md` for comprehensive documentation.
+- [GitHub Repository](https://github.com/rsp2k/vultr-dns-mcp)
+- [PyPI Package](https://pypi.org/project/vultr-dns-mcp/)
+- [Vultr API Documentation](https://www.vultr.com/api/)
+- [Model Context Protocol](https://modelcontextprotocol.io/)
+- [uv Package Manager](https://docs.astral.sh/uv/)

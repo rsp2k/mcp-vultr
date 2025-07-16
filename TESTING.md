@@ -104,32 +104,41 @@ def mock_vultr_client():
 
 ## 🚀 Running Tests
 
-### Using pytest directly:
+### Using uv (recommended):
 ```bash
 # All tests
-pytest
+uv run pytest
 
 # Specific categories
-pytest -m unit
-pytest -m integration  
-pytest -m mcp
-pytest -m "not slow"
+uv run pytest -m unit
+uv run pytest -m integration  
+uv run pytest -m mcp
+uv run pytest -m "not slow"
 
 # With coverage
-pytest --cov=vultr_dns_mcp --cov-report=html
+uv run pytest --cov=vultr_dns_mcp --cov-report=html
 ```
 
 ### Using the test runner:
 ```bash
-# Comprehensive test runner
-python run_tests.py
+# Comprehensive test runner (uv)
+uv run python run_tests.py
 
 # Specific test types
-python run_tests.py --type unit --verbose
-python run_tests.py --type mcp --coverage
-python run_tests.py --fast  # Skip slow tests
+uv run python run_tests.py --type unit --verbose
+uv run python run_tests.py --type mcp --coverage
+uv run python run_tests.py --fast  # Skip slow tests
 
 # Full validation
+uv run python run_tests.py --all-checks
+```
+
+### Traditional approach (fallback):
+```bash
+# All tests
+pytest
+
+# Test runner
 python run_tests.py --all-checks
 ```
 
