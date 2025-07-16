@@ -139,12 +139,13 @@ vultr-dns-mcp/
 - 12 comprehensive DNS management tools
 - **Important**: FastMCP's `run()` method is synchronous, not async. Do not wrap with `asyncio.run()`
 
-### MCP Tools (12 total)
+### MCP Tools (17 total)
 - Domain management: list, create, delete, get details
 - DNS record operations: CRUD for all record types
 - Validation: Pre-creation validation with suggestions
 - Analysis: Configuration analysis with security recommendations
 - Setup utilities: Quick website and email DNS configuration
+- Resource access tools: Tool wrappers for Claude Desktop compatibility
 
 ### Enhanced Error Handling
 - Custom exception hierarchy: VultrAPIError, VultrAuthError, VultrRateLimitError, etc.

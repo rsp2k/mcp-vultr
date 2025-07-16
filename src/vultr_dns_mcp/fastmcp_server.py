@@ -190,6 +190,60 @@ def create_vultr_mcp_server(api_key: Optional[str] = None) -> FastMCP:
         
         return records
     
+    # Tool wrappers for resources (for compatibility with Claude Desktop)
+    @mcp.tool
+    async def list_domains_tool() -> List[Dict[str, Any]]:
+        """List all DNS domains in your Vultr account.
+        
+        This is a tool wrapper for the dns://domains resource.
+        """
+        return await list_dns_domains()
+    
+    @mcp.tool
+    async def get_domain_tool(domain: str) -> Dict[str, Any]:
+        """Get details for a specific DNS domain.
+        
+        Args:
+            domain: The domain name to get details for
+            
+        This is a tool wrapper for the dns://domains/{domain} resource.
+        """
+        return await get_dns_domain(domain)
+    
+    @mcp.tool
+    async def list_records_tool(domain: str) -> List[Dict[str, Any]]:
+        """List all DNS records for a domain.
+        
+        Args:
+            domain: The domain name to list records for
+            
+        This is a tool wrapper for the dns://domains/{domain}/records resource.
+        """
+        return await list_dns_records(domain)
+    
+    @mcp.tool
+    async def get_record_tool(domain: str, record_id: str) -> Dict[str, Any]:
+        """Get details for a specific DNS record.
+        
+        Args:
+            domain: The domain name
+            record_id: The record ID to get details for
+            
+        This is a tool wrapper for the dns://domains/{domain}/records/{record_id} resource.
+        """
+        return await get_dns_record(domain, record_id)
+    
+    @mcp.tool
+    async def analyze_domain_tool(domain: str) -> Dict[str, Any]:
+        """Analyze DNS configuration for a domain and provide recommendations.
+        
+        Args:
+            domain: The domain name to analyze
+            
+        This is a tool wrapper for the dns://domains/{domain}/analysis resource.
+        """
+        return await analyze_dns_records(domain)
+    
     return mcp
 
 

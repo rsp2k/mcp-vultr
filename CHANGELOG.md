@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2025-01-16
+
+### Added
+- Tool wrappers for resource access to ensure Claude Desktop compatibility
+  - `list_domains_tool()` - wrapper for dns://domains resource
+  - `get_domain_tool()` - wrapper for dns://domains/{domain} resource
+  - `list_records_tool()` - wrapper for dns://domains/{domain}/records resource
+  - `get_record_tool()` - wrapper for dns://domains/{domain}/records/{record_id} resource
+  - `analyze_domain_tool()` - wrapper for dns://domains/{domain}/analysis resource
+
+### Technical
+- Hybrid approach: resources for direct MCP access, tools for Claude Desktop compatibility
+- Maintains both patterns to support different MCP client implementations
+
 ## [1.0.2] - 2025-01-16
 
 ### Changed
