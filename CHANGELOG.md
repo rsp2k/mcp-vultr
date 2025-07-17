@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-01-16
+
+### Added
+- **Zone File Import/Export** - Major new feature for DNS backup and migration
+  - `export_zone_file_tool(domain)` - Export domain records as standard DNS zone file format
+  - `import_zone_file_tool(domain, zone_data, dry_run)` - Import DNS records from zone file format
+  - `dns://domains/{domain}/zone-file` resource for zone file access
+  - Support for all standard DNS record types (A, AAAA, CNAME, MX, TXT, NS, SRV)
+  - Comprehensive zone file parsing with proper handling of $TTL and $ORIGIN directives
+  - Dry-run mode for import validation without making changes
+  - Standard zone file format compliance for interoperability
+
+### Features
+- **Backup & Migration**: Easy DNS configuration backup and restoration
+- **Bulk Operations**: Import multiple records at once from zone files
+- **Validation**: Pre-import validation with detailed error reporting
+- **Compatibility**: Standard zone file format works with BIND, PowerDNS, and other DNS servers
+
+### Technical
+- Added comprehensive zone file parsing engine with quoted string handling
+- Proper record type detection and formatting
+- Error handling with line-by-line validation feedback
+- Support for both tool and resource access patterns
+
 ## [1.0.4] - 2025-01-16
 
 ### Fixed

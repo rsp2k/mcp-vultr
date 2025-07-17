@@ -190,6 +190,15 @@ def create_vultr_mcp_server(api_key: Optional[str] = None) -> FastMCP:
         
         return records
     
+    @mcp.resource("dns://domains/{domain}/zone-file")
+    async def export_zone_file_resource(domain: str) -> str:
+        """Export domain records as standard DNS zone file format.
+        
+        Args:
+            domain: The domain name to export
+        """
+        return await vultr_client.export_zone_file(domain)
+    
     # Tool wrappers for resources (for compatibility with Claude Desktop)
     @mcp.tool
     async def list_domains_tool() -> List[Dict[str, Any]]:
@@ -243,6 +252,32 @@ def create_vultr_mcp_server(api_key: Optional[str] = None) -> FastMCP:
         This is a tool wrapper for the dns://domains/{domain}/analysis resource.
         """
         return await vultr_client.analyze_records(domain)
+    
+    @mcp.tool
+    async def export_zone_file_tool(domain: str) -> str:
+        """Export domain records as standard DNS zone file format.
+        
+        Args:
+            domain: The domain name to export
+            
+        Returns:
+            DNS zone file content as string
+        """
+        return await vultr_client.export_zone_file(domain)
+    
+    @mcp.tool
+    async def import_zone_file_tool(domain: str, zone_data: str, dry_run: bool = False) -> List[Dict[str, Any]]:
+        """Import DNS records from zone file format.
+        
+        Args:
+            domain: The domain name to import records to
+            zone_data: DNS zone file content as string
+            dry_run: If True, only validate and return what would be created without making changes
+            
+        Returns:
+            List of created records or validation results
+        """
+        return await vultr_client.import_zone_file(domain, zone_data, dry_run)
     
     return mcp
 
