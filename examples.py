@@ -155,10 +155,10 @@ async def main():
     
     print("\n" + "=" * 50)
     print("📚 More Information:")
-    print("  • Documentation: https://vultr-dns-mcp.readthedocs.io/")
-    print("  • PyPI: https://pypi.org/project/vultr-dns-mcp/")
-    print("  • CLI Help: vultr-dns-mcp --help")
-    print("  • Start MCP Server: vultr-dns-mcp server")
+    print("  • Documentation: https://mcp-vultr.readthedocs.io/")
+    print("  • PyPI: https://pypi.org/project/mcp-vultr/")
+    print("  • CLI Help: mcp-vultr --help")
+    print("  • Start MCP Server: mcp-vultr server")
 
 
 if __name__ == "__main__":

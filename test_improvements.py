@@ -127,7 +127,7 @@ def simulate_domain_query():
     print()
     print("💡 To query real domains, set VULTR_API_KEY and run:")
     print("   export VULTR_API_KEY='your-api-key'")
-    print("   uv run vultr-dns-mcp domains list")
+    print("   uv run mcp-vultr domains list")
     print()
 
 if __name__ == "__main__":
@@ -140,4 +140,4 @@ if __name__ == "__main__":
     simulate_domain_query()
     
     print("✅ All improvement tests completed successfully!")
-    print("\n🎉 Ready to use with: uv run vultr-dns-mcp --help")
+    print("\n🎉 Ready to use with: uv run mcp-vultr --help")

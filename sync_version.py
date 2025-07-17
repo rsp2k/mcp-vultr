@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Version synchronization script for vultr-dns-mcp.
+Version synchronization script for mcp-vultr.
 
 This script ensures that the version number in pyproject.toml 
 and src/mcp_vultr/_version.py are kept in sync.
@@ -58,7 +58,7 @@ def update_version_py(new_version: str) -> None:
     """Update version in _version.py."""
     version_path = Path("src/mcp_vultr/_version.py")
     
-    content = f'''"""Version information for vultr-dns-mcp package."""
+    content = f'''"""Version information for mcp-vultr package."""
 
 __version__ = "{new_version}"
 __version_info__ = tuple(int(i) for i in __version__.split(".") if i.isdigit())

@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Development installation script for vultr-dns-mcp
+# Development installation script for mcp-vultr
 # This script installs the package in development mode for testing
 
 set -e
 
-echo "🔧 Installing vultr-dns-mcp in development mode..."
+echo "🔧 Installing mcp-vultr in development mode..."
 
 # Change to package directory
 cd "$(dirname "$0")"
@@ -21,8 +21,8 @@ if command -v uv &> /dev/null; then
     echo "✅ Installation complete!"
     echo ""
     echo "🚀 You can now run:"
-    echo "   vultr-dns-mcp --help"
-    echo "   vultr-dns-mcp server"
+    echo "   mcp-vultr --help"
+    echo "   mcp-vultr server"
     echo ""
     echo "🧪 Run tests with:"
     echo "   uv run pytest"
@@ -55,8 +55,8 @@ else
     echo "✅ Installation complete!"
     echo ""
     echo "🚀 You can now run:"
-    echo "   vultr-dns-mcp --help"
-    echo "   vultr-dns-mcp server"
+    echo "   mcp-vultr --help"
+    echo "   mcp-vultr server"
     echo ""
     echo "🧪 Run tests with:"
     echo "   pytest"
