@@ -3,7 +3,7 @@
 import pytest
 import httpx
 from unittest.mock import AsyncMock, patch
-from vultr_dns_mcp.server import (
+from mcp_vultr.server import (
     VultrDNSServer,
     VultrAPIError,
     VultrAuthError,

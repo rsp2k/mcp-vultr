@@ -11,7 +11,7 @@ This script demonstrates various ways to use the package:
 
 import asyncio
 import os
-from vultr_dns_mcp import VultrDNSClient, VultrDNSServer, create_mcp_server
+from mcp_vultr import VultrDNSClient, VultrDNSServer, create_mcp_server
 
 
 async def client_example():
@@ -82,7 +82,7 @@ async def validation_example():
     print("=" * 40)
     
     # Import the validation from the server module
-    from vultr_dns_mcp.server import create_mcp_server
+    from mcp_vultr.server import create_mcp_server
     
     # Create a test server instance for validation (won't make API calls)
     try:

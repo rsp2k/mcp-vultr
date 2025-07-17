@@ -3,7 +3,7 @@
 Version synchronization script for vultr-dns-mcp.
 
 This script ensures that the version number in pyproject.toml 
-and src/vultr_dns_mcp/_version.py are kept in sync.
+and src/mcp_vultr/_version.py are kept in sync.
 
 Usage:
     python sync_version.py              # Check if versions are in sync
@@ -40,9 +40,9 @@ def get_version_from_pyproject() -> str:
 
 def get_version_from_version_py() -> str:
     """Get version from _version.py."""
-    version_path = Path("src/vultr_dns_mcp/_version.py")
+    version_path = Path("src/mcp_vultr/_version.py")
     if not version_path.exists():
-        raise FileNotFoundError("src/vultr_dns_mcp/_version.py not found")
+        raise FileNotFoundError("src/mcp_vultr/_version.py not found")
     
     with open(version_path, "r") as f:
         content = f.read()
@@ -56,7 +56,7 @@ def get_version_from_version_py() -> str:
 
 def update_version_py(new_version: str) -> None:
     """Update version in _version.py."""
-    version_path = Path("src/vultr_dns_mcp/_version.py")
+    version_path = Path("src/mcp_vultr/_version.py")
     
     content = f'''"""Version information for vultr-dns-mcp package."""
 

@@ -29,7 +29,7 @@ def run_tests(test_type="all", verbose=False, coverage=False, fast=False):
     
     # Add coverage if requested
     if coverage:
-        cmd.extend(["--cov=vultr_dns_mcp", "--cov-report=term-missing", "--cov-report=html"])
+        cmd.extend(["--cov=mcp_vultr", "--cov-report=term-missing", "--cov-report=html"])
     
     # Select tests based on type
     if test_type == "unit":
@@ -130,8 +130,8 @@ def run_package_validation():
         sys.path.insert(0, str(src_path))
         
         # Test main imports
-        from vultr_dns_mcp import VultrDNSClient, VultrDNSServer, create_mcp_server
-        from vultr_dns_mcp._version import __version__
+        from mcp_vultr import VultrDNSClient, VultrDNSServer, create_mcp_server
+        from mcp_vultr._version import __version__
         
         print(f"  ✅ Package imports successful (version {__version__})")
         

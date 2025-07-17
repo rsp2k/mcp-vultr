@@ -6,7 +6,7 @@ the Vultr API. It includes tools for domain management, DNS record operations,
 configuration analysis, and validation.
 
 Example usage:
-    from vultr_dns_mcp import VultrDNSServer, create_mcp_server
+    from mcp_vultr import VultrDNSServer, create_mcp_server
     
     # Create a server instance
     server = VultrDNSServer(api_key="your-api-key")

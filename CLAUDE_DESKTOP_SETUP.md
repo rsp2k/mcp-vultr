@@ -12,7 +12,7 @@ This guide shows how to set up and test the Vultr DNS MCP package locally with C
 
 ### Option 1: Install from PyPI (Recommended)
 ```bash
-pip install vultr-dns-mcp
+pip install mcp-vultr
 ```
 
 ### Option 2: Install from Local Development
@@ -23,7 +23,7 @@ pip install -e .
 
 ### Option 3: Using uv (Fastest)
 ```bash
-uv add vultr-dns-mcp
+uv add mcp-vultr
 ```
 
 ## Claude Desktop Configuration
@@ -61,7 +61,7 @@ Add this to your `claude_desktop_config.json`:
   "mcpServers": {
     "vultr-dns": {
       "command": "python",
-      "args": ["-m", "vultr_dns_mcp"],
+      "args": ["-m", "mcp_vultr"],
       "env": {
         "VULTR_API_KEY": "YOUR_VULTR_API_KEY_HERE"
       }
@@ -96,7 +96,7 @@ This approach uses `uvx` to automatically install and run the package without ne
     "vultr-dns": {
       "command": "uvx",
       "args": [
-        "--from", "vultr-dns-mcp",
+        "--from", "mcp-vultr",
         "vultr-mcp-server"
       ],
       "env": {
@@ -117,7 +117,7 @@ For TestPyPI version:
         "--index-url", "https://test.pypi.org/simple/",
         "--extra-index-url", "https://pypi.org/simple/",
         "--index-strategy", "unsafe-best-match",
-        "--from", "vultr-dns-mcp==1.0.1",
+        "--from", "mcp-vultr==1.0.1",
         "vultr-mcp-server"
       ],
       "env": {
@@ -137,7 +137,7 @@ If you have issues, use the absolute path to your Python installation:
   "mcpServers": {
     "vultr-dns": {
       "command": "/usr/bin/python3",
-      "args": ["-m", "vultr_dns_mcp"],
+      "args": ["-m", "mcp_vultr"],
       "env": {
         "VULTR_API_KEY": "YOUR_VULTR_API_KEY_HERE"
       }
@@ -203,7 +203,7 @@ The server provides these tools that Claude Desktop can use:
 
 1. **Check Python installation**:
    ```bash
-   python -c "import vultr_dns_mcp; print('✅ Package installed')"
+   python -c "import mcp_vultr; print('✅ Package installed')"
    ```
 
 2. **Test server manually**:
@@ -211,14 +211,14 @@ The server provides these tools that Claude Desktop can use:
    export VULTR_API_KEY="your-key"
    vultr-mcp-server
    # or
-   python -m vultr_dns_mcp
+   python -m mcp_vultr
    ```
 
 3. **Check API key**:
    ```bash
    export VULTR_API_KEY="your-key"
    python -c "
-   from vultr_dns_mcp.client import VultrDNSClient
+   from mcp_vultr.client import VultrDNSClient
    import asyncio
    async def test():
        client = VultrDNSClient()
@@ -245,7 +245,7 @@ If Claude Desktop can't find Python:
      "mcpServers": {
        "vultr-dns": {
          "command": "/full/path/to/python3",
-         "args": ["-m", "vultr_dns_mcp"],
+         "args": ["-m", "mcp_vultr"],
          "env": {
            "VULTR_API_KEY": "YOUR_KEY"
          }

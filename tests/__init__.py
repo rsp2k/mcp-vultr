@@ -1,1 +1,1 @@
-"""Tests for vultr_dns_mcp package."""
+"""Tests for mcp_vultr package."""

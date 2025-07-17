@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from vultr_dns_mcp.client import VultrDNSClient
+from mcp_vultr.client import VultrDNSClient
 
 
 @pytest.mark.unit
@@ -18,7 +18,7 @@ class TestVultrDNSClient:
     @pytest.mark.asyncio
     async def test_domains_method(self, mock_api_key, mock_vultr_client):
         """Test the domains() method."""
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_vultr_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.domains()
             
@@ -28,7 +28,7 @@ class TestVultrDNSClient:
     @pytest.mark.asyncio
     async def test_domain_method(self, mock_api_key, mock_vultr_client):
         """Test the domain() method."""
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_vultr_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.domain("example.com")
             
@@ -38,7 +38,7 @@ class TestVultrDNSClient:
     @pytest.mark.asyncio
     async def test_add_domain_method(self, mock_api_key, mock_vultr_client):
         """Test the add_domain() method."""
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_vultr_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.add_domain("newdomain.com", "192.168.1.100")
             
@@ -48,7 +48,7 @@ class TestVultrDNSClient:
     @pytest.mark.asyncio
     async def test_remove_domain_success(self, mock_api_key, mock_vultr_client):
         """Test successful domain removal."""
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_vultr_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.remove_domain("example.com")
             
@@ -61,7 +61,7 @@ class TestVultrDNSClient:
         mock_client = AsyncMock()
         mock_client.delete_domain.side_effect = Exception("API Error")
         
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.remove_domain("example.com")
             
@@ -70,7 +70,7 @@ class TestVultrDNSClient:
     @pytest.mark.asyncio
     async def test_records_method(self, mock_api_key, mock_vultr_client):
         """Test the records() method."""
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_vultr_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.records("example.com")
             
@@ -80,7 +80,7 @@ class TestVultrDNSClient:
     @pytest.mark.asyncio
     async def test_add_record_method(self, mock_api_key, mock_vultr_client):
         """Test the add_record() method."""
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_vultr_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.add_record("example.com", "A", "www", "192.168.1.100", 300)
             
@@ -92,7 +92,7 @@ class TestVultrDNSClient:
     @pytest.mark.asyncio
     async def test_update_record_method(self, mock_api_key, mock_vultr_client):
         """Test the update_record() method."""
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_vultr_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.update_record(
                 "example.com", "record-123", "A", "www", "192.168.1.200", 600
@@ -106,7 +106,7 @@ class TestVultrDNSClient:
     @pytest.mark.asyncio
     async def test_remove_record_success(self, mock_api_key, mock_vultr_client):
         """Test successful record removal."""
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_vultr_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.remove_record("example.com", "record-123")
             
@@ -119,7 +119,7 @@ class TestVultrDNSClient:
         mock_client = AsyncMock()
         mock_client.delete_record.side_effect = Exception("API Error")
         
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.remove_record("example.com", "record-123")
             
@@ -133,7 +133,7 @@ class TestConvenienceMethods:
     @pytest.mark.asyncio
     async def test_add_a_record(self, mock_api_key, mock_vultr_client):
         """Test add_a_record convenience method."""
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_vultr_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.add_a_record("example.com", "www", "192.168.1.100", 300)
             
@@ -145,7 +145,7 @@ class TestConvenienceMethods:
     @pytest.mark.asyncio
     async def test_add_aaaa_record(self, mock_api_key, mock_vultr_client):
         """Test add_aaaa_record convenience method."""
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_vultr_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.add_aaaa_record("example.com", "www", "2001:db8::1", 300)
             
@@ -157,7 +157,7 @@ class TestConvenienceMethods:
     @pytest.mark.asyncio
     async def test_add_cname_record(self, mock_api_key, mock_vultr_client):
         """Test add_cname_record convenience method."""
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_vultr_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.add_cname_record("example.com", "www", "example.com", 300)
             
@@ -169,7 +169,7 @@ class TestConvenienceMethods:
     @pytest.mark.asyncio
     async def test_add_mx_record(self, mock_api_key, mock_vultr_client):
         """Test add_mx_record convenience method."""
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_vultr_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.add_mx_record("example.com", "@", "mail.example.com", 10, 300)
             
@@ -181,7 +181,7 @@ class TestConvenienceMethods:
     @pytest.mark.asyncio
     async def test_add_txt_record(self, mock_api_key, mock_vultr_client):
         """Test add_txt_record convenience method."""
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_vultr_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.add_txt_record("example.com", "@", "v=spf1 include:_spf.google.com ~all", 300)
             
@@ -201,7 +201,7 @@ class TestUtilityMethods:
         mock_client = AsyncMock()
         mock_client.list_records.return_value = sample_records
         
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.find_records_by_type("example.com", "A")
             
@@ -214,7 +214,7 @@ class TestUtilityMethods:
         mock_client = AsyncMock()
         mock_client.list_records.return_value = sample_records
         
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.find_records_by_name("example.com", "@")
             
@@ -228,7 +228,7 @@ class TestUtilityMethods:
         mock_client.get_domain.return_value = {"domain": "example.com", "date_created": "2024-01-01"}
         mock_client.list_records.return_value = sample_records
         
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.get_domain_summary("example.com")
             
@@ -246,7 +246,7 @@ class TestUtilityMethods:
         mock_client = AsyncMock()
         mock_client.get_domain.side_effect = Exception("API Error")
         
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.get_domain_summary("example.com")
             
@@ -261,7 +261,7 @@ class TestSetupMethods:
     @pytest.mark.asyncio
     async def test_setup_basic_website_success(self, mock_api_key, mock_vultr_client):
         """Test successful website setup."""
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_vultr_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.setup_basic_website("example.com", "192.168.1.100", True, 300)
             
@@ -275,7 +275,7 @@ class TestSetupMethods:
     @pytest.mark.asyncio
     async def test_setup_basic_website_no_www(self, mock_api_key, mock_vultr_client):
         """Test website setup without www subdomain."""
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_vultr_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.setup_basic_website("example.com", "192.168.1.100", False, 300)
             
@@ -291,7 +291,7 @@ class TestSetupMethods:
         mock_client = AsyncMock()
         mock_client.create_record.side_effect = Exception("API Error")
         
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.setup_basic_website("example.com", "192.168.1.100", True, 300)
             
@@ -301,7 +301,7 @@ class TestSetupMethods:
     @pytest.mark.asyncio
     async def test_setup_email_success(self, mock_api_key, mock_vultr_client):
         """Test successful email setup."""
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_vultr_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.setup_email("example.com", "mail.example.com", 10, 300)
             
@@ -320,7 +320,7 @@ class TestSetupMethods:
         mock_client = AsyncMock()
         mock_client.create_record.side_effect = Exception("API Error")
         
-        with patch('vultr_dns_mcp.client.VultrDNSServer', return_value=mock_client):
+        with patch('mcp_vultr.client.VultrDNSServer', return_value=mock_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.setup_email("example.com", "mail.example.com", 10, 300)
             

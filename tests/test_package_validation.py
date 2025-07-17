@@ -13,16 +13,16 @@ sys.path.insert(0, str(src_path))
 def test_package_imports():
     """Test that all main package imports work correctly."""
     # Test main package imports
-    from vultr_dns_mcp import VultrDNSClient, VultrDNSServer, create_mcp_server
+    from mcp_vultr import VultrDNSClient, VultrDNSServer, create_mcp_server
     assert VultrDNSClient is not None
     assert VultrDNSServer is not None
     assert create_mcp_server is not None
     
     # Test individual module imports
-    from vultr_dns_mcp.server import VultrDNSServer as ServerClass
-    from vultr_dns_mcp.client import VultrDNSClient as ClientClass
-    from vultr_dns_mcp.cli import main
-    from vultr_dns_mcp._version import __version__
+    from mcp_vultr.server import VultrDNSServer as ServerClass
+    from mcp_vultr.client import VultrDNSClient as ClientClass
+    from mcp_vultr.cli import main
+    from mcp_vultr._version import __version__
     
     assert ServerClass is not None
     assert ClientClass is not None
@@ -32,7 +32,7 @@ def test_package_imports():
 
 def test_version_consistency():
     """Test that version is consistent across files."""
-    from vultr_dns_mcp._version import __version__
+    from mcp_vultr._version import __version__
     
     # Read version from pyproject.toml
     pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
@@ -58,7 +58,7 @@ def test_fastmcp_available():
 
 def test_mcp_server_creation():
     """Test that MCP server can be created without errors."""
-    from vultr_dns_mcp.server import create_mcp_server
+    from mcp_vultr.server import create_mcp_server
     
     # This should work with any API key for creation (won't make API calls)
     server = create_mcp_server("test-api-key-for-testing")
@@ -71,7 +71,7 @@ def test_mcp_server_creation():
 
 def test_cli_entry_points():
     """Test that CLI entry points are properly configured."""
-    from vultr_dns_mcp.cli import main, server_command
+    from mcp_vultr.cli import main, server_command
     
     assert callable(main)
     assert callable(server_command)
@@ -138,7 +138,7 @@ def test_environment_setup():
 
 def test_package_structure():
     """Test that package structure is correct."""
-    package_root = Path(__file__).parent.parent / "src" / "vultr_dns_mcp"
+    package_root = Path(__file__).parent.parent / "src" / "mcp_vultr"
     
     # Check that all expected files exist
     expected_files = [

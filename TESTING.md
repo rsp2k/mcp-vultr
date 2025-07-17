@@ -116,7 +116,7 @@ uv run pytest -m mcp
 uv run pytest -m "not slow"
 
 # With coverage
-uv run pytest --cov=vultr_dns_mcp --cov-report=html
+uv run pytest --cov=mcp_vultr --cov-report=html
 ```
 
 ### Using the test runner:
@@ -163,7 +163,7 @@ testpaths = ["tests"]
 addopts = [
     "--strict-markers",
     "--verbose", 
-    "--cov=vultr_dns_mcp",
+    "--cov=mcp_vultr",
     "--cov-fail-under=80"
 ]
 asyncio_mode = "auto"

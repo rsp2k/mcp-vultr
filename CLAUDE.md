@@ -11,22 +11,22 @@ This package provides both an MCP server and a standalone Python client for Vult
 ### Installation
 ```bash
 # Using uv (recommended)
-uv add vultr-dns-mcp
+uv add mcp-vultr
 
 # Or using pip
-pip install vultr-dns-mcp
+pip install mcp-vultr
 ```
 
 ### Basic Usage
 ```bash
 # CLI - requires VULTR_API_KEY environment variable
-vultr-dns-mcp domains list
-vultr-dns-mcp records list example.com
+mcp-vultr domains list
+mcp-vultr records list example.com
 
 # As MCP server
 vultr-mcp-server
 # or using Python module
-python -m vultr_dns_mcp
+python -m mcp_vultr
 ```
 
 ## Development Setup
@@ -51,7 +51,7 @@ uv run pytest -m mcp
 uv run pytest -m integration
 
 # With coverage
-uv run pytest --cov=vultr_dns_mcp --cov-report=html
+uv run pytest --cov=mcp_vultr --cov-report=html
 
 # Comprehensive test runner
 uv run python run_tests.py --all-checks
@@ -116,8 +116,8 @@ Following FastMCP testing best practices:
 ## Project Structure
 
 ```
-vultr-dns-mcp/
-├── src/vultr_dns_mcp/
+mcp-vultr/
+├── src/mcp_vultr/
 │   ├── __init__.py         # Package initialization with exports
 │   ├── __main__.py         # Module entry point for python -m
 │   ├── client.py           # High-level DNS client
@@ -252,18 +252,18 @@ uv run pytest tests/test_mcp_server.py::TestMCPTools::test_list_dns_domains_tool
 uv run pytest --collect-only tests/
 
 # Validate imports
-uv run python -c "from vultr_dns_mcp.server import create_mcp_server"
+uv run python -c "from mcp_vultr.server import create_mcp_server"
 
 # Traditional approach
 pytest tests/test_mcp_server.py::TestMCPTools::test_list_dns_domains_tool -vvv
 pytest --collect-only tests/
-python -c "from vultr_dns_mcp.server import create_mcp_server"
+python -c "from mcp_vultr.server import create_mcp_server"
 ```
 
 ## Claude Desktop Integration
 
 ### Quick Setup
-1. Install the package: `pip install vultr-dns-mcp`
+1. Install the package: `pip install mcp-vultr`
 2. Add to Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 ```json
 {
@@ -284,7 +284,7 @@ For detailed setup instructions, see `CLAUDE_DESKTOP_SETUP.md`.
 
 ## Support & Documentation
 
-- **GitHub**: https://github.com/rsp2k/vultr-dns-mcp
-- **PyPI**: https://pypi.org/project/vultr-dns-mcp/
+- **GitHub**: https://github.com/rsp2k/mcp-vultr
+- **PyPI**: https://pypi.org/project/mcp-vultr/
 - **Documentation**: Complete API documentation and examples in package
 - **Issues**: Use GitHub Issues for bug reports and feature requests

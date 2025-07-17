@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from vultr_dns_mcp.server import VultrDNSServer, create_mcp_server
+from mcp_vultr.server import VultrDNSServer, create_mcp_server
 
 
 class TestVultrDNSServer:
@@ -103,14 +103,14 @@ class TestMCPServer:
 @pytest.fixture
 def mock_vultr_server():
     """Fixture for mocked VultrDNSServer."""
-    with patch('vultr_dns_mcp.server.VultrDNSServer') as mock:
+    with patch('mcp_vultr.server.VultrDNSServer') as mock:
         yield mock
 
 
 @pytest.mark.asyncio
 async def test_validation_tool():
     """Test DNS record validation functionality."""
-    from vultr_dns_mcp.server import create_mcp_server
+    from mcp_vultr.server import create_mcp_server
     
     # Create server (this will fail without API key, but we can test the structure)
     with pytest.raises(ValueError):

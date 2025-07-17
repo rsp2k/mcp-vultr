@@ -1,6 +1,6 @@
 # PyPI Publishing Setup Guide
 
-This guide explains how to set up and use the automated PyPI publishing workflow for the `vultr-dns-mcp` package.
+This guide explains how to set up and use the automated PyPI publishing workflow for the `mcp-vultr` package.
 
 ## 🔐 Setting Up Trusted Publishing (Recommended)
 
@@ -8,29 +8,29 @@ The workflow uses [PyPI's trusted publishing](https://docs.pypi.org/trusted-publ
 
 ### For PyPI (Production)
 
-1. **Go to your project on PyPI**: https://pypi.org/manage/project/vultr-dns-mcp/
+1. **Go to your project on PyPI**: https://pypi.org/manage/project/mcp-vultr/
 2. **Navigate to "Publishing"** tab
 3. **Add a new trusted publisher** with these settings:
-   - **PyPI Project Name**: `vultr-dns-mcp`
+   - **PyPI Project Name**: `mcp-vultr`
    - **Owner**: `rsp2k`
-   - **Repository name**: `vultr-dns-mcp`
+   - **Repository name**: `mcp-vultr`
    - **Workflow filename**: `publish.yml`
    - **Environment name**: `pypi`
 
 ### For TestPyPI (Testing)
 
-1. **Go to TestPyPI**: https://test.pypi.org/manage/project/vultr-dns-mcp/
+1. **Go to TestPyPI**: https://test.pypi.org/manage/project/mcp-vultr/
 2. **Navigate to "Publishing"** tab
 3. **Add a new trusted publisher** with these settings:
-   - **PyPI Project Name**: `vultr-dns-mcp`
+   - **PyPI Project Name**: `mcp-vultr`
    - **Owner**: `rsp2k`
-   - **Repository name**: `vultr-dns-mcp`
+   - **Repository name**: `mcp-vultr`
    - **Workflow filename**: `publish.yml`
    - **Environment name**: `testpypi`
 
 ### GitHub Environment Setup
 
-1. **Go to your repository settings**: https://github.com/rsp2k/vultr-dns-mcp/settings/environments
+1. **Go to your repository settings**: https://github.com/rsp2k/mcp-vultr/settings/environments
 2. **Create two environments**:
    - `pypi` (for production releases)
    - `testpypi` (for testing)
@@ -43,7 +43,7 @@ The workflow uses [PyPI's trusted publishing](https://docs.pypi.org/trusted-publ
 1. **Update the version** in `pyproject.toml`:
    ```toml
    [project]
-   name = "vultr-dns-mcp"
+   name = "mcp-vultr"
    version = "1.0.2"  # Increment this
    ```
 
@@ -185,9 +185,9 @@ python -m twine check dist/*
 ## 📊 Monitoring
 
 After publishing, monitor:
-- **PyPI downloads**: https://pypistats.org/packages/vultr-dns-mcp
-- **GitHub releases**: https://github.com/rsp2k/vultr-dns-mcp/releases
-- **Actions logs**: https://github.com/rsp2k/vultr-dns-mcp/actions
+- **PyPI downloads**: https://pypistats.org/packages/mcp-vultr
+- **GitHub releases**: https://github.com/rsp2k/mcp-vultr/releases
+- **Actions logs**: https://github.com/rsp2k/mcp-vultr/actions
 
 ## 🎯 Next Steps
 

@@ -1,6 +1,6 @@
 # Building and Publishing to PyPI
 
-This document provides instructions for building and publishing the `vultr-dns-mcp` package to PyPI.
+This document provides instructions for building and publishing the `mcp-vultr` package to PyPI.
 
 ## Prerequisites
 
@@ -43,8 +43,8 @@ This document provides instructions for building and publishing the `vultr-dns-m
    ```
 
    This creates:
-   - `dist/vultr_dns_mcp-1.0.0-py3-none-any.whl` (wheel)
-   - `dist/vultr-dns-mcp-1.0.0.tar.gz` (source distribution)
+   - `dist/mcp_vultr-1.0.0-py3-none-any.whl` (wheel)
+   - `dist/mcp-vultr-1.0.0.tar.gz` (source distribution)
 
 3. **Verify the build:**
    ```bash
@@ -60,13 +60,13 @@ This document provides instructions for building and publishing the `vultr-dns-m
 
 2. **Test installation from TestPyPI:**
    ```bash
-   pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple vultr-dns-mcp
+   pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple mcp-vultr
    ```
 
 3. **Test functionality:**
    ```bash
-   vultr-dns-mcp --help
-   python -c "from vultr_dns_mcp import VultrDNSClient; print('Import successful')"
+   mcp-vultr --help
+   python -c "from mcp_vultr import VultrDNSClient; print('Import successful')"
    ```
 
 ## Publishing to PyPI
@@ -77,8 +77,8 @@ This document provides instructions for building and publishing the `vultr-dns-m
    ```
 
 2. **Verify publication:**
-   - Check the package page: https://pypi.org/project/vultr-dns-mcp/
-   - Test installation: `pip install vultr-dns-mcp`
+   - Check the package page: https://pypi.org/project/mcp-vultr/
+   - Test installation: `pip install mcp-vultr`
 
 ## Version Management
 

@@ -2,7 +2,7 @@
 """Test our improvements to the Vultr DNS MCP package."""
 
 import ipaddress
-from vultr_dns_mcp.server import (
+from mcp_vultr.server import (
     VultrAPIError, 
     VultrAuthError, 
     VultrRateLimitError, 
@@ -79,7 +79,7 @@ def test_mcp_server_creation():
     print("🧪 Testing MCP Server Creation:")
     
     try:
-        from vultr_dns_mcp.server import create_mcp_server
+        from mcp_vultr.server import create_mcp_server
         
         # This should fail without API key (expected)
         try:

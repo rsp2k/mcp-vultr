@@ -3,7 +3,7 @@
 import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from vultr_dns_mcp.server import create_mcp_server
+from mcp_vultr.server import create_mcp_server
 
 
 @pytest.fixture
@@ -21,7 +21,7 @@ def mcp_server(mock_api_key):
 @pytest.fixture
 def mock_vultr_client():
     """Create a mock VultrDNSServer for testing API interactions."""
-    from vultr_dns_mcp.server import VultrDNSServer
+    from mcp_vultr.server import VultrDNSServer
     
     mock_client = AsyncMock(spec=VultrDNSServer)
     

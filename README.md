@@ -22,10 +22,10 @@ A comprehensive Model Context Protocol (MCP) server for managing Vultr DNS recor
 
 ```bash
 # Using uv (recommended - fast and modern)
-uv add vultr-dns-mcp
+uv add mcp-vultr
 
 # Or using pip
-pip install vultr-dns-mcp
+pip install mcp-vultr
 ```
 
 ### Basic Usage
@@ -35,23 +35,23 @@ pip install vultr-dns-mcp
 export VULTR_API_KEY="your-api-key"
 
 # List domains
-vultr-dns-mcp domains list
+mcp-vultr domains list
 
 # List DNS records
-vultr-dns-mcp records list example.com
+mcp-vultr records list example.com
 
 # Set up basic website DNS
-vultr-dns-mcp setup-website example.com 192.168.1.100
+mcp-vultr setup-website example.com 192.168.1.100
 
 # Run as MCP server
-uv run python -m vultr_dns_mcp.server
+uv run python -m mcp_vultr.server
 ```
 
 ### Python API
 
 ```python
 import asyncio
-from vultr_dns_mcp import VultrDNSClient
+from mcp_vultr import VultrDNSClient
 
 async def main():
     client = VultrDNSClient("your-api-key")
@@ -75,7 +75,7 @@ asyncio.run(main())
 This package provides a complete MCP server that can be integrated with MCP-compatible clients:
 
 ```python
-from vultr_dns_mcp import create_mcp_server, run_server
+from mcp_vultr import create_mcp_server, run_server
 
 # Create server
 server = create_mcp_server("your-api-key")
@@ -96,8 +96,8 @@ await run_server("your-api-key")
 
 ```bash
 # Clone the repository
-git clone https://github.com/rsp2k/vultr-dns-mcp.git
-cd vultr-dns-mcp
+git clone https://github.com/rsp2k/mcp-vultr.git
+cd mcp-vultr
 
 # Install dependencies
 uv sync --extra dev
@@ -153,21 +153,21 @@ python run_tests.py --all-checks
 
 ```bash
 # Domain management
-vultr-dns-mcp domains list
-vultr-dns-mcp domains info example.com
-vultr-dns-mcp domains create newdomain.com 192.168.1.100
+mcp-vultr domains list
+mcp-vultr domains info example.com
+mcp-vultr domains create newdomain.com 192.168.1.100
 
 # Record management
-vultr-dns-mcp records list example.com
-vultr-dns-mcp records add example.com A www 192.168.1.100
-vultr-dns-mcp records delete example.com record-id
+mcp-vultr records list example.com
+mcp-vultr records add example.com A www 192.168.1.100
+mcp-vultr records delete example.com record-id
 
 # Setup utilities
-vultr-dns-mcp setup-website example.com 192.168.1.100
-vultr-dns-mcp setup-email example.com mail.example.com
+mcp-vultr setup-website example.com 192.168.1.100
+mcp-vultr setup-email example.com mail.example.com
 
 # Start MCP server
-vultr-dns-mcp server
+mcp-vultr server
 ```
 
 ## Testing
@@ -184,7 +184,7 @@ uv run pytest -m integration   # Integration tests
 uv run pytest -m mcp          # MCP-specific tests
 
 # With coverage
-uv run pytest --cov=vultr_dns_mcp --cov-report=html
+uv run pytest --cov=mcp_vultr --cov-report=html
 
 # Full validation suite
 uv run python run_tests.py --all-checks
@@ -205,7 +205,7 @@ uv run python run_tests.py --all-checks
 The package provides specific exception types for better error handling:
 
 ```python
-from vultr_dns_mcp import (
+from mcp_vultr import (
     VultrAPIError,
     VultrAuthError,
     VultrRateLimitError,
@@ -246,8 +246,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Links
 
-- [GitHub Repository](https://github.com/rsp2k/vultr-dns-mcp)
-- [PyPI Package](https://pypi.org/project/vultr-dns-mcp/)
+- [GitHub Repository](https://github.com/rsp2k/mcp-vultr)
+- [PyPI Package](https://pypi.org/project/mcp-vultr/)
 - [Vultr API Documentation](https://www.vultr.com/api/)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 - [uv Package Manager](https://docs.astral.sh/uv/)

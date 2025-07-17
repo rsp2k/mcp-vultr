@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import patch, AsyncMock
 from mcp.client.session import ClientSession
 from mcp.client.stdio import stdio_client
-from vultr_dns_mcp.server import VultrDNSServer, create_mcp_server
+from mcp_vultr.server import VultrDNSServer, create_mcp_server
 
 
 class TestMCPServerBasics:
@@ -36,7 +36,7 @@ class TestMCPTools:
     @pytest.mark.asyncio
     async def test_list_dns_domains_tool(self, mcp_server, mock_vultr_client):
         """Test the list_dns_domains MCP tool."""
-        with patch('vultr_dns_mcp.server.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.server.VultrDNSServer', return_value=mock_vultr_client):
             server = create_mcp_server("test-api-key")
             
             # For the official MCP package, we need to use ClientSession
@@ -54,7 +54,7 @@ class TestMCPTools:
     @pytest.mark.asyncio 
     async def test_get_dns_domain_tool(self, mcp_server, mock_vultr_client):
         """Test the get_dns_domain MCP tool."""
-        with patch('vultr_dns_mcp.server.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.server.VultrDNSServer', return_value=mock_vultr_client):
             server = create_mcp_server("test-api-key")
             
             async with ClientSession(server) as session:
@@ -66,7 +66,7 @@ class TestMCPTools:
     @pytest.mark.asyncio
     async def test_create_dns_domain_tool(self, mcp_server, mock_vultr_client):
         """Test the create_dns_domain MCP tool."""
-        with patch('vultr_dns_mcp.server.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.server.VultrDNSServer', return_value=mock_vultr_client):
             server = create_mcp_server("test-api-key")
             
             async with ClientSession(server) as session:
@@ -81,7 +81,7 @@ class TestMCPTools:
     @pytest.mark.asyncio
     async def test_delete_dns_domain_tool(self, mcp_server, mock_vultr_client):
         """Test the delete_dns_domain MCP tool.""" 
-        with patch('vultr_dns_mcp.server.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.server.VultrDNSServer', return_value=mock_vultr_client):
             server = create_mcp_server("test-api-key")
             
             async with ClientSession(server) as session:
@@ -93,7 +93,7 @@ class TestMCPTools:
     @pytest.mark.asyncio
     async def test_list_dns_records_tool(self, mcp_server, mock_vultr_client):
         """Test the list_dns_records MCP tool."""
-        with patch('vultr_dns_mcp.server.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.server.VultrDNSServer', return_value=mock_vultr_client):
             server = create_mcp_server("test-api-key")
             
             async with ClientSession(server) as session:
@@ -105,7 +105,7 @@ class TestMCPTools:
     @pytest.mark.asyncio
     async def test_create_dns_record_tool(self, mcp_server, mock_vultr_client):
         """Test the create_dns_record MCP tool."""
-        with patch('vultr_dns_mcp.server.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.server.VultrDNSServer', return_value=mock_vultr_client):
             server = create_mcp_server("test-api-key")
             
             async with ClientSession(server) as session:
@@ -154,7 +154,7 @@ class TestMCPTools:
     @pytest.mark.asyncio
     async def test_analyze_dns_records_tool(self, mcp_server, mock_vultr_client):
         """Test the analyze_dns_records MCP tool."""
-        with patch('vultr_dns_mcp.server.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.server.VultrDNSServer', return_value=mock_vultr_client):
             server = create_mcp_server("test-api-key")
             
             async with ClientSession(server) as session:
@@ -171,7 +171,7 @@ class TestMCPResources:
     @pytest.mark.asyncio
     async def test_domains_resource(self, mcp_server, mock_vultr_client):
         """Test the vultr://domains resource."""
-        with patch('vultr_dns_mcp.server.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.server.VultrDNSServer', return_value=mock_vultr_client):
             server = create_mcp_server("test-api-key")
             
             async with ClientSession(server) as session:
@@ -193,7 +193,7 @@ class TestMCPResources:
     @pytest.mark.asyncio
     async def test_read_domains_resource(self, mcp_server, mock_vultr_client):
         """Test reading the domains resource content."""
-        with patch('vultr_dns_mcp.server.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.server.VultrDNSServer', return_value=mock_vultr_client):
             server = create_mcp_server("test-api-key")
             
             async with ClientSession(server) as session:
@@ -216,7 +216,7 @@ class TestMCPToolErrors:
         mock_client = AsyncMock()
         mock_client.list_domains.side_effect = Exception("API Error")
         
-        with patch('vultr_dns_mcp.server.VultrDNSServer', return_value=mock_client):
+        with patch('mcp_vultr.server.VultrDNSServer', return_value=mock_client):
             server = create_mcp_server("test-api-key")
             
             async with ClientSession(server) as session:
@@ -241,7 +241,7 @@ class TestMCPIntegration:
     @pytest.mark.asyncio
     async def test_complete_domain_workflow(self, mcp_server, mock_vultr_client):
         """Test a complete domain management workflow."""
-        with patch('vultr_dns_mcp.server.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.server.VultrDNSServer', return_value=mock_vultr_client):
             server = create_mcp_server("test-api-key")
             
             async with ClientSession(server) as session:
@@ -269,7 +269,7 @@ class TestMCPIntegration:
     @pytest.mark.asyncio
     async def test_record_management_workflow(self, mcp_server, mock_vultr_client):
         """Test record creation and management workflow."""
-        with patch('vultr_dns_mcp.server.VultrDNSServer', return_value=mock_vultr_client):
+        with patch('mcp_vultr.server.VultrDNSServer', return_value=mock_vultr_client):
             server = create_mcp_server("test-api-key")
             
             async with ClientSession(server) as session:
