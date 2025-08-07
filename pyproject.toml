@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-vultr"
-version = "2.0.0"
+version = "2.0.2"
 description = "A comprehensive Model Context Protocol (MCP) server for managing Vultr DNS records"
 readme = "README.md"
 license = {text = "MIT"}
@@ -73,11 +73,11 @@ test = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/rsp2k/mcp-vultr"
+Homepage = "https://git.supported.systems/MCP/mcp-vultr"
 Documentation = "https://mcp-vultr.readthedocs.io/"
-Repository = "https://github.com/rsp2k/mcp-vultr.git"
-"Bug Tracker" = "https://github.com/rsp2k/mcp-vultr/issues"
-Changelog = "https://github.com/rsp2k/mcp-vultr/blob/main/CHANGELOG.md"
+Repository = "https://git.supported.systems/MCP/mcp-vultr.git"
+"Bug Tracker" = "https://git.supported.systems/MCP/mcp-vultr/issues"
+Changelog = "https://git.supported.systems/MCP/mcp-vultr/blob/main/CHANGELOG.md"
 
 [project.scripts]
 mcp-vultr = "mcp_vultr.cli:main"
