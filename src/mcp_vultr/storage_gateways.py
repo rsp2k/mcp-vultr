@@ -5,7 +5,8 @@ This module contains FastMCP tools and resources for managing Vultr storage gate
 Storage Gateways allow access to Vultr File System via the NFS v4.2 protocol.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from fastmcp import FastMCP
 
 
@@ -20,14 +21,14 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with storage gateway management tools
     """
     mcp = FastMCP(name="vultr-storage-gateways")
-    
+
     # Helper function to check if string is UUID format
     def is_uuid_format(value: str) -> bool:
         """Check if a string looks like a UUID."""
         import re
         uuid_pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         return bool(re.match(uuid_pattern, value, re.IGNORECASE))
-    
+
     # Helper function to get storage gateway ID from label or ID
     async def get_storage_gateway_id(identifier: str) -> str:
         """
@@ -45,21 +46,21 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         # If it looks like a UUID, return as-is
         if is_uuid_format(identifier):
             return identifier
-        
+
         # Search by label
         gateways = await vultr_client.list_storage_gateways()
         for gateway in gateways:
             if gateway.get("label") == identifier:
                 return gateway["id"]
-        
+
         raise ValueError(f"Storage gateway '{identifier}' not found")
-    
+
     # Storage Gateway resources
     @mcp.resource("storage-gateways://list")
     async def list_gateways_resource() -> List[Dict[str, Any]]:
         """List all storage gateways."""
         return await vultr_client.list_storage_gateways()
-    
+
     @mcp.resource("storage-gateways://{gateway_identifier}")
     async def get_gateway_resource(gateway_identifier: str) -> Dict[str, Any]:
         """Get details of a specific storage gateway.
@@ -69,7 +70,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         """
         gateway_id = await get_storage_gateway_id(gateway_identifier)
         return await vultr_client.get_storage_gateway(gateway_id)
-    
+
     @mcp.resource("storage-gateways://{gateway_identifier}/status")
     async def get_gateway_status_resource(gateway_identifier: str) -> Dict[str, Any]:
         """Get comprehensive status of a storage gateway.
@@ -79,7 +80,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         """
         gateway_id = await get_storage_gateway_id(gateway_identifier)
         return await get_gateway_status(gateway_identifier)
-    
+
     # Storage Gateway tools
     @mcp.tool
     async def list() -> List[Dict[str, Any]]:
@@ -99,7 +100,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
             - date_created: Creation date
         """
         return await vultr_client.list_storage_gateways()
-    
+
     @mcp.tool
     async def get(gateway_identifier: str) -> Dict[str, Any]:
         """Get detailed information about a specific storage gateway.
@@ -114,7 +115,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         """
         gateway_id = await get_storage_gateway_id(gateway_identifier)
         return await vultr_client.get_storage_gateway(gateway_id)
-    
+
     @mcp.tool
     async def create(
         label: str,
@@ -150,7 +151,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
             network_config=network_config,
             tags=tags
         )
-    
+
     @mcp.tool
     async def update(
         gateway_identifier: str,
@@ -171,19 +172,19 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         """
         gateway_id = await get_storage_gateway_id(gateway_identifier)
         await vultr_client.update_storage_gateway(gateway_id, label, tags)
-        
+
         changes = []
         if label is not None:
             changes.append(f"label to '{label}'")
         if tags is not None:
             changes.append(f"tags to {tags}")
-        
+
         return {
             "success": True,
             "message": f"Gateway updated: {', '.join(changes) if changes else 'no changes'}",
             "gateway_id": gateway_id
         }
-    
+
     @mcp.tool
     async def delete(gateway_identifier: str) -> Dict[str, str]:
         """Delete a storage gateway.
@@ -200,10 +201,10 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         await vultr_client.delete_storage_gateway(gateway_id)
         return {
             "success": True,
-            "message": f"Storage gateway deleted successfully",
+            "message": "Storage gateway deleted successfully",
             "gateway_id": gateway_id
         }
-    
+
     @mcp.tool
     async def add_export(
         gateway_identifier: str,
@@ -226,7 +227,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         """
         gateway_id = await get_storage_gateway_id(gateway_identifier)
         return await vultr_client.add_storage_gateway_export(gateway_id, export_config)
-    
+
     @mcp.tool
     async def delete_export(
         gateway_identifier: str,
@@ -251,7 +252,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
             "gateway_id": gateway_id,
             "export_id": export_id
         }
-    
+
     @mcp.tool
     async def list_by_region(region: str) -> List[Dict[str, Any]]:
         """List storage gateways in a specific region.
@@ -264,7 +265,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         """
         gateways = await vultr_client.list_storage_gateways()
         return [gateway for gateway in gateways if gateway.get("region") == region]
-    
+
     @mcp.tool
     async def list_by_type(gateway_type: str) -> List[Dict[str, Any]]:
         """List storage gateways by type.
@@ -277,7 +278,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         """
         gateways = await vultr_client.list_storage_gateways()
         return [gateway for gateway in gateways if gateway.get("type") == gateway_type]
-    
+
     @mcp.tool
     async def list_by_status(status: str) -> List[Dict[str, Any]]:
         """List storage gateways by status.
@@ -290,7 +291,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         """
         gateways = await vultr_client.list_storage_gateways()
         return [gateway for gateway in gateways if gateway.get("status") == status]
-    
+
     @mcp.tool
     async def get_gateway_status(gateway_identifier: str) -> Dict[str, Any]:
         """Get comprehensive status information for a storage gateway.
@@ -305,7 +306,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         """
         gateway_id = await get_storage_gateway_id(gateway_identifier)
         gateway = await vultr_client.get_storage_gateway(gateway_id)
-        
+
         # Enhanced status information
         status_info = {
             **gateway,
@@ -329,9 +330,9 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
                 "estimated_monthly": gateway.get("pending_charges", 0) * 30  # Rough estimate
             }
         }
-        
+
         return status_info
-    
+
     @mcp.tool
     async def get_mount_instructions(gateway_identifier: str) -> Dict[str, Any]:
         """Get NFS mount instructions for a storage gateway.
@@ -346,11 +347,11 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         """
         gateway_id = await get_storage_gateway_id(gateway_identifier)
         gateway = await vultr_client.get_storage_gateway(gateway_id)
-        
+
         # Generate mount instructions for each export
         exports = gateway.get("export_config", [])
         network_config = gateway.get("network_config", {}).get("primary", {})
-        
+
         instructions = {
             "gateway_info": {
                 "id": gateway_id,
@@ -379,18 +380,18 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
                 "check_mounts": "df -h -t nfs4"
             }
         }
-        
+
         if not exports:
             instructions["warning"] = "No exports configured on this gateway"
             return instructions
-        
+
         for i, export in enumerate(exports):
             export_label = export.get("label", f"export_{i}")
             pseudo_path = export.get("pseudo_root_path", "/")
             allowed_ips = export.get("allowed_ips", [])
-            
+
             mount_point = f"/mnt/{export_label}"
-            
+
             export_info = {
                 "export_label": export_label,
                 "pseudo_root_path": pseudo_path,
@@ -412,14 +413,14 @@ ls -la {mount_point}
 # To make persistent, add to /etc/fstab:
 echo '<gateway-ip>:{pseudo_path} {mount_point} nfs4 rsize=1048576,wsize=1048576,hard,intr,timeo=600 0 0' | sudo tee -a /etc/fstab"""
             }
-            
+
             instructions["exports"].append(export_info)
-        
+
         if gateway.get("status") != "active":
             instructions["warning"] = f"Gateway is not active (status: {gateway.get('status')}). Wait for it to become active before mounting."
-        
+
         return instructions
-    
+
     @mcp.tool
     async def optimize_gateway_configuration(gateway_identifier: str) -> Dict[str, Any]:
         """Analyze and provide optimization recommendations for a storage gateway.
@@ -434,10 +435,10 @@ echo '<gateway-ip>:{pseudo_path} {mount_point} nfs4 rsize=1048576,wsize=1048576,
         """
         gateway_id = await get_storage_gateway_id(gateway_identifier)
         gateway = await vultr_client.get_storage_gateway(gateway_id)
-        
+
         exports = gateway.get("export_config", [])
         network_config = gateway.get("network_config", {}).get("primary", {})
-        
+
         analysis = {
             "gateway_info": {
                 "id": gateway_id,
@@ -458,13 +459,13 @@ echo '<gateway-ip>:{pseudo_path} {mount_point} nfs4 rsize=1048576,wsize=1048576,
             "performance_tips": [],
             "cost_optimization": []
         }
-        
+
         # Security recommendations
         has_unrestricted_exports = any(
             not exp.get("allowed_ips") or "*" in exp.get("allowed_ips", [])
             for exp in exports
         )
-        
+
         if has_unrestricted_exports:
             analysis["security_considerations"].append({
                 "priority": "HIGH",
@@ -472,7 +473,7 @@ echo '<gateway-ip>:{pseudo_path} {mount_point} nfs4 rsize=1048576,wsize=1048576,
                 "recommendation": "Restrict allowed_ips to specific IP addresses or subnets",
                 "details": "Open access (*) or empty allowed_ips list poses security risks"
             })
-        
+
         if network_config.get("ipv4_public_enabled") and not network_config.get("vpc", {}).get("vpc_uuid"):
             analysis["security_considerations"].append({
                 "priority": "MEDIUM",
@@ -480,7 +481,7 @@ echo '<gateway-ip>:{pseudo_path} {mount_point} nfs4 rsize=1048576,wsize=1048576,
                 "recommendation": "Consider using VPC for additional network isolation",
                 "details": "VPC provides better network security and control"
             })
-        
+
         # Performance recommendations
         if len(exports) > 5:
             analysis["performance_tips"].append({
@@ -489,13 +490,13 @@ echo '<gateway-ip>:{pseudo_path} {mount_point} nfs4 rsize=1048576,wsize=1048576,
                 "recommendation": "Consider distributing exports across multiple gateways",
                 "details": "Too many exports can impact performance"
             })
-        
+
         vfs_usage = {}
         for exp in exports:
             vfs_uuid = exp.get("vfs_uuid")
             if vfs_uuid:
                 vfs_usage[vfs_uuid] = vfs_usage.get(vfs_uuid, 0) + 1
-        
+
         duplicated_vfs = {vfs: count for vfs, count in vfs_usage.items() if count > 1}
         if duplicated_vfs:
             analysis["performance_tips"].append({
@@ -504,7 +505,7 @@ echo '<gateway-ip>:{pseudo_path} {mount_point} nfs4 rsize=1048576,wsize=1048576,
                 "recommendation": "Consolidate exports using different pseudo paths",
                 "details": f"VFS {list(duplicated_vfs.keys())} exported multiple times"
             })
-        
+
         # Cost optimization
         if network_config.get("ipv6_public_enabled") and not network_config.get("ipv4_public_enabled"):
             analysis["cost_optimization"].append({
@@ -513,7 +514,7 @@ echo '<gateway-ip>:{pseudo_path} {mount_point} nfs4 rsize=1048576,wsize=1048576,
                 "benefit": "Using IPv6-only can reduce costs compared to dual-stack",
                 "consideration": "Ensure clients support IPv6 connectivity"
             })
-        
+
         # General recommendations
         if gateway.get("status") == "active" and gateway.get("health") != "healthy":
             analysis["recommendations"].append({
@@ -522,7 +523,7 @@ echo '<gateway-ip>:{pseudo_path} {mount_point} nfs4 rsize=1048576,wsize=1048576,
                 "action": "Investigate gateway health issues",
                 "description": f"Gateway health is '{gateway.get('health')}' instead of 'healthy'"
             })
-        
+
         if not exports:
             analysis["recommendations"].append({
                 "priority": "HIGH",
@@ -530,7 +531,7 @@ echo '<gateway-ip>:{pseudo_path} {mount_point} nfs4 rsize=1048576,wsize=1048576,
                 "action": "Add at least one export",
                 "description": "Gateway has no exports configured"
             })
-        
+
         # Configuration quality score
         score = 100
         if has_unrestricted_exports:
@@ -541,15 +542,15 @@ echo '<gateway-ip>:{pseudo_path} {mount_point} nfs4 rsize=1048576,wsize=1048576,
             score -= 40
         if gateway.get("health") != "healthy":
             score -= 20
-        
+
         analysis["configuration_score"] = {
             "score": max(0, score),
             "rating": "Excellent" if score >= 90 else "Good" if score >= 70 else "Fair" if score >= 50 else "Poor",
             "description": f"Configuration quality score: {max(0, score)}/100"
         }
-        
+
         return analysis
-    
+
     @mcp.tool
     async def get_cost_analysis(gateway_identifier: str) -> Dict[str, Any]:
         """Get cost analysis and projections for a storage gateway.
@@ -564,11 +565,11 @@ echo '<gateway-ip>:{pseudo_path} {mount_point} nfs4 rsize=1048576,wsize=1048576,
         """
         gateway_id = await get_storage_gateway_id(gateway_identifier)
         gateway = await vultr_client.get_storage_gateway(gateway_id)
-        
+
         pending_charges = gateway.get("pending_charges", 0)
         exports = gateway.get("export_config", [])
         network_config = gateway.get("network_config", {}).get("primary", {})
-        
+
         cost_analysis = {
             "gateway_info": {
                 "id": gateway_id,
@@ -597,7 +598,7 @@ echo '<gateway-ip>:{pseudo_path} {mount_point} nfs4 rsize=1048576,wsize=1048576,
             },
             "optimization_suggestions": []
         }
-        
+
         # Cost optimization suggestions
         if pending_charges > 0:
             if len(exports) == 0:
@@ -606,14 +607,14 @@ echo '<gateway-ip>:{pseudo_path} {mount_point} nfs4 rsize=1048576,wsize=1048576,
                     "suggestion": "No exports configured - consider deleting if unused",
                     "potential_savings": f"${pending_charges * 30:.2f}/month"
                 })
-            
+
             if network_config.get("ipv4_public_enabled") and network_config.get("ipv6_public_enabled"):
                 cost_analysis["optimization_suggestions"].append({
                     "category": "Network",
                     "suggestion": "Consider IPv6-only if clients support it",
                     "potential_savings": "Potential cost reduction for dual-stack"
                 })
-        
+
         # Add cost comparison with alternatives
         cost_analysis["cost_comparison"] = {
             "storage_gateway_monthly": pending_charges * 30,
@@ -624,7 +625,7 @@ echo '<gateway-ip>:{pseudo_path} {mount_point} nfs4 rsize=1048576,wsize=1048576,
                 "Factor in management overhead and reliability"
             ]
         }
-        
+
         return cost_analysis
-    
+
     return mcp

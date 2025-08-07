@@ -4,7 +4,8 @@ Vultr SSH Keys FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr SSH keys.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from fastmcp import FastMCP
 
 
@@ -19,14 +20,14 @@ def create_ssh_keys_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with SSH key management tools
     """
     mcp = FastMCP(name="vultr-ssh-keys")
-    
+
     # Helper function to check if a string looks like a UUID
     def is_uuid_format(s: str) -> bool:
         """Check if a string looks like a UUID."""
         if len(s) == 36 and s.count('-') == 4:
             return True
         return False
-    
+
     # Helper function to get SSH key ID from name
     async def get_ssh_key_id(identifier: str) -> str:
         """
@@ -44,21 +45,21 @@ def create_ssh_keys_mcp(vultr_client) -> FastMCP:
         # If it looks like a UUID, return it as-is
         if is_uuid_format(identifier):
             return identifier
-            
+
         # Otherwise, search for it by name
         ssh_keys = await vultr_client.list_ssh_keys()
         for key in ssh_keys:
             if key.get("name") == identifier:
                 return key["id"]
-        
+
         raise ValueError(f"SSH key '{identifier}' not found")
-    
+
     # SSH Key resources
     @mcp.resource("ssh-keys://list")
     async def list_ssh_keys_resource() -> List[Dict[str, Any]]:
         """List all SSH keys in your Vultr account."""
         return await vultr_client.list_ssh_keys()
-    
+
     @mcp.resource("ssh-keys://{ssh_key_id}")
     async def get_ssh_key_resource(ssh_key_id: str) -> Dict[str, Any]:
         """Get information about a specific SSH key.
@@ -68,7 +69,7 @@ def create_ssh_keys_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_ssh_key_id(ssh_key_id)
         return await vultr_client.get_ssh_key(actual_id)
-    
+
     # SSH Key tools
     @mcp.tool
     async def list() -> List[Dict[str, Any]]:
@@ -82,7 +83,7 @@ def create_ssh_keys_mcp(vultr_client) -> FastMCP:
             - date_created: Creation date
         """
         return await vultr_client.list_ssh_keys()
-    
+
     @mcp.tool
     async def get(ssh_key_id: str) -> Dict[str, Any]:
         """Get information about a specific SSH key.
@@ -99,7 +100,7 @@ def create_ssh_keys_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_ssh_key_id(ssh_key_id)
         return await vultr_client.get_ssh_key(actual_id)
-    
+
     @mcp.tool
     async def create(name: str, ssh_key: str) -> Dict[str, Any]:
         """Create a new SSH key.
@@ -116,7 +117,7 @@ def create_ssh_keys_mcp(vultr_client) -> FastMCP:
             - date_created: Creation date
         """
         return await vultr_client.create_ssh_key(name, ssh_key)
-    
+
     @mcp.tool
     async def update(ssh_key_id: str, name: Optional[str] = None, ssh_key: Optional[str] = None) -> Dict[str, Any]:
         """Update an existing SSH key.
@@ -131,7 +132,7 @@ def create_ssh_keys_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_ssh_key_id(ssh_key_id)
         return await vultr_client.update_ssh_key(actual_id, name, ssh_key)
-    
+
     @mcp.tool
     async def delete(ssh_key_id: str) -> Dict[str, str]:
         """Delete an SSH key.
@@ -145,5 +146,5 @@ def create_ssh_keys_mcp(vultr_client) -> FastMCP:
         actual_id = await get_ssh_key_id(ssh_key_id)
         await vultr_client.delete_ssh_key(actual_id)
         return {"status": "success", "message": f"SSH key {ssh_key_id} deleted successfully"}
-    
+
     return mcp

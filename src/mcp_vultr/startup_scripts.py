@@ -4,7 +4,8 @@ Vultr Startup Scripts FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr startup scripts.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from fastmcp import FastMCP
 
 
@@ -19,27 +20,27 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with startup scripts management tools
     """
     mcp = FastMCP(name="vultr-startup-scripts")
-    
+
     # Helper function to check if string is UUID format
     def is_uuid_format(value: str) -> bool:
         """Check if a string looks like a UUID."""
         import re
         uuid_pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         return bool(re.match(uuid_pattern, value, re.IGNORECASE))
-    
+
     # Helper function to get startup script ID from name or ID
     async def get_startup_script_id(identifier: str) -> str:
         """Get the startup script ID from name or existing ID."""
         if is_uuid_format(identifier):
             return identifier
-        
+
         scripts = await vultr_client.list_startup_scripts()
         for script in scripts:
             if script.get("name") == identifier:
                 return script["id"]
-        
+
         raise ValueError(f"Startup script '{identifier}' not found")
-    
+
     @mcp.tool()
     async def list_startup_scripts() -> List[Dict[str, Any]]:
         """
@@ -49,7 +50,7 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
             List of startup scripts
         """
         return await vultr_client.list_startup_scripts()
-    
+
     @mcp.tool()
     async def get_startup_script(script_identifier: str) -> Dict[str, Any]:
         """
@@ -64,7 +65,7 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
         """
         script_id = await get_startup_script_id(script_identifier)
         return await vultr_client.get_startup_script(script_id)
-    
+
     @mcp.tool()
     async def create_startup_script(
         name: str,
@@ -83,7 +84,7 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
             Created startup script details
         """
         return await vultr_client.create_startup_script(name, script, script_type)
-    
+
     @mcp.tool()
     async def update_startup_script(
         script_identifier: str,
@@ -104,7 +105,7 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
         """
         script_id = await get_startup_script_id(script_identifier)
         return await vultr_client.update_startup_script(script_id, name, script)
-    
+
     @mcp.tool()
     async def delete_startup_script(script_identifier: str) -> str:
         """
@@ -120,7 +121,7 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
         script_id = await get_startup_script_id(script_identifier)
         await vultr_client.delete_startup_script(script_id)
         return f"Successfully deleted startup script {script_identifier}"
-    
+
     @mcp.tool()
     async def list_boot_scripts() -> List[Dict[str, Any]]:
         """
@@ -130,10 +131,10 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
             List of boot startup scripts
         """
         all_scripts = await vultr_client.list_startup_scripts()
-        boot_scripts = [script for script in all_scripts 
+        boot_scripts = [script for script in all_scripts
                        if script.get("type", "").lower() == "boot"]
         return boot_scripts
-    
+
     @mcp.tool()
     async def list_pxe_scripts() -> List[Dict[str, Any]]:
         """
@@ -143,10 +144,10 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
             List of PXE startup scripts
         """
         all_scripts = await vultr_client.list_startup_scripts()
-        pxe_scripts = [script for script in all_scripts 
+        pxe_scripts = [script for script in all_scripts
                       if script.get("type", "").lower() == "pxe"]
         return pxe_scripts
-    
+
     @mcp.tool()
     async def search_startup_scripts(query: str) -> List[Dict[str, Any]]:
         """
@@ -160,16 +161,16 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
         """
         all_scripts = await vultr_client.list_startup_scripts()
         matching_scripts = []
-        
+
         for script in all_scripts:
             name = script.get("name", "").lower()
             content = script.get("script", "").lower()
-            
+
             if query.lower() in name or query.lower() in content:
                 matching_scripts.append(script)
-        
+
         return matching_scripts
-    
+
     @mcp.tool()
     async def create_common_startup_script(script_type: str, **kwargs) -> Dict[str, Any]:
         """
@@ -226,17 +227,17 @@ systemctl restart sshd
 """
             }
         }
-        
+
         if script_type not in templates:
             raise ValueError(f"Unknown script type: {script_type}. Available: {list(templates.keys())}")
-        
+
         template = templates[script_type]
         return await vultr_client.create_startup_script(
             template["name"],
             template["script"],
             "boot"
         )
-    
+
     @mcp.tool()
     async def get_startup_script_content(script_identifier: str) -> str:
         """
@@ -251,5 +252,5 @@ systemctl restart sshd
         """
         script = await get_startup_script(script_identifier)
         return script.get("script", "")
-    
+
     return mcp

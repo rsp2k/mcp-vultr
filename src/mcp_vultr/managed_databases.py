@@ -6,7 +6,8 @@ Supports MySQL, PostgreSQL, Valkey (Redis), and Kafka engines with comprehensive
 database management features including users, backups, connection pools, and monitoring.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from fastmcp import FastMCP
 
 
@@ -21,14 +22,14 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with managed database tools
     """
     mcp = FastMCP(name="vultr-managed-databases")
-    
+
     # Helper function to check if a string looks like a UUID
     def is_uuid_format(s: str) -> bool:
         """Check if a string looks like a UUID."""
         if len(s) == 36 and s.count('-') == 4:
             return True
         return False
-    
+
     # Helper function to get database ID from label or UUID
     async def get_database_id(identifier: str) -> str:
         """
@@ -46,21 +47,21 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         # If it looks like a UUID, return it as-is
         if is_uuid_format(identifier):
             return identifier
-            
+
         # Otherwise, search for it by label
         databases = await vultr_client.list_managed_databases()
         for database in databases:
             if database.get("label") == identifier:
                 return database["id"]
-        
+
         raise ValueError(f"Database '{identifier}' not found (searched by label)")
-    
+
     # Database resources
     @mcp.resource("databases://list")
     async def list_databases_resource() -> List[Dict[str, Any]]:
         """List all managed databases in your Vultr account."""
         return await vultr_client.list_managed_databases()
-    
+
     @mcp.resource("databases://{database_id}")
     async def get_database_resource(database_id: str) -> Dict[str, Any]:
         """Get information about a specific managed database.
@@ -70,12 +71,12 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_database_id(database_id)
         return await vultr_client.get_managed_database(actual_id)
-    
+
     @mcp.resource("databases://plans")
     async def list_database_plans_resource() -> List[Dict[str, Any]]:
         """List all available managed database plans."""
         return await vultr_client.list_database_plans()
-    
+
     # Core Database Management Tools
     @mcp.tool
     async def list() -> List[Dict[str, Any]]:
@@ -96,7 +97,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             - user: Default username
         """
         return await vultr_client.list_managed_databases()
-    
+
     @mcp.tool
     async def get(database_id: str) -> Dict[str, Any]:
         """Get detailed information about a specific managed database.
@@ -109,7 +110,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_database_id(database_id)
         return await vultr_client.get_managed_database(actual_id)
-    
+
     @mcp.tool
     async def create(
         database_engine: str,
@@ -167,7 +168,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             kafka_schema_registry_enabled=kafka_schema_registry_enabled,
             kafka_connect_enabled=kafka_connect_enabled
         )
-    
+
     @mcp.tool
     async def update(
         database_id: str,
@@ -226,7 +227,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             kafka_schema_registry_enabled=kafka_schema_registry_enabled,
             kafka_connect_enabled=kafka_connect_enabled
         )
-    
+
     @mcp.tool
     async def delete(database_id: str) -> Dict[str, str]:
         """Delete a managed database.
@@ -240,7 +241,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         actual_id = await get_database_id(database_id)
         await vultr_client.delete_managed_database(actual_id)
         return {"status": "success", "message": f"Database {database_id} deleted successfully"}
-    
+
     @mcp.tool
     async def get_usage(database_id: str) -> Dict[str, Any]:
         """Get database usage statistics (CPU, memory, disk).
@@ -253,7 +254,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_database_id(database_id)
         return await vultr_client.get_database_usage(actual_id)
-    
+
     # Database User Management Tools
     @mcp.tool
     async def list_users(database_id: str) -> List[Dict[str, Any]]:
@@ -267,7 +268,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_database_id(database_id)
         return await vultr_client.list_database_users(actual_id)
-    
+
     @mcp.tool
     async def create_user(
         database_id: str,
@@ -296,7 +297,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             encryption=encryption,
             access_level=access_level
         )
-    
+
     @mcp.tool
     async def get_user(database_id: str, username: str) -> Dict[str, Any]:
         """Get information about a specific database user.
@@ -310,7 +311,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_database_id(database_id)
         return await vultr_client.get_database_user(actual_id, username)
-    
+
     @mcp.tool
     async def update_user(
         database_id: str,
@@ -336,7 +337,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             password=password,
             access_level=access_level
         )
-    
+
     @mcp.tool
     async def delete_user(database_id: str, username: str) -> Dict[str, str]:
         """Delete a database user.
@@ -351,7 +352,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         actual_id = await get_database_id(database_id)
         await vultr_client.delete_database_user(actual_id, username)
         return {"status": "success", "message": f"User {username} deleted successfully"}
-    
+
     # Database Access Control (Valkey/Redis)
     @mcp.tool
     async def update_user_access_control(
@@ -385,7 +386,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             acl_keys=acl_keys
         )
         return {"status": "success", "message": f"Access control updated for user {username}"}
-    
+
     # Database Schema Management
     @mcp.tool
     async def list_databases(database_id: str) -> List[Dict[str, Any]]:
@@ -399,7 +400,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_database_id(database_id)
         return await vultr_client.list_logical_databases(actual_id)
-    
+
     @mcp.tool
     async def create_logical_database(database_id: str, name: str) -> Dict[str, Any]:
         """Create a new logical database within a managed database instance.
@@ -413,7 +414,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_database_id(database_id)
         return await vultr_client.create_logical_database(actual_id, name)
-    
+
     @mcp.tool
     async def get_logical_database(database_id: str, db_name: str) -> Dict[str, Any]:
         """Get information about a logical database.
@@ -427,7 +428,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_database_id(database_id)
         return await vultr_client.get_logical_database(actual_id, db_name)
-    
+
     @mcp.tool
     async def delete_logical_database(database_id: str, db_name: str) -> Dict[str, str]:
         """Delete a logical database.
@@ -442,7 +443,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         actual_id = await get_database_id(database_id)
         await vultr_client.delete_logical_database(actual_id, db_name)
         return {"status": "success", "message": f"Logical database {db_name} deleted successfully"}
-    
+
     # Connection Pool Management
     @mcp.tool
     async def list_connection_pools(database_id: str) -> List[Dict[str, Any]]:
@@ -456,7 +457,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_database_id(database_id)
         return await vultr_client.list_connection_pools(actual_id)
-    
+
     @mcp.tool
     async def create_connection_pool(
         database_id: str,
@@ -488,7 +489,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             mode=mode,
             size=size
         )
-    
+
     @mcp.tool
     async def get_connection_pool(database_id: str, pool_name: str) -> Dict[str, Any]:
         """Get information about a connection pool.
@@ -502,7 +503,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_database_id(database_id)
         return await vultr_client.get_connection_pool(actual_id, pool_name)
-    
+
     @mcp.tool
     async def update_connection_pool(
         database_id: str,
@@ -534,7 +535,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             mode=mode,
             size=size
         )
-    
+
     @mcp.tool
     async def delete_connection_pool(database_id: str, pool_name: str) -> Dict[str, str]:
         """Delete a connection pool.
@@ -549,7 +550,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         actual_id = await get_database_id(database_id)
         await vultr_client.delete_connection_pool(actual_id, pool_name)
         return {"status": "success", "message": f"Connection pool {pool_name} deleted successfully"}
-    
+
     # Backup Management
     @mcp.tool
     async def list_backups(database_id: str) -> List[Dict[str, Any]]:
@@ -563,7 +564,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_database_id(database_id)
         return await vultr_client.list_database_backups(actual_id)
-    
+
     @mcp.tool
     async def restore_from_backup(
         database_id: str,
@@ -595,7 +596,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             region=region,
             vpc_id=vpc_id
         )
-    
+
     @mcp.tool
     async def fork_database(
         database_id: str,
@@ -624,7 +625,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             plan=plan,
             vpc_id=vpc_id
         )
-    
+
     # Read Replica Management
     @mcp.tool
     async def create_read_replica(
@@ -651,7 +652,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             region=region,
             plan=plan
         )
-    
+
     @mcp.tool
     async def promote_read_replica(database_id: str) -> Dict[str, str]:
         """Promote a read replica to a standalone database.
@@ -665,7 +666,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         actual_id = await get_database_id(database_id)
         await vultr_client.promote_read_replica(actual_id)
         return {"status": "success", "message": f"Read replica {database_id} promoted successfully"}
-    
+
     # Maintenance and Migration
     @mcp.tool
     async def list_available_versions(database_id: str) -> List[Dict[str, Any]]:
@@ -679,7 +680,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_database_id(database_id)
         return await vultr_client.list_database_versions(actual_id)
-    
+
     @mcp.tool
     async def start_version_upgrade(database_id: str, version: str) -> Dict[str, str]:
         """Start a database engine version upgrade.
@@ -694,7 +695,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         actual_id = await get_database_id(database_id)
         await vultr_client.start_version_upgrade(actual_id, version)
         return {"status": "success", "message": f"Version upgrade to {version} started for {database_id}"}
-    
+
     @mcp.tool
     async def get_maintenance_updates(database_id: str) -> List[Dict[str, Any]]:
         """Get available maintenance updates for a database.
@@ -707,7 +708,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_database_id(database_id)
         return await vultr_client.get_maintenance_updates(actual_id)
-    
+
     @mcp.tool
     async def start_maintenance(database_id: str) -> Dict[str, str]:
         """Start maintenance on a database.
@@ -721,7 +722,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         actual_id = await get_database_id(database_id)
         await vultr_client.start_maintenance(actual_id)
         return {"status": "success", "message": f"Maintenance started for {database_id}"}
-    
+
     @mcp.tool
     async def get_migration_status(database_id: str) -> Dict[str, Any]:
         """Get the status of an ongoing database migration.
@@ -734,7 +735,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_database_id(database_id)
         return await vultr_client.get_migration_status(actual_id)
-    
+
     @mcp.tool
     async def start_migration(
         database_id: str,
@@ -770,7 +771,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             ssl=ssl
         )
         return {"status": "success", "message": f"Migration started for {database_id}"}
-    
+
     @mcp.tool
     async def stop_migration(database_id: str) -> Dict[str, str]:
         """Stop an ongoing database migration.
@@ -784,7 +785,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         actual_id = await get_database_id(database_id)
         await vultr_client.stop_migration(actual_id)
         return {"status": "success", "message": f"Migration stopped for {database_id}"}
-    
+
     # Kafka-specific Tools
     @mcp.tool
     async def list_kafka_topics(database_id: str) -> List[Dict[str, Any]]:
@@ -798,7 +799,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_database_id(database_id)
         return await vultr_client.list_kafka_topics(actual_id)
-    
+
     @mcp.tool
     async def create_kafka_topic(
         database_id: str,
@@ -830,7 +831,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             retention_hours=retention_hours,
             retention_bytes=retention_bytes
         )
-    
+
     @mcp.tool
     async def get_kafka_topic(database_id: str, topic_name: str) -> Dict[str, Any]:
         """Get information about a Kafka topic.
@@ -844,7 +845,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_database_id(database_id)
         return await vultr_client.get_kafka_topic(actual_id, topic_name)
-    
+
     @mcp.tool
     async def update_kafka_topic(
         database_id: str,
@@ -876,7 +877,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             retention_hours=retention_hours,
             retention_bytes=retention_bytes
         )
-    
+
     @mcp.tool
     async def delete_kafka_topic(database_id: str, topic_name: str) -> Dict[str, str]:
         """Delete a Kafka topic.
@@ -891,7 +892,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         actual_id = await get_database_id(database_id)
         await vultr_client.delete_kafka_topic(actual_id, topic_name)
         return {"status": "success", "message": f"Kafka topic {topic_name} deleted successfully"}
-    
+
     # Helper Setup Tools
     @mcp.tool
     async def list_plans() -> List[Dict[str, Any]]:
@@ -901,7 +902,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             List of database plans with pricing and specifications
         """
         return await vultr_client.list_database_plans()
-    
+
     @mcp.tool
     async def setup_mysql_database(
         region: str,
@@ -936,9 +937,9 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             mysql_require_primary_key=True,
             mysql_slow_query_log=True
         )
-        
+
         database_id = db_result["database"]["id"]
-        
+
         # Wait for database to be ready (simplified - in real implementation, poll status)
         # Create application user
         user_result = await vultr_client.create_database_user(
@@ -947,13 +948,13 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             password=app_password,
             encryption="caching_sha2_password"
         )
-        
+
         # Create application database
         db_create_result = await vultr_client.create_logical_database(
             database_id=database_id,
             name=app_database
         )
-        
+
         return {
             "database": db_result,
             "user": user_result,
@@ -966,7 +967,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
                 "ssl_required": True
             }
         }
-    
+
     @mcp.tool
     async def setup_postgresql_database(
         region: str,
@@ -999,22 +1000,22 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             plan=plan,
             label=label
         )
-        
+
         database_id = db_result["database"]["id"]
-        
+
         # Create application user
         user_result = await vultr_client.create_database_user(
             database_id=database_id,
             username=app_user,
             password=app_password
         )
-        
+
         # Create application database
         db_create_result = await vultr_client.create_logical_database(
             database_id=database_id,
             name=app_database
         )
-        
+
         return {
             "database": db_result,
             "user": user_result,
@@ -1027,5 +1028,5 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
                 "ssl_required": True
             }
         }
-    
+
     return mcp

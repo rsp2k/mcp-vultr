@@ -3,8 +3,8 @@ Main entry point for running the Vultr DNS FastMCP server.
 """
 
 import sys
-from .fastmcp_server import run_server
 
+from .fastmcp_server import run_server
 
 if __name__ == "__main__":
     try:

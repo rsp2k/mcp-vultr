@@ -4,7 +4,8 @@ Vultr DNS FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr DNS domains and records.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from fastmcp import FastMCP
 
 
@@ -19,13 +20,13 @@ def create_dns_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with DNS management tools
     """
     mcp = FastMCP(name="vultr-dns")
-    
+
     # DNS Domain resources
     @mcp.resource("domains://list")
     async def list_domains_resource() -> List[Dict[str, Any]]:
         """List all DNS domains in your Vultr account."""
         return await vultr_client.list_domains()
-    
+
     @mcp.resource("domains://{domain}")
     async def get_domain_resource(domain: str) -> Dict[str, Any]:
         """Get details for a specific DNS domain.
@@ -34,7 +35,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             domain: The domain name to get details for
         """
         return await vultr_client.get_domain(domain)
-    
+
     @mcp.resource("domains://{domain}/records")
     async def list_records_resource(domain: str) -> List[Dict[str, Any]]:
         """List all DNS records for a domain.
@@ -43,7 +44,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             domain: The domain name to list records for
         """
         return await vultr_client.list_records(domain)
-    
+
     @mcp.resource("domains://{domain}/records/{record_id}")
     async def get_record_resource(domain: str, record_id: str) -> Dict[str, Any]:
         """Get details for a specific DNS record.
@@ -53,7 +54,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             record_id: The record ID to get details for
         """
         return await vultr_client.get_record(domain, record_id)
-    
+
     @mcp.resource("domains://{domain}/analysis")
     async def analyze_domain_resource(domain: str) -> Dict[str, Any]:
         """Analyze DNS records for a domain and provide recommendations.
@@ -62,7 +63,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             domain: The domain name to analyze
         """
         return await vultr_client.analyze_records(domain)
-    
+
     @mcp.resource("domains://{domain}/zone-file")
     async def export_zone_file_resource(domain: str) -> str:
         """Export domain records as standard DNS zone file format.
@@ -71,7 +72,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             domain: The domain name to export
         """
         return await vultr_client.export_zone_file(domain)
-    
+
     # DNS Domain tools
     @mcp.tool
     async def list_domains() -> List[Dict[str, Any]]:
@@ -84,7 +85,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             - dns_sec: DNSSEC status
         """
         return await vultr_client.list_domains()
-    
+
     @mcp.tool
     async def get_domain(domain: str) -> Dict[str, Any]:
         """Get details for a specific DNS domain.
@@ -96,7 +97,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             Domain details including creation date and DNSSEC status
         """
         return await vultr_client.get_domain(domain)
-    
+
     @mcp.tool
     async def create_domain(domain: str, ip: str, dns_sec: str = "disabled") -> Dict[str, Any]:
         """Create a new DNS domain.
@@ -110,7 +111,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             Created domain information
         """
         return await vultr_client.create_domain(domain, ip, dns_sec)
-    
+
     @mcp.tool
     async def delete_domain(domain: str) -> Dict[str, str]:
         """Delete a DNS domain and all its records.
@@ -123,7 +124,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
         """
         await vultr_client.delete_domain(domain)
         return {"status": "success", "message": f"Domain {domain} deleted successfully"}
-    
+
     # DNS Record tools
     @mcp.tool
     async def list_records(domain: str) -> List[Dict[str, Any]]:
@@ -136,7 +137,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             List of DNS records with details
         """
         return await vultr_client.list_records(domain)
-    
+
     @mcp.tool
     async def get_record(domain: str, record_id: str) -> Dict[str, Any]:
         """Get details for a specific DNS record.
@@ -149,7 +150,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             DNS record details
         """
         return await vultr_client.get_record(domain, record_id)
-    
+
     @mcp.tool
     async def create_record(
         domain: str,
@@ -173,7 +174,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             Created record information
         """
         return await vultr_client.create_record(domain, record_type, name, data, ttl, priority)
-    
+
     @mcp.tool
     async def update_record(
         domain: str,
@@ -197,7 +198,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             Updated record information
         """
         return await vultr_client.update_record(domain, record_id, name, data, ttl, priority)
-    
+
     @mcp.tool
     async def delete_record(domain: str, record_id: str) -> Dict[str, str]:
         """Delete a DNS record.
@@ -211,7 +212,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
         """
         await vultr_client.delete_record(domain, record_id)
         return {"status": "success", "message": f"Record {record_id} deleted successfully"}
-    
+
     @mcp.tool
     async def validate_record(
         record_type: str,
@@ -233,7 +234,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             Validation results with any errors or warnings
         """
         return await vultr_client.validate_record(record_type, name, data, ttl, priority)
-    
+
     @mcp.tool
     async def analyze_domain(domain: str) -> Dict[str, Any]:
         """Analyze DNS configuration for a domain and provide recommendations.
@@ -245,7 +246,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             Analysis results with recommendations for improvements
         """
         return await vultr_client.analyze_records(domain)
-    
+
     @mcp.tool
     async def setup_website(domain: str, ip: str, www_enabled: bool = True) -> List[Dict[str, Any]]:
         """Set up basic DNS records for a website.
@@ -259,16 +260,16 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             List of created DNS records
         """
         records = []
-        
+
         # Create A record for domain
         records.append(await vultr_client.create_record(domain, "A", "@", ip))
-        
+
         # Create www CNAME if enabled
         if www_enabled:
             records.append(await vultr_client.create_record(domain, "CNAME", "www", domain))
-        
+
         return records
-    
+
     @mcp.tool
     async def export_zone_file(domain: str) -> str:
         """Export domain records as standard DNS zone file format.
@@ -280,7 +281,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             DNS zone file content as string
         """
         return await vultr_client.export_zone_file(domain)
-    
+
     @mcp.tool
     async def import_zone_file(domain: str, zone_data: str, dry_run: bool = False) -> List[Dict[str, Any]]:
         """Import DNS records from zone file format.
@@ -294,5 +295,5 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             List of created records or validation results
         """
         return await vultr_client.import_zone_file(domain, zone_data, dry_run)
-    
+
     return mcp

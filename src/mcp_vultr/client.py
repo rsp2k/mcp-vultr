@@ -5,7 +5,7 @@ This module provides a high-level client interface for common DNS operations
 without requiring the full MCP server setup.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from .server import VultrDNSServer
 
@@ -17,7 +17,7 @@ class VultrDNSClient:
     This client provides convenient methods for common DNS operations
     with built-in validation and error handling.
     """
-    
+
     def __init__(self, api_key: str):
         """
         Initialize the Vultr DNS client.
@@ -26,15 +26,15 @@ class VultrDNSClient:
             api_key: Your Vultr API key
         """
         self.server = VultrDNSServer(api_key)
-    
+
     async def domains(self) -> List[Dict[str, Any]]:
         """Get all domains in your account."""
         return await self.server.list_domains()
-    
+
     async def domain(self, name: str) -> Dict[str, Any]:
         """Get details for a specific domain."""
         return await self.server.get_domain(name)
-    
+
     async def add_domain(self, domain: str, ip: str) -> Dict[str, Any]:
         """
         Add a new domain with default A record.
@@ -44,7 +44,7 @@ class VultrDNSClient:
             ip: IPv4 address for default A record
         """
         return await self.server.create_domain(domain, ip)
-    
+
     async def remove_domain(self, domain: str) -> bool:
         """
         Remove a domain and all its records.
@@ -60,15 +60,15 @@ class VultrDNSClient:
             return True
         except Exception:
             return False
-    
+
     async def records(self, domain: str) -> List[Dict[str, Any]]:
         """Get all DNS records for a domain."""
         return await self.server.list_records(domain)
-    
+
     async def record(self, domain: str, record_id: str) -> Dict[str, Any]:
         """Get details for a specific DNS record."""
         return await self.server.get_record(domain, record_id)
-    
+
     async def add_record(
         self,
         domain: str,
@@ -92,7 +92,7 @@ class VultrDNSClient:
         return await self.server.create_record(
             domain, record_type, name, value, ttl, priority
         )
-    
+
     async def update_record(
         self,
         domain: str,
@@ -118,7 +118,7 @@ class VultrDNSClient:
         return await self.server.update_record(
             domain, record_id, record_type, name, value, ttl, priority
         )
-    
+
     async def remove_record(self, domain: str, record_id: str) -> bool:
         """
         Remove a DNS record.
@@ -135,78 +135,78 @@ class VultrDNSClient:
             return True
         except Exception:
             return False
-    
+
     # Convenience methods for common record types
     async def add_a_record(
-        self, 
-        domain: str, 
-        name: str, 
-        ip: str, 
+        self,
+        domain: str,
+        name: str,
+        ip: str,
         ttl: Optional[int] = None
     ) -> Dict[str, Any]:
         """Add an A record pointing to an IPv4 address."""
         return await self.add_record(domain, "A", name, ip, ttl)
-    
+
     async def add_aaaa_record(
-        self, 
-        domain: str, 
-        name: str, 
-        ip: str, 
+        self,
+        domain: str,
+        name: str,
+        ip: str,
         ttl: Optional[int] = None
     ) -> Dict[str, Any]:
         """Add an AAAA record pointing to an IPv6 address."""
         return await self.add_record(domain, "AAAA", name, ip, ttl)
-    
+
     async def add_cname_record(
-        self, 
-        domain: str, 
-        name: str, 
-        target: str, 
+        self,
+        domain: str,
+        name: str,
+        target: str,
         ttl: Optional[int] = None
     ) -> Dict[str, Any]:
         """Add a CNAME record pointing to another domain."""
         return await self.add_record(domain, "CNAME", name, target, ttl)
-    
+
     async def add_mx_record(
-        self, 
-        domain: str, 
-        name: str, 
-        mail_server: str, 
+        self,
+        domain: str,
+        name: str,
+        mail_server: str,
         priority: int,
         ttl: Optional[int] = None
     ) -> Dict[str, Any]:
         """Add an MX record for email routing."""
         return await self.add_record(domain, "MX", name, mail_server, ttl, priority)
-    
+
     async def add_txt_record(
-        self, 
-        domain: str, 
-        name: str, 
-        text: str, 
+        self,
+        domain: str,
+        name: str,
+        text: str,
         ttl: Optional[int] = None
     ) -> Dict[str, Any]:
         """Add a TXT record for verification or policies."""
         return await self.add_record(domain, "TXT", name, text, ttl)
-    
+
     # Utility methods
     async def find_records_by_type(
-        self, 
-        domain: str, 
+        self,
+        domain: str,
         record_type: str
     ) -> List[Dict[str, Any]]:
         """Find all records of a specific type for a domain."""
         records = await self.records(domain)
         return [r for r in records if r.get('type', '').upper() == record_type.upper()]
-    
+
     async def find_records_by_name(
-        self, 
-        domain: str, 
+        self,
+        domain: str,
         name: str
     ) -> List[Dict[str, Any]]:
         """Find all records with a specific name for a domain."""
         records = await self.records(domain)
         return [r for r in records if r.get('name', '') == name]
-    
+
     async def get_domain_summary(self, domain: str) -> Dict[str, Any]:
         """
         Get a comprehensive summary of a domain's configuration.
@@ -217,21 +217,21 @@ class VultrDNSClient:
         try:
             domain_info = await self.domain(domain)
             records = await self.records(domain)
-            
+
             # Count record types
             record_counts = {}
             for record in records:
                 record_type = record.get('type', 'UNKNOWN')
                 record_counts[record_type] = record_counts.get(record_type, 0) + 1
-            
+
             # Basic configuration checks
             has_root_a = any(
-                r.get('type') == 'A' and r.get('name') in ['@', domain] 
+                r.get('type') == 'A' and r.get('name') in ['@', domain]
                 for r in records
             )
             has_www = any(r.get('name') == 'www' for r in records)
             has_mail = any(r.get('type') == 'MX' for r in records)
-            
+
             return {
                 "domain": domain,
                 "domain_info": domain_info,
@@ -244,14 +244,14 @@ class VultrDNSClient:
                 },
                 "records": records
             }
-            
+
         except Exception as e:
             return {"error": str(e), "domain": domain}
-    
+
     async def setup_basic_website(
-        self, 
-        domain: str, 
-        ip: str, 
+        self,
+        domain: str,
+        ip: str,
         include_www: bool = True,
         ttl: Optional[int] = None
     ) -> Dict[str, Any]:
@@ -268,32 +268,32 @@ class VultrDNSClient:
             Dictionary with results of record creation
         """
         results = {"domain": domain, "created_records": [], "errors": []}
-        
+
         try:
             # Create root A record
             root_result = await self.add_a_record(domain, "@", ip, ttl)
             if "error" not in root_result:
-                results["created_records"].append(f"A record for root domain")
+                results["created_records"].append("A record for root domain")
             else:
                 results["errors"].append(f"Root A record: {root_result['error']}")
-            
+
             # Create www record if requested
             if include_www:
                 www_result = await self.add_a_record(domain, "www", ip, ttl)
                 if "error" not in www_result:
-                    results["created_records"].append(f"A record for www subdomain")
+                    results["created_records"].append("A record for www subdomain")
                 else:
                     results["errors"].append(f"WWW A record: {www_result['error']}")
-            
+
         except Exception as e:
             results["errors"].append(f"Setup failed: {str(e)}")
-        
+
         return results
-    
+
     async def setup_email(
-        self, 
-        domain: str, 
-        mail_server: str, 
+        self,
+        domain: str,
+        mail_server: str,
         priority: int = 10,
         ttl: Optional[int] = None
     ) -> Dict[str, Any]:
@@ -310,7 +310,7 @@ class VultrDNSClient:
             Dictionary with results of record creation
         """
         results = {"domain": domain, "created_records": [], "errors": []}
-        
+
         try:
             # Create MX record
             mx_result = await self.add_mx_record(domain, "@", mail_server, priority, ttl)
@@ -318,8 +318,8 @@ class VultrDNSClient:
                 results["created_records"].append(f"MX record for {mail_server}")
             else:
                 results["errors"].append(f"MX record: {mx_result['error']}")
-            
+
         except Exception as e:
             results["errors"].append(f"Email setup failed: {str(e)}")
-        
+
         return results

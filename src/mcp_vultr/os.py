@@ -4,7 +4,8 @@ Vultr Operating Systems FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr operating systems.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List
+
 from fastmcp import FastMCP
 
 
@@ -19,7 +20,7 @@ def create_os_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with OS management tools
     """
     mcp = FastMCP(name="vultr-os")
-    
+
     @mcp.tool()
     async def list_operating_systems() -> List[Dict[str, Any]]:
         """
@@ -29,7 +30,7 @@ def create_os_mcp(vultr_client) -> FastMCP:
             List of available operating systems
         """
         return await vultr_client.list_operating_systems()
-    
+
     @mcp.tool()
     async def get_operating_system(os_id: str) -> Dict[str, Any]:
         """
@@ -42,7 +43,7 @@ def create_os_mcp(vultr_client) -> FastMCP:
             Operating system details
         """
         return await vultr_client.get_operating_system(os_id)
-    
+
     @mcp.tool()
     async def list_linux_os() -> List[Dict[str, Any]]:
         """
@@ -55,14 +56,14 @@ def create_os_mcp(vultr_client) -> FastMCP:
         # Filter for Linux distributions
         linux_keywords = ['ubuntu', 'debian', 'centos', 'fedora', 'arch', 'rocky', 'alma', 'opensuse']
         linux_os = []
-        
+
         for os_item in all_os:
             name = os_item.get("name", "").lower()
             if any(keyword in name for keyword in linux_keywords):
                 linux_os.append(os_item)
-        
+
         return linux_os
-    
+
     @mcp.tool()
     async def list_windows_os() -> List[Dict[str, Any]]:
         """
@@ -73,10 +74,10 @@ def create_os_mcp(vultr_client) -> FastMCP:
         """
         all_os = await vultr_client.list_operating_systems()
         # Filter for Windows
-        windows_os = [os_item for os_item in all_os 
+        windows_os = [os_item for os_item in all_os
                      if 'windows' in os_item.get("name", "").lower()]
         return windows_os
-    
+
     @mcp.tool()
     async def search_os_by_name(name: str) -> List[Dict[str, Any]]:
         """
@@ -90,13 +91,13 @@ def create_os_mcp(vultr_client) -> FastMCP:
         """
         all_os = await vultr_client.list_operating_systems()
         matching_os = []
-        
+
         for os_item in all_os:
             if name.lower() in os_item.get("name", "").lower():
                 matching_os.append(os_item)
-        
+
         return matching_os
-    
+
     @mcp.tool()
     async def get_os_by_name(name: str) -> Dict[str, Any]:
         """
@@ -109,13 +110,13 @@ def create_os_mcp(vultr_client) -> FastMCP:
             Operating system details
         """
         all_os = await vultr_client.list_operating_systems()
-        
+
         for os_item in all_os:
             if os_item.get("name", "").lower() == name.lower():
                 return os_item
-        
+
         raise ValueError(f"Operating system '{name}' not found")
-    
+
     @mcp.tool()
     async def list_application_images() -> List[Dict[str, Any]]:
         """
@@ -126,10 +127,10 @@ def create_os_mcp(vultr_client) -> FastMCP:
         """
         all_os = await vultr_client.list_operating_systems()
         # Filter for application images (typically have "Application" in family)
-        app_images = [os_item for os_item in all_os 
+        app_images = [os_item for os_item in all_os
                      if os_item.get("family", "").lower() == "application"]
         return app_images
-    
+
     @mcp.tool()
     async def list_os_by_family(family: str) -> List[Dict[str, Any]]:
         """
@@ -142,8 +143,8 @@ def create_os_mcp(vultr_client) -> FastMCP:
             List of operating systems in the specified family
         """
         all_os = await vultr_client.list_operating_systems()
-        family_os = [os_item for os_item in all_os 
+        family_os = [os_item for os_item in all_os
                     if os_item.get("family", "").lower() == family.lower()]
         return family_os
-    
+
     return mcp

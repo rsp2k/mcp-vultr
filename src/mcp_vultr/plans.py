@@ -4,7 +4,8 @@ Vultr Plans FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr plans.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from fastmcp import FastMCP
 
 
@@ -19,7 +20,7 @@ def create_plans_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with plans management tools
     """
     mcp = FastMCP(name="vultr-plans")
-    
+
     @mcp.tool()
     async def list_plans(plan_type: Optional[str] = None) -> List[Dict[str, Any]]:
         """
@@ -32,7 +33,7 @@ def create_plans_mcp(vultr_client) -> FastMCP:
             List of available plans
         """
         return await vultr_client.list_plans(plan_type)
-    
+
     @mcp.tool()
     async def get_plan(plan_id: str) -> Dict[str, Any]:
         """
@@ -45,7 +46,7 @@ def create_plans_mcp(vultr_client) -> FastMCP:
             Plan details
         """
         return await vultr_client.get_plan(plan_id)
-    
+
     @mcp.tool()
     async def list_vc2_plans() -> List[Dict[str, Any]]:
         """
@@ -55,7 +56,7 @@ def create_plans_mcp(vultr_client) -> FastMCP:
             List of VC2 plans
         """
         return await vultr_client.list_plans("vc2")
-    
+
     @mcp.tool()
     async def list_vhf_plans() -> List[Dict[str, Any]]:
         """
@@ -65,7 +66,7 @@ def create_plans_mcp(vultr_client) -> FastMCP:
             List of VHF plans
         """
         return await vultr_client.list_plans("vhf")
-    
+
     @mcp.tool()
     async def list_voc_plans() -> List[Dict[str, Any]]:
         """
@@ -75,7 +76,7 @@ def create_plans_mcp(vultr_client) -> FastMCP:
             List of VOC plans
         """
         return await vultr_client.list_plans("voc")
-    
+
     @mcp.tool()
     async def search_plans_by_specs(
         min_vcpus: Optional[int] = None,
@@ -97,12 +98,12 @@ def create_plans_mcp(vultr_client) -> FastMCP:
         """
         all_plans = await vultr_client.list_plans()
         matching_plans = []
-        
+
         for plan in all_plans:
             # Check vCPUs
             if min_vcpus and plan.get("vcpu_count", 0) < min_vcpus:
                 continue
-            
+
             # Check RAM (convert GB to MB for comparison if needed)
             if min_ram:
                 ram_mb = plan.get("ram", 0)
@@ -111,19 +112,19 @@ def create_plans_mcp(vultr_client) -> FastMCP:
                     ram_mb = ram_mb * 1024
                 if ram_mb < min_ram:
                     continue
-            
+
             # Check disk space
             if min_disk and plan.get("disk", 0) < min_disk:
                 continue
-            
+
             # Check monthly cost
             if max_monthly_cost and plan.get("monthly_cost", float('inf')) > max_monthly_cost:
                 continue
-            
+
             matching_plans.append(plan)
-        
+
         return matching_plans
-    
+
     @mcp.tool()
     async def get_plan_by_type_and_spec(plan_type: str, vcpus: int, ram_gb: int) -> List[Dict[str, Any]]:
         """
@@ -139,14 +140,14 @@ def create_plans_mcp(vultr_client) -> FastMCP:
         """
         plans = await vultr_client.list_plans(plan_type)
         matching_plans = []
-        
+
         for plan in plans:
-            if (plan.get("vcpu_count") == vcpus and 
+            if (plan.get("vcpu_count") == vcpus and
                 plan.get("ram") == ram_gb * 1024):  # Convert GB to MB
                 matching_plans.append(plan)
-        
+
         return matching_plans
-    
+
     @mcp.tool()
     async def get_cheapest_plan(plan_type: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -159,13 +160,13 @@ def create_plans_mcp(vultr_client) -> FastMCP:
             Cheapest plan details
         """
         plans = await vultr_client.list_plans(plan_type)
-        
+
         if not plans:
             raise ValueError("No plans available")
-        
+
         cheapest = min(plans, key=lambda p: p.get("monthly_cost", float('inf')))
         return cheapest
-    
+
     @mcp.tool()
     async def get_plans_by_region_availability(region: str) -> List[Dict[str, Any]]:
         """
@@ -179,14 +180,14 @@ def create_plans_mcp(vultr_client) -> FastMCP:
         """
         all_plans = await vultr_client.list_plans()
         available_plans = []
-        
+
         for plan in all_plans:
             locations = plan.get("locations", [])
             if region in locations:
                 available_plans.append(plan)
-        
+
         return available_plans
-    
+
     @mcp.tool()
     async def compare_plans(plan_ids: List[str]) -> List[Dict[str, Any]]:
         """
@@ -199,14 +200,14 @@ def create_plans_mcp(vultr_client) -> FastMCP:
             List of plan details for comparison
         """
         comparison = []
-        
+
         for plan_id in plan_ids:
             try:
                 plan = await vultr_client.get_plan(plan_id)
                 comparison.append(plan)
             except Exception as e:
                 comparison.append({"id": plan_id, "error": str(e)})
-        
+
         return comparison
-    
+
     return mcp

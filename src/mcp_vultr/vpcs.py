@@ -4,7 +4,8 @@ Vultr VPCs FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr VPCs and VPC 2.0 networks.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from fastmcp import FastMCP
 
 
@@ -19,14 +20,14 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with VPC management tools
     """
     mcp = FastMCP(name="vultr-vpcs")
-    
+
     # Helper function to check if string is UUID format
     def is_uuid_format(value: str) -> bool:
         """Check if a string looks like a UUID."""
         import re
         uuid_pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         return bool(re.match(uuid_pattern, value, re.IGNORECASE))
-    
+
     # Helper function to get VPC ID from description or ID
     async def get_vpc_id(identifier: str) -> str:
         """
@@ -44,15 +45,15 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
         # If it looks like a UUID, return as-is
         if is_uuid_format(identifier):
             return identifier
-        
+
         # Search by description
         vpcs = await vultr_client.list_vpcs()
         for vpc in vpcs:
             if vpc.get("description") == identifier:
                 return vpc["id"]
-        
+
         raise ValueError(f"VPC '{identifier}' not found")
-    
+
     # Helper function to get VPC 2.0 ID from description or ID
     async def get_vpc2_id(identifier: str) -> str:
         """
@@ -70,21 +71,21 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
         # If it looks like a UUID, return as-is
         if is_uuid_format(identifier):
             return identifier
-        
+
         # Search by description
         vpc2s = await vultr_client.list_vpc2s()
         for vpc2 in vpc2s:
             if vpc2.get("description") == identifier:
                 return vpc2["id"]
-        
+
         raise ValueError(f"VPC 2.0 '{identifier}' not found")
-    
+
     # VPC resources
     @mcp.resource("vpcs://list")
     async def list_vpcs_resource() -> List[Dict[str, Any]]:
         """List all VPCs."""
         return await vultr_client.list_vpcs()
-    
+
     @mcp.resource("vpcs://{vpc_identifier}")
     async def get_vpc_resource(vpc_identifier: str) -> Dict[str, Any]:
         """Get details of a specific VPC.
@@ -94,12 +95,12 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
         """
         vpc_id = await get_vpc_id(vpc_identifier)
         return await vultr_client.get_vpc(vpc_id)
-    
+
     @mcp.resource("vpc2s://list")
     async def list_vpc2s_resource() -> List[Dict[str, Any]]:
         """List all VPC 2.0 networks."""
         return await vultr_client.list_vpc2s()
-    
+
     @mcp.resource("vpc2s://{vpc2_identifier}")
     async def get_vpc2_resource(vpc2_identifier: str) -> Dict[str, Any]:
         """Get details of a specific VPC 2.0.
@@ -109,7 +110,7 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
         """
         vpc2_id = await get_vpc2_id(vpc2_identifier)
         return await vultr_client.get_vpc2(vpc2_id)
-    
+
     # VPC tools
     @mcp.tool
     async def list() -> List[Dict[str, Any]]:
@@ -125,7 +126,7 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
             - date_created: Creation date
         """
         return await vultr_client.list_vpcs()
-    
+
     @mcp.tool
     async def get(vpc_identifier: str) -> Dict[str, Any]:
         """Get detailed information about a specific VPC.
@@ -140,7 +141,7 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
         """
         vpc_id = await get_vpc_id(vpc_identifier)
         return await vultr_client.get_vpc(vpc_id)
-    
+
     @mcp.tool
     async def create(
         region: str,
@@ -160,7 +161,7 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
             Created VPC information including ID and subnet details
         """
         return await vultr_client.create_vpc(region, description, v4_subnet, v4_subnet_mask)
-    
+
     @mcp.tool
     async def update(vpc_identifier: str, description: str) -> Dict[str, str]:
         """Update VPC description.
@@ -181,7 +182,7 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
             "message": f"VPC description updated to '{description}'",
             "vpc_id": vpc_id
         }
-    
+
     @mcp.tool
     async def delete(vpc_identifier: str) -> Dict[str, str]:
         """Delete a VPC.
@@ -198,10 +199,10 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
         await vultr_client.delete_vpc(vpc_id)
         return {
             "success": True,
-            "message": f"VPC deleted successfully",
+            "message": "VPC deleted successfully",
             "vpc_id": vpc_id
         }
-    
+
     # VPC 2.0 tools
     @mcp.tool
     async def list_vpc2() -> List[Dict[str, Any]]:
@@ -217,7 +218,7 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
             - date_created: Creation date
         """
         return await vultr_client.list_vpc2s()
-    
+
     @mcp.tool
     async def get_vpc2(vpc2_identifier: str) -> Dict[str, Any]:
         """Get detailed information about a specific VPC 2.0.
@@ -232,7 +233,7 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
         """
         vpc2_id = await get_vpc2_id(vpc2_identifier)
         return await vultr_client.get_vpc2(vpc2_id)
-    
+
     @mcp.tool
     async def create_vpc2(
         region: str,
@@ -254,7 +255,7 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
             Created VPC 2.0 information including ID and IP block details
         """
         return await vultr_client.create_vpc2(region, description, ip_type, ip_block, prefix_length)
-    
+
     @mcp.tool
     async def update_vpc2(vpc2_identifier: str, description: str) -> Dict[str, str]:
         """Update VPC 2.0 description.
@@ -275,7 +276,7 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
             "message": f"VPC 2.0 description updated to '{description}'",
             "vpc2_id": vpc2_id
         }
-    
+
     @mcp.tool
     async def delete_vpc2(vpc2_identifier: str) -> Dict[str, str]:
         """Delete a VPC 2.0 network.
@@ -292,10 +293,10 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
         await vultr_client.delete_vpc2(vpc2_id)
         return {
             "success": True,
-            "message": f"VPC 2.0 deleted successfully",
+            "message": "VPC 2.0 deleted successfully",
             "vpc2_id": vpc2_id
         }
-    
+
     # Instance attachment tools
     @mcp.tool
     async def attach_to_instance(
@@ -322,19 +323,19 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
             instances = await vultr_client.list_instances()
             instance_id = None
             for instance in instances:
-                if (instance.get("label") == instance_identifier or 
+                if (instance.get("label") == instance_identifier or
                     instance.get("hostname") == instance_identifier):
                     instance_id = instance["id"]
                     break
             if not instance_id:
                 raise ValueError(f"Instance '{instance_identifier}' not found")
-        
+
         if vpc_type == "vpc2":
             vpc2_id = await get_vpc2_id(vpc_identifier)
             await vultr_client.attach_vpc2_to_instance(instance_id, vpc2_id)
             return {
                 "success": True,
-                "message": f"VPC 2.0 attached to instance successfully",
+                "message": "VPC 2.0 attached to instance successfully",
                 "vpc2_id": vpc2_id,
                 "instance_id": instance_id
             }
@@ -343,11 +344,11 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
             await vultr_client.attach_vpc_to_instance(instance_id, vpc_id)
             return {
                 "success": True,
-                "message": f"VPC attached to instance successfully",
+                "message": "VPC attached to instance successfully",
                 "vpc_id": vpc_id,
                 "instance_id": instance_id
             }
-    
+
     @mcp.tool
     async def detach_from_instance(
         vpc_identifier: str,
@@ -373,19 +374,19 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
             instances = await vultr_client.list_instances()
             instance_id = None
             for instance in instances:
-                if (instance.get("label") == instance_identifier or 
+                if (instance.get("label") == instance_identifier or
                     instance.get("hostname") == instance_identifier):
                     instance_id = instance["id"]
                     break
             if not instance_id:
                 raise ValueError(f"Instance '{instance_identifier}' not found")
-        
+
         if vpc_type == "vpc2":
             vpc2_id = await get_vpc2_id(vpc_identifier)
             await vultr_client.detach_vpc2_from_instance(instance_id, vpc2_id)
             return {
                 "success": True,
-                "message": f"VPC 2.0 detached from instance successfully",
+                "message": "VPC 2.0 detached from instance successfully",
                 "vpc2_id": vpc2_id,
                 "instance_id": instance_id
             }
@@ -394,11 +395,11 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
             await vultr_client.detach_vpc_from_instance(instance_id, vpc_id)
             return {
                 "success": True,
-                "message": f"VPC detached from instance successfully",
+                "message": "VPC detached from instance successfully",
                 "vpc_id": vpc_id,
                 "instance_id": instance_id
             }
-    
+
     @mcp.tool
     async def list_instance_networks(instance_identifier: str) -> Dict[str, Any]:
         """List all VPCs and VPC 2.0 networks attached to an instance.
@@ -418,23 +419,23 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
             instances = await vultr_client.list_instances()
             instance_id = None
             for instance in instances:
-                if (instance.get("label") == instance_identifier or 
+                if (instance.get("label") == instance_identifier or
                     instance.get("hostname") == instance_identifier):
                     instance_id = instance["id"]
                     break
             if not instance_id:
                 raise ValueError(f"Instance '{instance_identifier}' not found")
-        
+
         vpcs = await vultr_client.list_instance_vpcs(instance_id)
         vpc2s = await vultr_client.list_instance_vpc2s(instance_id)
-        
+
         return {
             "instance_id": instance_id,
             "vpcs": vpcs,
             "vpc2s": vpc2s,
             "total_networks": len(vpcs) + len(vpc2s)
         }
-    
+
     @mcp.tool
     async def list_by_region(region: str) -> Dict[str, Any]:
         """List VPCs and VPC 2.0 networks in a specific region.
@@ -447,17 +448,17 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
         """
         vpcs = await vultr_client.list_vpcs()
         vpc2s = await vultr_client.list_vpc2s()
-        
+
         region_vpcs = [vpc for vpc in vpcs if vpc.get("region") == region]
         region_vpc2s = [vpc2 for vpc2 in vpc2s if vpc2.get("region") == region]
-        
+
         return {
             "region": region,
             "vpcs": region_vpcs,
             "vpc2s": region_vpc2s,
             "total_networks": len(region_vpcs) + len(region_vpc2s)
         }
-    
+
     @mcp.tool
     async def get_network_info(identifier: str, vpc_type: str = "auto") -> Dict[str, Any]:
         """Get comprehensive network information for VPC or VPC 2.0.
@@ -494,7 +495,7 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
             vpc_id = await get_vpc_id(identifier)
             network_info = await vultr_client.get_vpc(vpc_id)
             network_type = "VPC"
-        
+
         # Enhanced network information
         enhanced_info = {
             **network_info,
@@ -511,7 +512,7 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
                 "Ensure instances are in the same region for optimal performance"
             ]
         }
-        
+
         return enhanced_info
 
     return mcp

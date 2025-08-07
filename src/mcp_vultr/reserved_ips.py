@@ -4,7 +4,8 @@ Vultr Reserved IPs FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr reserved IPs.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from fastmcp import FastMCP
 
 
@@ -19,7 +20,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with reserved IP management tools
     """
     mcp = FastMCP(name="vultr-reserved-ips")
-    
+
     # Helper function to get UUID from IP address
     async def get_reserved_ip_uuid(ip_address: str) -> str:
         """
@@ -39,13 +40,13 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
             if rip.get("subnet") == ip_address:
                 return rip["id"]
         raise ValueError(f"Reserved IP {ip_address} not found")
-    
+
     # Reserved IP resources
     @mcp.resource("reserved-ips://list")
     async def list_reserved_ips_resource() -> List[Dict[str, Any]]:
         """List all reserved IPs."""
         return await vultr_client.list_reserved_ips()
-    
+
     @mcp.resource("reserved-ips://{reserved_ip}")
     async def get_reserved_ip_resource(reserved_ip: str) -> Dict[str, Any]:
         """Get details of a specific reserved IP.
@@ -59,7 +60,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
         else:
             reserved_ip_uuid = reserved_ip
         return await vultr_client.get_reserved_ip(reserved_ip_uuid)
-    
+
     # Reserved IP tools
     @mcp.tool
     async def list() -> List[Dict[str, Any]]:
@@ -76,7 +77,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
             - instance_id: Attached instance ID (if any)
         """
         return await vultr_client.list_reserved_ips()
-    
+
     @mcp.tool
     async def get(reserved_ip: str) -> Dict[str, Any]:
         """Get details of a specific reserved IP.
@@ -93,7 +94,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
         else:
             reserved_ip_uuid = reserved_ip
         return await vultr_client.get_reserved_ip(reserved_ip_uuid)
-    
+
     @mcp.tool
     async def create(
         region: str,
@@ -115,7 +116,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
             create(region="ewr", ip_type="v4", label="web-server-ip")
         """
         return await vultr_client.create_reserved_ip(region, ip_type, label)
-    
+
     @mcp.tool
     async def update(reserved_ip: str, label: str) -> str:
         """Update a reserved IP's label.
@@ -134,7 +135,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
             reserved_ip_uuid = reserved_ip
         await vultr_client.update_reserved_ip(reserved_ip_uuid, label)
         return f"Reserved IP {reserved_ip} label updated to: {label}"
-    
+
     @mcp.tool
     async def delete(reserved_ip: str) -> str:
         """Delete a reserved IP.
@@ -154,7 +155,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
             reserved_ip_uuid = reserved_ip
         await vultr_client.delete_reserved_ip(reserved_ip_uuid)
         return f"Reserved IP {reserved_ip} deleted successfully"
-    
+
     @mcp.tool
     async def attach(reserved_ip: str, instance_id: str) -> str:
         """Attach a reserved IP to an instance.
@@ -175,7 +176,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
             reserved_ip_uuid = reserved_ip
         await vultr_client.attach_reserved_ip(reserved_ip_uuid, instance_id)
         return f"Reserved IP {reserved_ip} attached to instance {instance_id}"
-    
+
     @mcp.tool
     async def detach(reserved_ip: str) -> str:
         """Detach a reserved IP from its instance.
@@ -193,7 +194,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
             reserved_ip_uuid = reserved_ip
         await vultr_client.detach_reserved_ip(reserved_ip_uuid)
         return f"Reserved IP {reserved_ip} detached from instance"
-    
+
     @mcp.tool
     async def convert_instance_ip(
         ip_address: str,
@@ -215,7 +216,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
         and remain attached to the instance.
         """
         return await vultr_client.convert_instance_ip_to_reserved(ip_address, instance_id, label)
-    
+
     @mcp.tool
     async def list_by_region(region: str) -> List[Dict[str, Any]]:
         """List all reserved IPs in a specific region.
@@ -228,7 +229,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
         """
         all_ips = await vultr_client.list_reserved_ips()
         return [ip for ip in all_ips if ip.get("region") == region]
-    
+
     @mcp.tool
     async def list_unattached() -> List[Dict[str, Any]]:
         """List all unattached reserved IPs.
@@ -238,7 +239,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
         """
         all_ips = await vultr_client.list_reserved_ips()
         return [ip for ip in all_ips if not ip.get("instance_id")]
-    
+
     @mcp.tool
     async def list_attached() -> List[Dict[str, Any]]:
         """List all attached reserved IPs.
@@ -249,5 +250,5 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
         """
         all_ips = await vultr_client.list_reserved_ips()
         return [ip for ip in all_ips if ip.get("instance_id")]
-    
+
     return mcp

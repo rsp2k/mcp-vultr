@@ -7,19 +7,23 @@ for managing DNS records through the Vultr API.
 
 import ipaddress
 import os
-import re
+import time
 from typing import Any, Dict, List, Optional
 
 import httpx
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import Resource, Tool, TextContent
-from pydantic import BaseModel
+from mcp.types import Resource, TextContent, Tool
+
+from .cache import CacheManager
+from .logging import get_logger, log_api_request
+from .metrics import record_api_call
+from .retry import NetworkError, RateLimitError, retry_api_call
 
 
 class VultrAPIError(Exception):
     """Base exception for Vultr API errors."""
-    
+
     def __init__(self, status_code: int, message: str):
         self.status_code = status_code
         self.message = message
@@ -53,9 +57,9 @@ class VultrDNSServer:
     This class provides async methods for all DNS operations including
     domain management and record CRUD operations.
     """
-    
+
     API_BASE = "https://api.vultr.com/v2"
-    
+
     def __init__(self, api_key: str):
         """
         Initialize the Vultr DNS server.
@@ -68,85 +72,169 @@ class VultrDNSServer:
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
-    
+        self.logger = get_logger(__name__)
+        self.cache = CacheManager()
+
+    @retry_api_call
     async def _make_request(
-        self, 
-        method: str, 
-        endpoint: str, 
+        self,
+        method: str,
+        endpoint: str,
         data: Optional[Dict] = None,
         params: Optional[Dict] = None
     ) -> Dict[str, Any]:
-        """Make an HTTP request to the Vultr API."""
+        """Make an HTTP request to the Vultr API with caching, retry, and structured logging."""
         url = f"{self.API_BASE}{endpoint}"
-        
+        start_time = time.time()
+
+        # Check cache for GET requests
+        cache_hit = False
+        if method.upper() == 'GET':
+            cached_result = self.cache.get(method, endpoint, params)
+            if cached_result is not None:
+                cache_hit = True
+                response_time = time.time() - start_time
+
+                # Record cache hit metrics
+                record_api_call(endpoint, method, response_time, success=True, cache_hit=True)
+
+                self.logger.debug(
+                    "Cache hit for API request",
+                    method=method,
+                    endpoint=endpoint
+                )
+                return cached_result
+
         # Configure timeout: 30 seconds total, 10 seconds to connect
         timeout = httpx.Timeout(30.0, connect=10.0)
-        
+
+        self.logger.debug(
+            "Making API request",
+            method=method,
+            endpoint=endpoint,
+            has_data=data is not None,
+            has_params=params is not None
+        )
+
         async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.request(
-                method=method,
-                url=url,
-                headers=self.headers,
-                json=data,
-                params=params
-            )
-            
-            if response.status_code not in [200, 201, 204]:
-                # Raise specific exceptions based on status code
-                if response.status_code == 401:
-                    raise VultrAuthError(response.status_code, "Invalid API key")
-                elif response.status_code == 403:
-                    raise VultrAuthError(response.status_code, "Insufficient permissions")
-                elif response.status_code == 404:
-                    raise VultrResourceNotFoundError(response.status_code, "Resource not found")
-                elif response.status_code == 429:
-                    raise VultrRateLimitError(response.status_code, "Rate limit exceeded")
-                elif response.status_code in [400, 422]:
-                    raise VultrValidationError(response.status_code, response.text)
+            try:
+                response = await client.request(
+                    method=method,
+                    url=url,
+                    headers=self.headers,
+                    json=data,
+                    params=params
+                )
+
+                response_time = time.time() - start_time
+
+                # Log the API request
+                log_api_request(
+                    self.logger,
+                    method=method,
+                    url=url,
+                    status_code=response.status_code,
+                    response_time=response_time,
+                    endpoint=endpoint
+                )
+
+                if response.status_code not in [200, 201, 204]:
+                    # Record failed API call metrics
+                    record_api_call(endpoint, method, response_time, success=False, cache_hit=cache_hit)
+
+                    # Raise specific exceptions based on status code
+                    if response.status_code == 401:
+                        raise VultrAuthError(response.status_code, "Invalid API key")
+                    elif response.status_code == 403:
+                        raise VultrAuthError(response.status_code, "Insufficient permissions")
+                    elif response.status_code == 404:
+                        raise VultrResourceNotFoundError(response.status_code, "Resource not found")
+                    elif response.status_code == 429:
+                        raise RateLimitError(f"Rate limit exceeded: {response.text}")
+                    elif response.status_code in [400, 422]:
+                        raise VultrValidationError(response.status_code, response.text)
+                    else:
+                        raise VultrAPIError(response.status_code, response.text)
+
+                if response.status_code == 204:
+                    result = {}
                 else:
-                    raise VultrAPIError(response.status_code, response.text)
-            
-            if response.status_code == 204:
-                return {}
-            
-            return response.json()
+                    result = response.json()
+
+                # Cache successful GET requests
+                if method.upper() == 'GET' and result:
+                    self.cache.set(method, endpoint, params, result)
+
+                # Record successful API call metrics
+                record_api_call(endpoint, method, response_time, success=True, cache_hit=cache_hit)
+
+                return result
+
+            except httpx.TimeoutException as e:
+                response_time = time.time() - start_time
+
+                # Record timeout metrics
+                record_api_call(endpoint, method, response_time, success=False, cache_hit=cache_hit)
+
+                self.logger.error(
+                    "API request timeout",
+                    method=method,
+                    url=url,
+                    response_time=response_time,
+                    error=str(e)
+                )
+                raise NetworkError(f"Request timeout after {response_time:.2f}s")
+            except httpx.RequestError as e:
+                response_time = time.time() - start_time
+
+                # Record network error metrics
+                record_api_call(endpoint, method, response_time, success=False, cache_hit=cache_hit)
+
+                self.logger.error(
+                    "API request failed",
+                    method=method,
+                    url=url,
+                    response_time=response_time,
+                    error=str(e)
+                )
+                raise NetworkError(f"Request failed: {e}")
 
     # Domain Management Methods
     async def list_domains(self) -> List[Dict[str, Any]]:
         """List all DNS domains."""
         result = await self._make_request("GET", "/domains")
         return result.get("domains", [])
-    
+
     async def get_domain(self, domain: str) -> Dict[str, Any]:
         """Get details for a specific domain."""
         return await self._make_request("GET", f"/domains/{domain}")
-    
+
     async def create_domain(self, domain: str, ip: str) -> Dict[str, Any]:
         """Create a new DNS domain."""
         data = {"domain": domain, "ip": ip}
         return await self._make_request("POST", "/domains", data)
-    
+
     async def delete_domain(self, domain: str) -> Dict[str, Any]:
         """Delete a DNS domain."""
         return await self._make_request("DELETE", f"/domains/{domain}")
-    
+
     # DNS Record Management Methods
     async def list_records(self, domain: str) -> List[Dict[str, Any]]:
         """List all DNS records for a domain."""
         result = await self._make_request("GET", f"/domains/{domain}/records")
         return result.get("records", [])
-    
+
     async def get_record(self, domain: str, record_id: str) -> Dict[str, Any]:
         """Get a specific DNS record."""
         return await self._make_request("GET", f"/domains/{domain}/records/{record_id}")
-    
+
     async def create_record(
-        self, 
-        domain: str, 
-        record_type: str, 
-        name: str, 
-        data: str, 
-        ttl: Optional[int] = None, 
+        self,
+        domain: str,
+        record_type: str,
+        name: str,
+        data: str,
+        ttl: Optional[int] = None,
         priority: Optional[int] = None
     ) -> Dict[str, Any]:
         """Create a new DNS record."""
@@ -155,22 +243,22 @@ class VultrDNSServer:
             "name": name,
             "data": data
         }
-        
+
         if ttl is not None:
             payload["ttl"] = ttl
         if priority is not None:
             payload["priority"] = priority
-            
+
         return await self._make_request("POST", f"/domains/{domain}/records", payload)
-    
+
     async def update_record(
-        self, 
-        domain: str, 
-        record_id: str, 
-        record_type: str, 
-        name: str, 
-        data: str, 
-        ttl: Optional[int] = None, 
+        self,
+        domain: str,
+        record_id: str,
+        record_type: str,
+        name: str,
+        data: str,
+        ttl: Optional[int] = None,
         priority: Optional[int] = None
     ) -> Dict[str, Any]:
         """Update an existing DNS record."""
@@ -179,14 +267,14 @@ class VultrDNSServer:
             "name": name,
             "data": data
         }
-        
+
         if ttl is not None:
             payload["ttl"] = ttl
         if priority is not None:
             payload["priority"] = priority
-            
+
         return await self._make_request("PATCH", f"/domains/{domain}/records/{record_id}", payload)
-    
+
     async def delete_record(self, domain: str, record_id: str) -> Dict[str, Any]:
         """Delete a DNS record."""
         return await self._make_request("DELETE", f"/domains/{domain}/records/{record_id}")
@@ -205,29 +293,29 @@ class VultrDNSServer:
         # Get domain info and records
         domain_info = await self.get_domain(domain)
         records = await self.list_records(domain)
-        
+
         # Build zone file content
         lines = []
-        
+
         # Zone file header
         lines.append(f"; Zone file for {domain}")
-        lines.append(f"; Generated by mcp-vultr")
+        lines.append("; Generated by mcp-vultr")
         lines.append(f"$ORIGIN {domain}.")
-        lines.append(f"$TTL 3600")
+        lines.append("$TTL 3600")
         lines.append("")
-        
+
         # Sort records by type for better organization
         record_types = ["SOA", "NS", "A", "AAAA", "CNAME", "MX", "TXT", "SRV"]
         sorted_records = []
-        
+
         for record_type in record_types:
             type_records = [r for r in records if r.get("type") == record_type]
             sorted_records.extend(type_records)
-        
+
         # Add any remaining record types not in our list
         remaining = [r for r in records if r.get("type") not in record_types]
         sorted_records.extend(remaining)
-        
+
         # Convert records to zone file format
         for record in sorted_records:
             name = record.get("name", "@")
@@ -235,7 +323,7 @@ class VultrDNSServer:
             record_type = record.get("type")
             data = record.get("data", "")
             priority = record.get("priority")
-            
+
             # Handle different record types
             if record_type == "MX":
                 line = f"{name}\t{ttl}\tIN\t{record_type}\t{priority}\t{data}"
@@ -256,11 +344,11 @@ class VultrDNSServer:
                 line = f"{name}\t{ttl}\tIN\t{record_type}\t{data}"
             else:
                 line = f"{name}\t{ttl}\tIN\t{record_type}\t{data}"
-            
+
             lines.append(line)
-        
+
         return "\n".join(lines)
-    
+
     async def import_zone_file(self, domain: str, zone_data: str, dry_run: bool = False) -> List[Dict[str, Any]]:
         """
         Import DNS records from zone file format.
@@ -275,17 +363,17 @@ class VultrDNSServer:
         """
         results = []
         lines = zone_data.strip().split('\n')
-        
+
         current_ttl = 3600
         current_origin = domain
-        
+
         for line_num, line in enumerate(lines, 1):
             line = line.strip()
-            
+
             # Skip empty lines and comments
             if not line or line.startswith(';'):
                 continue
-            
+
             # Handle $TTL directive
             if line.startswith('$TTL'):
                 try:
@@ -296,7 +384,7 @@ class VultrDNSServer:
                         "line": line
                     })
                 continue
-            
+
             # Handle $ORIGIN directive
             if line.startswith('$ORIGIN'):
                 try:
@@ -307,11 +395,11 @@ class VultrDNSServer:
                         "line": line
                     })
                 continue
-            
+
             # Skip SOA records (managed by Vultr)
             if '\tSOA\t' in line or ' SOA ' in line:
                 continue
-            
+
             # Parse DNS record
             try:
                 record = self._parse_zone_line(line, current_ttl, current_origin)
@@ -341,9 +429,9 @@ class VultrDNSServer:
                     "error": f"Line {line_num}: {str(e)}",
                     "line": line
                 })
-        
+
         return results
-    
+
     def _parse_zone_line(self, line: str, default_ttl: int, origin: str) -> Optional[Dict[str, Any]]:
         """
         Parse a single zone file line into a DNS record.
@@ -360,7 +448,7 @@ class VultrDNSServer:
         parts = []
         current_part = ""
         in_quotes = False
-        
+
         for char in line:
             if char == '"' and (not current_part or current_part[-1] != '\\'):
                 in_quotes = not in_quotes
@@ -371,19 +459,19 @@ class VultrDNSServer:
                     current_part = ""
             else:
                 current_part += char
-        
+
         if current_part:
             parts.append(current_part)
-        
+
         if len(parts) < 4:
             return None
-        
+
         # Parse parts: name [ttl] [class] type data [data...]
         name = parts[0]
         record_type = None
         data_start_idx = 0
         ttl = default_ttl
-        
+
         # Find the record type (should be one of the standard types)
         valid_types = ["A", "AAAA", "CNAME", "MX", "TXT", "NS", "SRV", "PTR"]
         for i, part in enumerate(parts[1:], 1):
@@ -395,20 +483,20 @@ class VultrDNSServer:
                 continue  # Skip class
             elif part.isdigit():
                 ttl = int(part)
-        
+
         if not record_type or data_start_idx >= len(parts):
             return None
-        
+
         # Handle @ symbol for root domain
         if name == "@":
             name = ""
         elif name.endswith("."):
             name = name[:-1]  # Remove trailing dot
-        
+
         # Get record data
         data_parts = parts[data_start_idx:]
         priority = None
-        
+
         if record_type == "MX":
             if len(data_parts) >= 2:
                 priority = int(data_parts[0])
@@ -431,7 +519,7 @@ class VultrDNSServer:
                 data = data[1:-1]
         else:
             data = " ".join(data_parts)
-        
+
         return {
             "name": name,
             "type": record_type,
@@ -439,7 +527,7 @@ class VultrDNSServer:
             "ttl": ttl,
             "priority": priority
         }
-    
+
     async def list_backups(self) -> List[Dict[str, Any]]:
         """
         List all backups in your account.
@@ -449,7 +537,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/backups")
         return result.get("backups", [])
-    
+
     async def get_backup(self, backup_id: str) -> Dict[str, Any]:
         """
         Get information about a specific backup.
@@ -461,7 +549,7 @@ class VultrDNSServer:
             Backup information
         """
         return await self._make_request("GET", f"/backups/{backup_id}")
-    
+
     async def list_ssh_keys(self) -> List[Dict[str, Any]]:
         """
         List all SSH keys in your account.
@@ -471,7 +559,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/ssh-keys")
         return result.get("ssh_keys", [])
-    
+
     async def get_ssh_key(self, ssh_key_id: str) -> Dict[str, Any]:
         """
         Get information about a specific SSH key.
@@ -483,7 +571,7 @@ class VultrDNSServer:
             SSH key information
         """
         return await self._make_request("GET", f"/ssh-keys/{ssh_key_id}")
-    
+
     async def create_ssh_key(self, name: str, ssh_key: str) -> Dict[str, Any]:
         """
         Create a new SSH key.
@@ -500,7 +588,7 @@ class VultrDNSServer:
             "ssh_key": ssh_key
         }
         return await self._make_request("POST", "/ssh-keys", data=data)
-    
+
     async def update_ssh_key(self, ssh_key_id: str, name: Optional[str] = None, ssh_key: Optional[str] = None) -> Dict[str, Any]:
         """
         Update an existing SSH key.
@@ -518,9 +606,9 @@ class VultrDNSServer:
             data["name"] = name
         if ssh_key is not None:
             data["ssh_key"] = ssh_key
-        
+
         return await self._make_request("PATCH", f"/ssh-keys/{ssh_key_id}", data=data)
-    
+
     async def delete_ssh_key(self, ssh_key_id: str) -> None:
         """
         Delete an SSH key.
@@ -529,7 +617,7 @@ class VultrDNSServer:
             ssh_key_id: The SSH key ID to delete
         """
         await self._make_request("DELETE", f"/ssh-keys/{ssh_key_id}")
-    
+
     # Instance management methods
     async def list_instances(self) -> List[Dict[str, Any]]:
         """
@@ -540,7 +628,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/instances")
         return result.get("instances", [])
-    
+
     async def get_instance(self, instance_id: str) -> Dict[str, Any]:
         """
         Get information about a specific instance.
@@ -552,7 +640,7 @@ class VultrDNSServer:
             Instance information
         """
         return await self._make_request("GET", f"/instances/{instance_id}")
-    
+
     async def create_instance(
         self,
         region: str,
@@ -608,7 +696,7 @@ class VultrDNSServer:
             "region": region,
             "plan": plan
         }
-        
+
         # Add optional parameters
         if label is not None:
             data["label"] = label
@@ -646,9 +734,9 @@ class VultrDNSServer:
             data["firewall_group_id"] = firewall_group_id
         if reserved_ipv4 is not None:
             data["reserved_ipv4"] = reserved_ipv4
-            
+
         return await self._make_request("POST", "/instances", data=data)
-    
+
     async def update_instance(
         self,
         instance_id: str,
@@ -695,9 +783,9 @@ class VultrDNSServer:
             data["firewall_group_id"] = firewall_group_id
         if user_data is not None:
             data["user_data"] = user_data
-            
+
         return await self._make_request("PATCH", f"/instances/{instance_id}", data=data)
-    
+
     async def delete_instance(self, instance_id: str) -> None:
         """
         Delete an instance.
@@ -706,7 +794,7 @@ class VultrDNSServer:
             instance_id: The instance ID to delete
         """
         await self._make_request("DELETE", f"/instances/{instance_id}")
-    
+
     async def start_instance(self, instance_id: str) -> None:
         """
         Start a stopped instance.
@@ -715,7 +803,7 @@ class VultrDNSServer:
             instance_id: The instance ID to start
         """
         await self._make_request("POST", f"/instances/{instance_id}/start")
-    
+
     async def stop_instance(self, instance_id: str) -> None:
         """
         Stop a running instance.
@@ -724,7 +812,7 @@ class VultrDNSServer:
             instance_id: The instance ID to stop
         """
         await self._make_request("POST", f"/instances/{instance_id}/halt")
-    
+
     async def reboot_instance(self, instance_id: str) -> None:
         """
         Reboot an instance.
@@ -733,7 +821,7 @@ class VultrDNSServer:
             instance_id: The instance ID to reboot
         """
         await self._make_request("POST", f"/instances/{instance_id}/reboot")
-    
+
     async def reinstall_instance(self, instance_id: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """
         Reinstall an instance's operating system.
@@ -748,9 +836,9 @@ class VultrDNSServer:
         data = {}
         if hostname is not None:
             data["hostname"] = hostname
-            
+
         return await self._make_request("POST", f"/instances/{instance_id}/reinstall", data=data)
-    
+
     async def get_instance_bandwidth(self, instance_id: str) -> Dict[str, Any]:
         """
         Get bandwidth usage for an instance.
@@ -762,7 +850,7 @@ class VultrDNSServer:
             Bandwidth usage information
         """
         return await self._make_request("GET", f"/instances/{instance_id}/bandwidth")
-    
+
     async def list_instance_ipv4(self, instance_id: str) -> List[Dict[str, Any]]:
         """
         List IPv4 addresses for an instance.
@@ -775,7 +863,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/instances/{instance_id}/ipv4")
         return result.get("ipv4s", [])
-    
+
     async def create_instance_ipv4(self, instance_id: str, reboot: bool = True) -> Dict[str, Any]:
         """
         Create a new IPv4 address for an instance.
@@ -789,7 +877,7 @@ class VultrDNSServer:
         """
         data = {"reboot": reboot}
         return await self._make_request("POST", f"/instances/{instance_id}/ipv4", data=data)
-    
+
     async def delete_instance_ipv4(self, instance_id: str, ipv4: str) -> None:
         """
         Delete an IPv4 address from an instance.
@@ -799,7 +887,7 @@ class VultrDNSServer:
             ipv4: The IPv4 address to delete
         """
         await self._make_request("DELETE", f"/instances/{instance_id}/ipv4/{ipv4}")
-    
+
     async def list_instance_ipv6(self, instance_id: str) -> List[Dict[str, Any]]:
         """
         List IPv6 addresses for an instance.
@@ -812,7 +900,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/instances/{instance_id}/ipv6")
         return result.get("ipv6s", [])
-    
+
     # Firewall management methods
     async def list_firewall_groups(self) -> List[Dict[str, Any]]:
         """
@@ -823,7 +911,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/firewalls")
         return result.get("firewall_groups", [])
-    
+
     async def get_firewall_group(self, firewall_group_id: str) -> Dict[str, Any]:
         """
         Get information about a specific firewall group.
@@ -835,7 +923,7 @@ class VultrDNSServer:
             Firewall group information
         """
         return await self._make_request("GET", f"/firewalls/{firewall_group_id}")
-    
+
     async def create_firewall_group(self, description: str) -> Dict[str, Any]:
         """
         Create a new firewall group.
@@ -848,7 +936,7 @@ class VultrDNSServer:
         """
         data = {"description": description}
         return await self._make_request("POST", "/firewalls", data=data)
-    
+
     async def update_firewall_group(self, firewall_group_id: str, description: str) -> None:
         """
         Update a firewall group description.
@@ -859,7 +947,7 @@ class VultrDNSServer:
         """
         data = {"description": description}
         await self._make_request("PUT", f"/firewalls/{firewall_group_id}", data=data)
-    
+
     async def delete_firewall_group(self, firewall_group_id: str) -> None:
         """
         Delete a firewall group.
@@ -868,7 +956,7 @@ class VultrDNSServer:
             firewall_group_id: The firewall group ID to delete
         """
         await self._make_request("DELETE", f"/firewalls/{firewall_group_id}")
-    
+
     async def list_firewall_rules(self, firewall_group_id: str) -> List[Dict[str, Any]]:
         """
         List all rules in a firewall group.
@@ -881,7 +969,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/firewalls/{firewall_group_id}/rules")
         return result.get("firewall_rules", [])
-    
+
     async def get_firewall_rule(self, firewall_group_id: str, firewall_rule_id: str) -> Dict[str, Any]:
         """
         Get information about a specific firewall rule.
@@ -894,7 +982,7 @@ class VultrDNSServer:
             Firewall rule information
         """
         return await self._make_request("GET", f"/firewalls/{firewall_group_id}/rules/{firewall_rule_id}")
-    
+
     async def create_firewall_rule(
         self,
         firewall_group_id: str,
@@ -928,16 +1016,16 @@ class VultrDNSServer:
             "subnet": subnet,
             "subnet_size": subnet_size
         }
-        
+
         if port is not None:
             data["port"] = port
         if source is not None:
             data["source"] = source
         if notes is not None:
             data["notes"] = notes
-            
+
         return await self._make_request("POST", f"/firewalls/{firewall_group_id}/rules", data=data)
-    
+
     async def delete_firewall_rule(self, firewall_group_id: str, firewall_rule_id: str) -> None:
         """
         Delete a firewall rule.
@@ -947,7 +1035,7 @@ class VultrDNSServer:
             firewall_rule_id: The firewall rule ID to delete
         """
         await self._make_request("DELETE", f"/firewalls/{firewall_group_id}/rules/{firewall_rule_id}")
-    
+
     # Snapshot management methods
     async def list_snapshots(self) -> List[Dict[str, Any]]:
         """
@@ -958,7 +1046,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/snapshots")
         return result.get("snapshots", [])
-    
+
     async def get_snapshot(self, snapshot_id: str) -> Dict[str, Any]:
         """
         Get information about a specific snapshot.
@@ -970,7 +1058,7 @@ class VultrDNSServer:
             Snapshot information
         """
         return await self._make_request("GET", f"/snapshots/{snapshot_id}")
-    
+
     async def create_snapshot(self, instance_id: str, description: Optional[str] = None) -> Dict[str, Any]:
         """
         Create a snapshot from an instance.
@@ -985,9 +1073,9 @@ class VultrDNSServer:
         data = {"instance_id": instance_id}
         if description is not None:
             data["description"] = description
-            
+
         return await self._make_request("POST", "/snapshots", data=data)
-    
+
     async def create_snapshot_from_url(self, url: str, description: Optional[str] = None) -> Dict[str, Any]:
         """
         Create a snapshot from a URL.
@@ -1002,9 +1090,9 @@ class VultrDNSServer:
         data = {"url": url}
         if description is not None:
             data["description"] = description
-            
+
         return await self._make_request("POST", "/snapshots/create-from-url", data=data)
-    
+
     async def update_snapshot(self, snapshot_id: str, description: str) -> None:
         """
         Update a snapshot description.
@@ -1015,7 +1103,7 @@ class VultrDNSServer:
         """
         data = {"description": description}
         await self._make_request("PUT", f"/snapshots/{snapshot_id}", data=data)
-    
+
     async def delete_snapshot(self, snapshot_id: str) -> None:
         """
         Delete a snapshot.
@@ -1024,7 +1112,7 @@ class VultrDNSServer:
             snapshot_id: The snapshot ID to delete
         """
         await self._make_request("DELETE", f"/snapshots/{snapshot_id}")
-    
+
     # Region information methods
     async def list_regions(self) -> List[Dict[str, Any]]:
         """
@@ -1035,7 +1123,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/regions")
         return result.get("regions", [])
-    
+
     async def list_availability(self, region_id: str) -> Dict[str, Any]:
         """
         Get availability information for a specific region.
@@ -1047,7 +1135,7 @@ class VultrDNSServer:
             Availability information including available plans
         """
         return await self._make_request("GET", f"/regions/{region_id}/availability")
-    
+
     # Reserved IP Methods
     async def list_reserved_ips(self) -> List[Dict[str, Any]]:
         """
@@ -1058,7 +1146,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/reserved-ips")
         return result.get("reserved_ips", [])
-    
+
     async def get_reserved_ip(self, reserved_ip: str) -> Dict[str, Any]:
         """
         Get details of a specific reserved IP.
@@ -1070,7 +1158,7 @@ class VultrDNSServer:
             Reserved IP details
         """
         return await self._make_request("GET", f"/reserved-ips/{reserved_ip}")
-    
+
     async def create_reserved_ip(
         self,
         region: str,
@@ -1094,10 +1182,10 @@ class VultrDNSServer:
         }
         if label is not None:
             data["label"] = label
-            
+
         result = await self._make_request("POST", "/reserved-ips", data=data)
         return result.get("reserved_ip", {})
-    
+
     async def update_reserved_ip(self, reserved_ip: str, label: str) -> None:
         """
         Update a reserved IP's label.
@@ -1108,7 +1196,7 @@ class VultrDNSServer:
         """
         data = {"label": label}
         await self._make_request("PATCH", f"/reserved-ips/{reserved_ip}", data=data)
-    
+
     async def delete_reserved_ip(self, reserved_ip: str) -> None:
         """
         Delete a reserved IP.
@@ -1117,7 +1205,7 @@ class VultrDNSServer:
             reserved_ip: The reserved IP address to delete
         """
         await self._make_request("DELETE", f"/reserved-ips/{reserved_ip}")
-    
+
     async def attach_reserved_ip(self, reserved_ip: str, instance_id: str) -> None:
         """
         Attach a reserved IP to an instance.
@@ -1128,7 +1216,7 @@ class VultrDNSServer:
         """
         data = {"instance_id": instance_id}
         await self._make_request("POST", f"/reserved-ips/{reserved_ip}/attach", data=data)
-    
+
     async def detach_reserved_ip(self, reserved_ip: str) -> None:
         """
         Detach a reserved IP from its instance.
@@ -1137,7 +1225,7 @@ class VultrDNSServer:
             reserved_ip: The reserved IP address to detach
         """
         await self._make_request("POST", f"/reserved-ips/{reserved_ip}/detach")
-    
+
     async def convert_instance_ip_to_reserved(self, ip_address: str, instance_id: str, label: Optional[str] = None) -> Dict[str, Any]:
         """
         Convert an instance IP to a reserved IP.
@@ -1156,7 +1244,7 @@ class VultrDNSServer:
         }
         if label is not None:
             data["label"] = label
-            
+
         result = await self._make_request("POST", "/reserved-ips/convert", data=data)
         return result.get("reserved_ip", {})
 
@@ -1170,7 +1258,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/registry")
         return result.get("registries", [])
-    
+
     async def get_container_registry(self, registry_id: str) -> Dict[str, Any]:
         """
         Get container registry details.
@@ -1183,7 +1271,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/registry/{registry_id}")
         return result.get("registry", {})
-    
+
     async def create_container_registry(
         self,
         name: str,
@@ -1208,7 +1296,7 @@ class VultrDNSServer:
         }
         result = await self._make_request("POST", "/registry", data=data)
         return result.get("registry", {})
-    
+
     async def update_container_registry(self, registry_id: str, plan: str) -> None:
         """
         Update container registry plan.
@@ -1219,7 +1307,7 @@ class VultrDNSServer:
         """
         data = {"plan": plan}
         await self._make_request("PUT", f"/registry/{registry_id}", data=data)
-    
+
     async def delete_container_registry(self, registry_id: str) -> None:
         """
         Delete a container registry subscription.
@@ -1228,7 +1316,7 @@ class VultrDNSServer:
             registry_id: The container registry ID to delete
         """
         await self._make_request("DELETE", f"/registry/{registry_id}")
-    
+
     async def list_registry_plans(self) -> List[Dict[str, Any]]:
         """
         List all available container registry plans.
@@ -1238,7 +1326,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/registry/plan/list")
         return result.get("plans", [])
-    
+
     async def generate_docker_credentials(
         self,
         registry_id: str,
@@ -1259,14 +1347,14 @@ class VultrDNSServer:
         params = {"read_write": str(read_write).lower()}
         if expiry_seconds is not None:
             params["expiry_seconds"] = str(expiry_seconds)
-        
+
         result = await self._make_request(
-            "OPTIONS", 
+            "OPTIONS",
             f"/registry/{registry_id}/docker-credentials",
             params=params
         )
         return result
-    
+
     async def generate_kubernetes_credentials(
         self,
         registry_id: str,
@@ -1292,9 +1380,9 @@ class VultrDNSServer:
         }
         if expiry_seconds is not None:
             params["expiry_seconds"] = str(expiry_seconds)
-        
+
         result = await self._make_request(
-            "OPTIONS", 
+            "OPTIONS",
             f"/registry/{registry_id}/docker-credentials/kubernetes",
             params=params
         )
@@ -1310,7 +1398,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/blocks")
         return result.get("blocks", [])
-    
+
     async def get_block_storage(self, block_id: str) -> Dict[str, Any]:
         """
         Get block storage volume details.
@@ -1323,7 +1411,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/blocks/{block_id}")
         return result.get("block", {})
-    
+
     async def create_block_storage(
         self,
         region: str,
@@ -1351,14 +1439,14 @@ class VultrDNSServer:
             data["label"] = label
         if block_type is not None:
             data["block_type"] = block_type
-            
+
         result = await self._make_request("POST", "/blocks", data=data)
         return result.get("block", {})
-    
+
     async def update_block_storage(
-        self, 
-        block_id: str, 
-        size_gb: Optional[int] = None, 
+        self,
+        block_id: str,
+        size_gb: Optional[int] = None,
         label: Optional[str] = None
     ) -> None:
         """
@@ -1374,10 +1462,10 @@ class VultrDNSServer:
             data["size_gb"] = size_gb
         if label is not None:
             data["label"] = label
-        
+
         if data:  # Only make request if there are changes
             await self._make_request("PATCH", f"/blocks/{block_id}", data=data)
-    
+
     async def delete_block_storage(self, block_id: str) -> None:
         """
         Delete a block storage volume.
@@ -1386,7 +1474,7 @@ class VultrDNSServer:
             block_id: The block storage volume ID to delete
         """
         await self._make_request("DELETE", f"/blocks/{block_id}")
-    
+
     async def attach_block_storage(self, block_id: str, instance_id: str, live: bool = True) -> None:
         """
         Attach block storage volume to an instance.
@@ -1401,7 +1489,7 @@ class VultrDNSServer:
             "live": live
         }
         await self._make_request("POST", f"/blocks/{block_id}/attach", data=data)
-    
+
     async def detach_block_storage(self, block_id: str, live: bool = True) -> None:
         """
         Detach block storage volume from its instance.
@@ -1423,7 +1511,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/vpcs")
         return result.get("vpcs", [])
-    
+
     async def get_vpc(self, vpc_id: str) -> Dict[str, Any]:
         """
         Get VPC details.
@@ -1436,7 +1524,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/vpcs/{vpc_id}")
         return result.get("vpc", {})
-    
+
     async def create_vpc(
         self,
         region: str,
@@ -1464,10 +1552,10 @@ class VultrDNSServer:
             data["v4_subnet"] = v4_subnet
         if v4_subnet_mask is not None:
             data["v4_subnet_mask"] = v4_subnet_mask
-            
+
         result = await self._make_request("POST", "/vpcs", data=data)
         return result.get("vpc", {})
-    
+
     async def update_vpc(self, vpc_id: str, description: str) -> None:
         """
         Update VPC description.
@@ -1478,7 +1566,7 @@ class VultrDNSServer:
         """
         data = {"description": description}
         await self._make_request("PUT", f"/vpcs/{vpc_id}", data=data)
-    
+
     async def delete_vpc(self, vpc_id: str) -> None:
         """
         Delete a VPC.
@@ -1487,7 +1575,7 @@ class VultrDNSServer:
             vpc_id: The VPC ID to delete
         """
         await self._make_request("DELETE", f"/vpcs/{vpc_id}")
-    
+
     # VPC 2.0 API Methods
     async def list_vpc2s(self) -> List[Dict[str, Any]]:
         """
@@ -1498,7 +1586,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/vpc2")
         return result.get("vpc2s", [])
-    
+
     async def get_vpc2(self, vpc2_id: str) -> Dict[str, Any]:
         """
         Get VPC 2.0 details.
@@ -1511,7 +1599,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/vpc2/{vpc2_id}")
         return result.get("vpc2", {})
-    
+
     async def create_vpc2(
         self,
         region: str,
@@ -1542,10 +1630,10 @@ class VultrDNSServer:
             data["ip_block"] = ip_block
         if prefix_length is not None:
             data["prefix_length"] = prefix_length
-            
+
         result = await self._make_request("POST", "/vpc2", data=data)
         return result.get("vpc2", {})
-    
+
     async def update_vpc2(self, vpc2_id: str, description: str) -> None:
         """
         Update VPC 2.0 description.
@@ -1556,7 +1644,7 @@ class VultrDNSServer:
         """
         data = {"description": description}
         await self._make_request("PUT", f"/vpc2/{vpc2_id}", data=data)
-    
+
     async def delete_vpc2(self, vpc2_id: str) -> None:
         """
         Delete a VPC 2.0 network.
@@ -1565,7 +1653,7 @@ class VultrDNSServer:
             vpc2_id: The VPC 2.0 ID to delete
         """
         await self._make_request("DELETE", f"/vpc2/{vpc2_id}")
-    
+
     # VPC Instance Attachment Methods
     async def attach_vpc_to_instance(self, instance_id: str, vpc_id: str) -> None:
         """
@@ -1577,7 +1665,7 @@ class VultrDNSServer:
         """
         data = {"vpc_id": vpc_id}
         await self._make_request("POST", f"/instances/{instance_id}/vpcs/attach", data=data)
-    
+
     async def detach_vpc_from_instance(self, instance_id: str, vpc_id: str) -> None:
         """
         Detach a VPC from an instance.
@@ -1588,7 +1676,7 @@ class VultrDNSServer:
         """
         data = {"vpc_id": vpc_id}
         await self._make_request("POST", f"/instances/{instance_id}/vpcs/detach", data=data)
-    
+
     async def attach_vpc2_to_instance(self, instance_id: str, vpc2_id: str, ip_address: Optional[str] = None) -> None:
         """
         Attach a VPC 2.0 to an instance.
@@ -1602,7 +1690,7 @@ class VultrDNSServer:
         if ip_address is not None:
             data["ip_address"] = ip_address
         await self._make_request("POST", f"/instances/{instance_id}/vpc2/attach", data=data)
-    
+
     async def detach_vpc2_from_instance(self, instance_id: str, vpc2_id: str) -> None:
         """
         Detach a VPC 2.0 from an instance.
@@ -1613,7 +1701,7 @@ class VultrDNSServer:
         """
         data = {"vpc2_id": vpc2_id}
         await self._make_request("POST", f"/instances/{instance_id}/vpc2/detach", data=data)
-    
+
     async def list_instance_vpcs(self, instance_id: str) -> List[Dict[str, Any]]:
         """
         List VPCs attached to an instance.
@@ -1626,7 +1714,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/instances/{instance_id}/vpcs")
         return result.get("vpcs", [])
-    
+
     async def list_instance_vpc2s(self, instance_id: str) -> List[Dict[str, Any]]:
         """
         List VPC 2.0 networks attached to an instance.
@@ -1643,7 +1731,7 @@ class VultrDNSServer:
     # =============================================================================
     # ISO Management Methods
     # =============================================================================
-    
+
     async def list_isos(self) -> List[Dict[str, Any]]:
         """
         List all available ISO images.
@@ -1653,7 +1741,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/iso")
         return result.get("isos", [])
-    
+
     async def get_iso(self, iso_id: str) -> Dict[str, Any]:
         """
         Get details of a specific ISO image.
@@ -1666,7 +1754,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/iso/{iso_id}")
         return result.get("iso", {})
-    
+
     async def create_iso(self, url: str) -> Dict[str, Any]:
         """
         Create a new ISO image from URL.
@@ -1680,7 +1768,7 @@ class VultrDNSServer:
         data = {"url": url}
         result = await self._make_request("POST", "/iso", data=data)
         return result.get("iso", {})
-    
+
     async def delete_iso(self, iso_id: str) -> None:
         """
         Delete an ISO image.
@@ -1693,7 +1781,7 @@ class VultrDNSServer:
     # =============================================================================
     # Operating System Methods
     # =============================================================================
-    
+
     async def list_operating_systems(self) -> List[Dict[str, Any]]:
         """
         List all available operating systems.
@@ -1703,7 +1791,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/os")
         return result.get("os", [])
-    
+
     async def get_operating_system(self, os_id: str) -> Dict[str, Any]:
         """
         Get details of a specific operating system.
@@ -1724,7 +1812,7 @@ class VultrDNSServer:
     # =============================================================================
     # Plans Methods
     # =============================================================================
-    
+
     async def list_plans(self, plan_type: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         List all available plans.
@@ -1738,10 +1826,10 @@ class VultrDNSServer:
         params = {}
         if plan_type:
             params["type"] = plan_type
-        
+
         result = await self._make_request("GET", "/plans", params=params)
         return result.get("plans", [])
-    
+
     async def get_plan(self, plan_id: str) -> Dict[str, Any]:
         """
         Get details of a specific plan.
@@ -1762,7 +1850,7 @@ class VultrDNSServer:
     # =============================================================================
     # Applications Methods
     # =============================================================================
-    
+
     async def list_applications(self, app_type: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         List all available applications (marketplace and one-click).
@@ -1776,10 +1864,10 @@ class VultrDNSServer:
         params = {}
         if app_type:
             params["type"] = app_type
-        
+
         result = await self._make_request("GET", "/applications", params=params)
         return result.get("applications", [])
-    
+
     async def get_marketplace_app_variables(self, image_id: str) -> Dict[str, Any]:
         """
         Get configuration variables for a marketplace application.
@@ -1796,7 +1884,7 @@ class VultrDNSServer:
     # =============================================================================
     # Startup Scripts Methods
     # =============================================================================
-    
+
     async def list_startup_scripts(self) -> List[Dict[str, Any]]:
         """
         List all startup scripts.
@@ -1806,7 +1894,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/startup-scripts")
         return result.get("startup_scripts", [])
-    
+
     async def get_startup_script(self, script_id: str) -> Dict[str, Any]:
         """
         Get details of a specific startup script.
@@ -1819,7 +1907,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/startup-scripts/{script_id}")
         return result.get("startup_script", {})
-    
+
     async def create_startup_script(
         self,
         name: str,
@@ -1844,7 +1932,7 @@ class VultrDNSServer:
         }
         result = await self._make_request("POST", "/startup-scripts", data=data)
         return result.get("startup_script", {})
-    
+
     async def update_startup_script(
         self,
         script_id: str,
@@ -1867,10 +1955,10 @@ class VultrDNSServer:
             data["name"] = name
         if script is not None:
             data["script"] = script
-        
+
         result = await self._make_request("PATCH", f"/startup-scripts/{script_id}", data=data)
         return result.get("startup_script", {})
-    
+
     async def delete_startup_script(self, script_id: str) -> None:
         """
         Delete a startup script.
@@ -1883,7 +1971,7 @@ class VultrDNSServer:
     # =============================================================================
     # Billing Methods
     # =============================================================================
-    
+
     async def get_account_info(self) -> Dict[str, Any]:
         """
         Get account information including billing details.
@@ -1893,7 +1981,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/account")
         return result.get("account", {})
-    
+
     async def list_billing_history(
         self,
         date_range: Optional[int] = None,
@@ -1918,9 +2006,9 @@ class VultrDNSServer:
             params["cursor"] = cursor
         if per_page is not None:
             params["per_page"] = per_page
-        
+
         return await self._make_request("GET", "/billing/history", params=params)
-    
+
     async def list_invoices(
         self,
         cursor: Optional[str] = None,
@@ -1941,9 +2029,9 @@ class VultrDNSServer:
             params["cursor"] = cursor
         if per_page is not None:
             params["per_page"] = per_page
-        
+
         return await self._make_request("GET", "/billing/invoices", params=params)
-    
+
     async def get_invoice(self, invoice_id: str) -> Dict[str, Any]:
         """
         Get a specific invoice.
@@ -1956,7 +2044,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/billing/invoices/{invoice_id}")
         return result.get("invoice", {})
-    
+
     async def list_invoice_items(
         self,
         invoice_id: str,
@@ -1979,9 +2067,9 @@ class VultrDNSServer:
             params["cursor"] = cursor
         if per_page is not None:
             params["per_page"] = per_page
-        
+
         return await self._make_request("GET", f"/billing/invoices/{invoice_id}/items", params=params)
-    
+
     async def get_current_balance(self) -> Dict[str, Any]:
         """
         Get current account balance.
@@ -1996,7 +2084,7 @@ class VultrDNSServer:
             "last_payment_date": account.get("last_payment_date"),
             "last_payment_amount": account.get("last_payment_amount")
         }
-    
+
     async def get_monthly_usage_summary(self, year: int, month: int) -> Dict[str, Any]:
         """
         Get monthly usage summary for billing analysis.
@@ -2010,28 +2098,28 @@ class VultrDNSServer:
         """
         # Get billing history for the specified month
         # Calculate date range from start of month to end of month
-        from datetime import datetime, timedelta
         import calendar
-        
+        from datetime import datetime
+
         start_date = datetime(year, month, 1)
         end_date = datetime(year, month, calendar.monthrange(year, month)[1])
         current_date = datetime.now()
-        
+
         # Calculate days from start of month to now (or end of month if past)
         if end_date > current_date:
             days = (current_date - start_date).days + 1
         else:
             days = (end_date - start_date).days + 1
-        
+
         billing_data = await self.list_billing_history(date_range=days)
-        
+
         # Process billing history to create summary
         billing_history = billing_data.get("billing_history", [])
-        
+
         total_cost = 0
         service_costs = {}
         transaction_count = 0
-        
+
         for item in billing_history:
             if item.get("date"):
                 item_date = datetime.fromisoformat(item["date"].replace("Z", "+00:00"))
@@ -2039,14 +2127,14 @@ class VultrDNSServer:
                     amount = float(item.get("amount", 0))
                     total_cost += amount
                     transaction_count += 1
-                    
+
                     description = item.get("description", "Unknown")
                     service_type = description.split()[0] if description else "Unknown"
-                    
+
                     if service_type not in service_costs:
                         service_costs[service_type] = 0
                     service_costs[service_type] += amount
-        
+
         return {
             "year": year,
             "month": month,
@@ -2059,7 +2147,7 @@ class VultrDNSServer:
     # =============================================================================
     # Bare Metal Server Methods
     # =============================================================================
-    
+
     async def list_bare_metal_servers(self) -> List[Dict[str, Any]]:
         """
         List all bare metal servers.
@@ -2069,7 +2157,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/bare-metals")
         return result.get("bare_metals", [])
-    
+
     async def get_bare_metal_server(self, baremetal_id: str) -> Dict[str, Any]:
         """
         Get details of a specific bare metal server.
@@ -2082,7 +2170,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/bare-metals/{baremetal_id}")
         return result.get("bare_metal", {})
-    
+
     async def create_bare_metal_server(
         self,
         region: str,
@@ -2132,7 +2220,7 @@ class VultrDNSServer:
             "region": region,
             "plan": plan
         }
-        
+
         if os_id is not None:
             data["os_id"] = os_id
         if iso_id is not None:
@@ -2163,10 +2251,10 @@ class VultrDNSServer:
             data["hostname"] = hostname
         if persistent_pxe is not None:
             data["persistent_pxe"] = persistent_pxe
-        
+
         result = await self._make_request("POST", "/bare-metals", data=data)
         return result.get("bare_metal", {})
-    
+
     async def update_bare_metal_server(
         self,
         baremetal_id: str,
@@ -2197,10 +2285,10 @@ class VultrDNSServer:
             data["user_data"] = user_data
         if enable_ddos_protection is not None:
             data["enable_ddos_protection"] = enable_ddos_protection
-        
+
         result = await self._make_request("PATCH", f"/bare-metals/{baremetal_id}", data=data)
         return result.get("bare_metal", {})
-    
+
     async def delete_bare_metal_server(self, baremetal_id: str) -> None:
         """
         Delete a bare metal server.
@@ -2209,7 +2297,7 @@ class VultrDNSServer:
             baremetal_id: The bare metal server ID to delete
         """
         await self._make_request("DELETE", f"/bare-metals/{baremetal_id}")
-    
+
     async def start_bare_metal_server(self, baremetal_id: str) -> None:
         """
         Start a bare metal server.
@@ -2218,7 +2306,7 @@ class VultrDNSServer:
             baremetal_id: The bare metal server ID
         """
         await self._make_request("POST", f"/bare-metals/{baremetal_id}/start")
-    
+
     async def stop_bare_metal_server(self, baremetal_id: str) -> None:
         """
         Stop a bare metal server.
@@ -2227,7 +2315,7 @@ class VultrDNSServer:
             baremetal_id: The bare metal server ID
         """
         await self._make_request("POST", f"/bare-metals/{baremetal_id}/halt")
-    
+
     async def reboot_bare_metal_server(self, baremetal_id: str) -> None:
         """
         Reboot a bare metal server.
@@ -2236,7 +2324,7 @@ class VultrDNSServer:
             baremetal_id: The bare metal server ID
         """
         await self._make_request("POST", f"/bare-metals/{baremetal_id}/reboot")
-    
+
     async def reinstall_bare_metal_server(
         self,
         baremetal_id: str,
@@ -2255,10 +2343,10 @@ class VultrDNSServer:
         data = {}
         if hostname is not None:
             data["hostname"] = hostname
-        
+
         result = await self._make_request("POST", f"/bare-metals/{baremetal_id}/reinstall", data=data)
         return result.get("bare_metal", {})
-    
+
     async def get_bare_metal_bandwidth(self, baremetal_id: str) -> Dict[str, Any]:
         """
         Get bandwidth usage for a bare metal server.
@@ -2271,7 +2359,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/bare-metals/{baremetal_id}/bandwidth")
         return result.get("bandwidth", {})
-    
+
     async def get_bare_metal_neighbors(self, baremetal_id: str) -> List[Dict[str, Any]]:
         """
         Get neighbors (other servers on same physical host) for a bare metal server.
@@ -2284,7 +2372,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/bare-metals/{baremetal_id}/neighbors")
         return result.get("neighbors", [])
-    
+
     async def get_bare_metal_user_data(self, baremetal_id: str) -> Dict[str, Any]:
         """
         Get user data for a bare metal server.
@@ -2297,7 +2385,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/bare-metals/{baremetal_id}/user-data")
         return result.get("user_data", {})
-    
+
     async def list_bare_metal_plans(self, plan_type: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         List available bare metal plans.
@@ -2311,10 +2399,10 @@ class VultrDNSServer:
         params = {}
         if plan_type:
             params["type"] = plan_type
-        
+
         result = await self._make_request("GET", "/plans-metal", params=params)
         return result.get("plans_metal", [])
-    
+
     async def get_bare_metal_plan(self, plan_id: str) -> Dict[str, Any]:
         """
         Get details of a specific bare metal plan.
@@ -2334,7 +2422,7 @@ class VultrDNSServer:
     # =============================================================================
     # CDN Methods
     # =============================================================================
-    
+
     async def list_cdn_zones(self) -> List[Dict[str, Any]]:
         """
         List all CDN zones.
@@ -2344,7 +2432,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/cdns")
         return result.get("cdns", [])
-    
+
     async def get_cdn_zone(self, cdn_id: str) -> Dict[str, Any]:
         """
         Get details of a specific CDN zone.
@@ -2357,7 +2445,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/cdns/{cdn_id}")
         return result.get("cdn", {})
-    
+
     async def create_cdn_zone(
         self,
         origin_domain: str,
@@ -2389,7 +2477,7 @@ class VultrDNSServer:
             "origin_domain": origin_domain,
             "origin_scheme": origin_scheme
         }
-        
+
         if cors_policy is not None:
             data["cors_policy"] = cors_policy
         if gzip_compression is not None:
@@ -2402,10 +2490,10 @@ class VultrDNSServer:
             data["block_ip_addresses"] = block_ip_addresses
         if regions is not None:
             data["regions"] = regions
-        
+
         result = await self._make_request("POST", "/cdns", data=data)
         return result.get("cdn", {})
-    
+
     async def update_cdn_zone(
         self,
         cdn_id: str,
@@ -2432,7 +2520,7 @@ class VultrDNSServer:
             Updated CDN zone details
         """
         data = {}
-        
+
         if cors_policy is not None:
             data["cors_policy"] = cors_policy
         if gzip_compression is not None:
@@ -2445,10 +2533,10 @@ class VultrDNSServer:
             data["block_ip_addresses"] = block_ip_addresses
         if regions is not None:
             data["regions"] = regions
-        
+
         result = await self._make_request("PATCH", f"/cdns/{cdn_id}", data=data)
         return result.get("cdn", {})
-    
+
     async def delete_cdn_zone(self, cdn_id: str) -> None:
         """
         Delete a CDN zone.
@@ -2457,7 +2545,7 @@ class VultrDNSServer:
             cdn_id: The CDN zone ID to delete
         """
         await self._make_request("DELETE", f"/cdns/{cdn_id}")
-    
+
     async def purge_cdn_zone(self, cdn_id: str) -> Dict[str, Any]:
         """
         Purge all cached content from a CDN zone.
@@ -2470,7 +2558,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("POST", f"/cdns/{cdn_id}/purge")
         return result.get("purge", {})
-    
+
     async def get_cdn_zone_stats(self, cdn_id: str) -> Dict[str, Any]:
         """
         Get statistics for a CDN zone.
@@ -2483,7 +2571,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/cdns/{cdn_id}/stats")
         return result.get("stats", {})
-    
+
     async def get_cdn_zone_logs(
         self,
         cdn_id: str,
@@ -2514,10 +2602,10 @@ class VultrDNSServer:
             params["per_page"] = per_page
         if cursor is not None:
             params["cursor"] = cursor
-        
+
         result = await self._make_request("GET", f"/cdns/{cdn_id}/logs", params=params)
         return result.get("logs", {})
-    
+
     async def create_cdn_ssl_certificate(
         self,
         cdn_id: str,
@@ -2541,13 +2629,13 @@ class VultrDNSServer:
             "certificate": certificate,
             "private_key": private_key
         }
-        
+
         if certificate_chain is not None:
             data["certificate_chain"] = certificate_chain
-        
+
         result = await self._make_request("POST", f"/cdns/{cdn_id}/ssl", data=data)
         return result.get("ssl", {})
-    
+
     async def get_cdn_ssl_certificate(self, cdn_id: str) -> Dict[str, Any]:
         """
         Get SSL certificate information for a CDN zone.
@@ -2560,7 +2648,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/cdns/{cdn_id}/ssl")
         return result.get("ssl", {})
-    
+
     async def delete_cdn_ssl_certificate(self, cdn_id: str) -> None:
         """
         Remove SSL certificate from a CDN zone.
@@ -2569,7 +2657,7 @@ class VultrDNSServer:
             cdn_id: The CDN zone ID
         """
         await self._make_request("DELETE", f"/cdns/{cdn_id}/ssl")
-    
+
     async def get_cdn_available_regions(self) -> List[Dict[str, Any]]:
         """
         Get list of available CDN regions.
@@ -2590,7 +2678,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/kubernetes/clusters")
         return result.get("vke_clusters", [])
-    
+
     async def get_kubernetes_cluster(self, cluster_id: str) -> Dict[str, Any]:
         """
         Get Kubernetes cluster details.
@@ -2603,7 +2691,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/kubernetes/clusters/{cluster_id}")
         return result.get("vke_cluster", {})
-    
+
     async def create_kubernetes_cluster(
         self,
         label: str,
@@ -2637,10 +2725,10 @@ class VultrDNSServer:
             data["enable_firewall"] = enable_firewall
         if ha_controlplanes:
             data["ha_controlplanes"] = ha_controlplanes
-        
+
         result = await self._make_request("POST", "/kubernetes/clusters", data)
         return result.get("vke_cluster", {})
-    
+
     async def update_kubernetes_cluster(
         self,
         cluster_id: str,
@@ -2656,10 +2744,10 @@ class VultrDNSServer:
         data = {}
         if label is not None:
             data["label"] = label
-        
+
         if data:
             await self._make_request("PATCH", f"/kubernetes/clusters/{cluster_id}", data)
-    
+
     async def delete_kubernetes_cluster(self, cluster_id: str) -> None:
         """
         Delete a Kubernetes cluster.
@@ -2668,7 +2756,7 @@ class VultrDNSServer:
             cluster_id: The cluster ID
         """
         await self._make_request("DELETE", f"/kubernetes/clusters/{cluster_id}")
-    
+
     async def delete_kubernetes_cluster_with_resources(self, cluster_id: str) -> None:
         """
         Delete a Kubernetes cluster and all related resources.
@@ -2677,7 +2765,7 @@ class VultrDNSServer:
             cluster_id: The cluster ID
         """
         await self._make_request("DELETE", f"/kubernetes/clusters/{cluster_id}/delete-with-linked-resources")
-    
+
     async def get_kubernetes_cluster_config(self, cluster_id: str) -> Dict[str, Any]:
         """
         Get the kubeconfig for a Kubernetes cluster.
@@ -2690,7 +2778,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/kubernetes/clusters/{cluster_id}/config")
         return result
-    
+
     async def get_kubernetes_cluster_resources(self, cluster_id: str) -> Dict[str, Any]:
         """
         Get resource usage information for a Kubernetes cluster.
@@ -2703,7 +2791,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/kubernetes/clusters/{cluster_id}/resources")
         return result.get("resources", {})
-    
+
     async def get_kubernetes_available_upgrades(self, cluster_id: str) -> List[str]:
         """
         Get available Kubernetes version upgrades for a cluster.
@@ -2716,7 +2804,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/kubernetes/clusters/{cluster_id}/available-upgrades")
         return result.get("available_upgrades", [])
-    
+
     async def upgrade_kubernetes_cluster(self, cluster_id: str, upgrade_version: str) -> None:
         """
         Start a Kubernetes cluster upgrade.
@@ -2727,7 +2815,7 @@ class VultrDNSServer:
         """
         data = {"upgrade_version": upgrade_version}
         await self._make_request("POST", f"/kubernetes/clusters/{cluster_id}/upgrades", data)
-    
+
     async def get_kubernetes_versions(self) -> List[str]:
         """
         Get list of available Kubernetes versions.
@@ -2737,7 +2825,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/kubernetes/versions")
         return result.get("versions", [])
-    
+
     # Kubernetes Node Pool API Methods
     async def list_kubernetes_node_pools(self, cluster_id: str) -> List[Dict[str, Any]]:
         """
@@ -2751,7 +2839,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/kubernetes/clusters/{cluster_id}/node-pools")
         return result.get("node_pools", [])
-    
+
     async def get_kubernetes_node_pool(self, cluster_id: str, nodepool_id: str) -> Dict[str, Any]:
         """
         Get node pool details.
@@ -2765,7 +2853,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/kubernetes/clusters/{cluster_id}/node-pools/{nodepool_id}")
         return result.get("node_pool", {})
-    
+
     async def create_kubernetes_node_pool(
         self,
         cluster_id: str,
@@ -2810,10 +2898,10 @@ class VultrDNSServer:
             data["max_nodes"] = max_nodes
         if labels is not None:
             data["labels"] = labels
-        
+
         result = await self._make_request("POST", f"/kubernetes/clusters/{cluster_id}/node-pools", data)
         return result.get("node_pool", {})
-    
+
     async def update_kubernetes_node_pool(
         self,
         cluster_id: str,
@@ -2851,10 +2939,10 @@ class VultrDNSServer:
             data["max_nodes"] = max_nodes
         if labels is not None:
             data["labels"] = labels
-        
+
         if data:
             await self._make_request("PATCH", f"/kubernetes/clusters/{cluster_id}/node-pools/{nodepool_id}", data)
-    
+
     async def delete_kubernetes_node_pool(self, cluster_id: str, nodepool_id: str) -> None:
         """
         Delete a node pool from a Kubernetes cluster.
@@ -2864,7 +2952,7 @@ class VultrDNSServer:
             nodepool_id: The node pool ID
         """
         await self._make_request("DELETE", f"/kubernetes/clusters/{cluster_id}/node-pools/{nodepool_id}")
-    
+
     # Kubernetes Node API Methods
     async def list_kubernetes_nodes(self, cluster_id: str, nodepool_id: str) -> List[Dict[str, Any]]:
         """
@@ -2879,7 +2967,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/kubernetes/clusters/{cluster_id}/node-pools/{nodepool_id}/nodes")
         return result.get("nodes", [])
-    
+
     async def get_kubernetes_node(self, cluster_id: str, nodepool_id: str, node_id: str) -> Dict[str, Any]:
         """
         Get node details.
@@ -2894,7 +2982,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/kubernetes/clusters/{cluster_id}/node-pools/{nodepool_id}/nodes/{node_id}")
         return result.get("node", {})
-    
+
     async def delete_kubernetes_node(self, cluster_id: str, nodepool_id: str, node_id: str) -> None:
         """
         Delete a specific node from a node pool.
@@ -2905,7 +2993,7 @@ class VultrDNSServer:
             node_id: The node ID
         """
         await self._make_request("DELETE", f"/kubernetes/clusters/{cluster_id}/node-pools/{nodepool_id}/nodes/{node_id}")
-    
+
     async def recycle_kubernetes_node(self, cluster_id: str, nodepool_id: str, node_id: str) -> None:
         """
         Recycle (restart) a specific node.
@@ -2927,7 +3015,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/load-balancers")
         return result.get("load_balancers", [])
-    
+
     async def get_load_balancer(self, load_balancer_id: str) -> Dict[str, Any]:
         """
         Get load balancer details.
@@ -2940,7 +3028,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/load-balancers/{load_balancer_id}")
         return result.get("load_balancer", {})
-    
+
     async def create_load_balancer(
         self,
         region: str,
@@ -3000,7 +3088,7 @@ class VultrDNSServer:
             "timeout": timeout,
             "nodes": nodes
         }
-        
+
         if label is not None:
             data["label"] = label
         if health_check is not None:
@@ -3023,10 +3111,10 @@ class VultrDNSServer:
             data["sticky_session"] = sticky_session
         if instances is not None:
             data["instances"] = instances
-        
+
         result = await self._make_request("POST", "/load-balancers", data)
         return result.get("load_balancer", {})
-    
+
     async def update_load_balancer(
         self,
         load_balancer_id: str,
@@ -3065,7 +3153,7 @@ class VultrDNSServer:
             Updated load balancer information
         """
         data = {}
-        
+
         if ssl is not None:
             data["ssl"] = ssl
         if sticky_session is not None:
@@ -3090,10 +3178,10 @@ class VultrDNSServer:
             data["balancing_algorithm"] = balancing_algorithm
         if instances is not None:
             data["instances"] = instances
-        
+
         result = await self._make_request("PATCH", f"/load-balancers/{load_balancer_id}", data)
         return result.get("load_balancer", {})
-    
+
     async def delete_load_balancer(self, load_balancer_id: str) -> None:
         """
         Delete a load balancer.
@@ -3102,7 +3190,7 @@ class VultrDNSServer:
             load_balancer_id: The load balancer ID
         """
         await self._make_request("DELETE", f"/load-balancers/{load_balancer_id}")
-    
+
     async def delete_load_balancer_ssl(self, load_balancer_id: str) -> None:
         """
         Delete SSL certificate from a load balancer.
@@ -3111,7 +3199,7 @@ class VultrDNSServer:
             load_balancer_id: The load balancer ID
         """
         await self._make_request("DELETE", f"/load-balancers/{load_balancer_id}/ssl")
-    
+
     async def disable_load_balancer_auto_ssl(self, load_balancer_id: str) -> None:
         """
         Disable Auto SSL for a load balancer.
@@ -3120,7 +3208,7 @@ class VultrDNSServer:
             load_balancer_id: The load balancer ID
         """
         await self._make_request("DELETE", f"/load-balancers/{load_balancer_id}/auto_ssl")
-    
+
     # Load Balancer Forwarding Rules API Methods
     async def list_load_balancer_forwarding_rules(self, load_balancer_id: str) -> List[Dict[str, Any]]:
         """
@@ -3134,7 +3222,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/load-balancers/{load_balancer_id}/forwarding-rules")
         return result.get("forwarding_rules", [])
-    
+
     async def create_load_balancer_forwarding_rule(
         self,
         load_balancer_id: str,
@@ -3162,10 +3250,10 @@ class VultrDNSServer:
             "backend_protocol": backend_protocol,
             "backend_port": backend_port
         }
-        
+
         result = await self._make_request("POST", f"/load-balancers/{load_balancer_id}/forwarding-rules", data)
         return result.get("forwarding_rule", {})
-    
+
     async def get_load_balancer_forwarding_rule(self, load_balancer_id: str, forwarding_rule_id: str) -> Dict[str, Any]:
         """
         Get details of a specific forwarding rule.
@@ -3179,7 +3267,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/load-balancers/{load_balancer_id}/forwarding-rules/{forwarding_rule_id}")
         return result.get("forwarding_rule", {})
-    
+
     async def delete_load_balancer_forwarding_rule(self, load_balancer_id: str, forwarding_rule_id: str) -> None:
         """
         Delete a forwarding rule from a load balancer.
@@ -3189,7 +3277,7 @@ class VultrDNSServer:
             forwarding_rule_id: The forwarding rule ID
         """
         await self._make_request("DELETE", f"/load-balancers/{load_balancer_id}/forwarding-rules/{forwarding_rule_id}")
-    
+
     # Load Balancer Firewall Rules API Methods
     async def list_load_balancer_firewall_rules(self, load_balancer_id: str) -> List[Dict[str, Any]]:
         """
@@ -3203,7 +3291,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/load-balancers/{load_balancer_id}/firewall-rules")
         return result.get("firewall_rules", [])
-    
+
     async def get_load_balancer_firewall_rule(self, load_balancer_id: str, firewall_rule_id: str) -> Dict[str, Any]:
         """
         Get details of a specific firewall rule.
@@ -3228,7 +3316,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/databases")
         return result.get("databases", [])
-    
+
     async def get_managed_database(self, database_id: str) -> Dict[str, Any]:
         """
         Get managed database details.
@@ -3241,7 +3329,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/databases/{database_id}")
         return result.get("database", {})
-    
+
     async def create_managed_database(
         self,
         database_engine: str,
@@ -3290,7 +3378,7 @@ class VultrDNSServer:
             "plan": plan,
             "label": label
         }
-        
+
         if tag is not None:
             data["tag"] = tag
         if vpc_id is not None:
@@ -3311,10 +3399,10 @@ class VultrDNSServer:
             data["kafka_schema_registry_enabled"] = kafka_schema_registry_enabled
         if kafka_connect_enabled is not None:
             data["kafka_connect_enabled"] = kafka_connect_enabled
-        
+
         result = await self._make_request("POST", "/databases", data)
         return result.get("database", {})
-    
+
     async def update_managed_database(
         self,
         database_id: str,
@@ -3357,7 +3445,7 @@ class VultrDNSServer:
             Updated database information
         """
         data = {}
-        
+
         if region is not None:
             data["region"] = region
         if plan is not None:
@@ -3386,10 +3474,10 @@ class VultrDNSServer:
             data["kafka_schema_registry_enabled"] = kafka_schema_registry_enabled
         if kafka_connect_enabled is not None:
             data["kafka_connect_enabled"] = kafka_connect_enabled
-        
+
         result = await self._make_request("PUT", f"/databases/{database_id}", data)
         return result.get("database", {})
-    
+
     async def delete_managed_database(self, database_id: str) -> None:
         """
         Delete a managed database.
@@ -3398,7 +3486,7 @@ class VultrDNSServer:
             database_id: The database ID
         """
         await self._make_request("DELETE", f"/databases/{database_id}")
-    
+
     async def get_database_usage(self, database_id: str) -> Dict[str, Any]:
         """
         Get database usage statistics.
@@ -3411,7 +3499,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/databases/{database_id}/usage")
         return result.get("usage", {})
-    
+
     # Database User Management
     async def list_database_users(self, database_id: str) -> List[Dict[str, Any]]:
         """
@@ -3425,7 +3513,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/databases/{database_id}/users")
         return result.get("users", [])
-    
+
     async def create_database_user(
         self,
         database_id: str,
@@ -3448,17 +3536,17 @@ class VultrDNSServer:
             Created user information
         """
         data = {"username": username}
-        
+
         if password is not None:
             data["password"] = password
         if encryption is not None:
             data["encryption"] = encryption
         if access_level is not None:
             data["access_level"] = access_level
-        
+
         result = await self._make_request("POST", f"/databases/{database_id}/users", data)
         return result.get("user", {})
-    
+
     async def get_database_user(self, database_id: str, username: str) -> Dict[str, Any]:
         """
         Get database user details.
@@ -3472,7 +3560,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/databases/{database_id}/users/{username}")
         return result.get("user", {})
-    
+
     async def update_database_user(
         self,
         database_id: str,
@@ -3493,15 +3581,15 @@ class VultrDNSServer:
             Updated user information
         """
         data = {}
-        
+
         if password is not None:
             data["password"] = password
         if access_level is not None:
             data["access_level"] = access_level
-        
+
         result = await self._make_request("PUT", f"/databases/{database_id}/users/{username}", data)
         return result.get("user", {})
-    
+
     async def delete_database_user(self, database_id: str, username: str) -> None:
         """
         Delete a database user.
@@ -3511,7 +3599,7 @@ class VultrDNSServer:
             username: The username to delete
         """
         await self._make_request("DELETE", f"/databases/{database_id}/users/{username}")
-    
+
     async def update_database_user_access_control(
         self,
         database_id: str,
@@ -3533,7 +3621,7 @@ class VultrDNSServer:
             acl_keys: ACL keys
         """
         data = {}
-        
+
         if acl_categories is not None:
             data["acl_categories"] = acl_categories
         if acl_channels is not None:
@@ -3542,9 +3630,9 @@ class VultrDNSServer:
             data["acl_commands"] = acl_commands
         if acl_keys is not None:
             data["acl_keys"] = acl_keys
-        
+
         await self._make_request("PUT", f"/databases/{database_id}/users/{username}/access-control", data)
-    
+
     # Logical Database Management
     async def list_logical_databases(self, database_id: str) -> List[Dict[str, Any]]:
         """
@@ -3558,7 +3646,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/databases/{database_id}/dbs")
         return result.get("dbs", [])
-    
+
     async def create_logical_database(self, database_id: str, name: str) -> Dict[str, Any]:
         """
         Create a logical database.
@@ -3573,7 +3661,7 @@ class VultrDNSServer:
         data = {"name": name}
         result = await self._make_request("POST", f"/databases/{database_id}/dbs", data)
         return result.get("db", {})
-    
+
     async def get_logical_database(self, database_id: str, db_name: str) -> Dict[str, Any]:
         """
         Get logical database details.
@@ -3587,7 +3675,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/databases/{database_id}/dbs/{db_name}")
         return result.get("db", {})
-    
+
     async def delete_logical_database(self, database_id: str, db_name: str) -> None:
         """
         Delete a logical database.
@@ -3597,7 +3685,7 @@ class VultrDNSServer:
             db_name: The logical database name
         """
         await self._make_request("DELETE", f"/databases/{database_id}/dbs/{db_name}")
-    
+
     # Connection Pool Management
     async def list_connection_pools(self, database_id: str) -> List[Dict[str, Any]]:
         """
@@ -3611,7 +3699,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/databases/{database_id}/connection-pools")
         return result.get("connection_pools", [])
-    
+
     async def create_connection_pool(
         self,
         database_id: str,
@@ -3644,7 +3732,7 @@ class VultrDNSServer:
         }
         result = await self._make_request("POST", f"/databases/{database_id}/connection-pools", data)
         return result.get("connection_pool", {})
-    
+
     async def get_connection_pool(self, database_id: str, pool_name: str) -> Dict[str, Any]:
         """
         Get connection pool details.
@@ -3658,7 +3746,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/databases/{database_id}/connection-pools/{pool_name}")
         return result.get("connection_pool", {})
-    
+
     async def update_connection_pool(
         self,
         database_id: str,
@@ -3683,7 +3771,7 @@ class VultrDNSServer:
             Updated pool information
         """
         data = {}
-        
+
         if database is not None:
             data["database"] = database
         if username is not None:
@@ -3692,10 +3780,10 @@ class VultrDNSServer:
             data["mode"] = mode
         if size is not None:
             data["size"] = size
-        
+
         result = await self._make_request("PUT", f"/databases/{database_id}/connection-pools/{pool_name}", data)
         return result.get("connection_pool", {})
-    
+
     async def delete_connection_pool(self, database_id: str, pool_name: str) -> None:
         """
         Delete a connection pool.
@@ -3705,7 +3793,7 @@ class VultrDNSServer:
             pool_name: The pool name
         """
         await self._make_request("DELETE", f"/databases/{database_id}/connection-pools/{pool_name}")
-    
+
     # Database Backup Management
     async def list_database_backups(self, database_id: str) -> List[Dict[str, Any]]:
         """
@@ -3719,7 +3807,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/databases/{database_id}/backups")
         return result.get("backups", [])
-    
+
     async def restore_database_from_backup(
         self,
         database_id: str,
@@ -3749,13 +3837,13 @@ class VultrDNSServer:
             "plan": plan,
             "region": region
         }
-        
+
         if vpc_id is not None:
             data["vpc_id"] = vpc_id
-        
+
         result = await self._make_request("POST", f"/databases/{database_id}/restore", data)
         return result.get("database", {})
-    
+
     async def fork_database(
         self,
         database_id: str,
@@ -3782,13 +3870,13 @@ class VultrDNSServer:
             "region": region,
             "plan": plan
         }
-        
+
         if vpc_id is not None:
             data["vpc_id"] = vpc_id
-        
+
         result = await self._make_request("POST", f"/databases/{database_id}/fork", data)
         return result.get("database", {})
-    
+
     # Read Replica Management
     async def create_read_replica(
         self,
@@ -3814,10 +3902,10 @@ class VultrDNSServer:
             "region": region,
             "plan": plan
         }
-        
+
         result = await self._make_request("POST", f"/databases/{database_id}/read-replica", data)
         return result.get("database", {})
-    
+
     async def promote_read_replica(self, database_id: str) -> None:
         """
         Promote a read replica to standalone.
@@ -3826,7 +3914,7 @@ class VultrDNSServer:
             database_id: The read replica database ID
         """
         await self._make_request("POST", f"/databases/{database_id}/promote-read-replica")
-    
+
     # Database Plans
     async def list_database_plans(self) -> List[Dict[str, Any]]:
         """
@@ -3837,7 +3925,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/databases/plans")
         return result.get("plans", [])
-    
+
     # Maintenance and Migration
     async def list_database_versions(self, database_id: str) -> List[Dict[str, Any]]:
         """
@@ -3851,7 +3939,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/databases/{database_id}/version-upgrade")
         return result.get("available_versions", [])
-    
+
     async def start_version_upgrade(self, database_id: str, version: str) -> None:
         """
         Start database version upgrade.
@@ -3862,7 +3950,7 @@ class VultrDNSServer:
         """
         data = {"version": version}
         await self._make_request("POST", f"/databases/{database_id}/version-upgrade", data)
-    
+
     async def get_maintenance_updates(self, database_id: str) -> List[Dict[str, Any]]:
         """
         Get maintenance updates.
@@ -3875,7 +3963,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/databases/{database_id}/maintenance")
         return result.get("available_updates", [])
-    
+
     async def start_maintenance(self, database_id: str) -> None:
         """
         Start maintenance on database.
@@ -3884,7 +3972,7 @@ class VultrDNSServer:
             database_id: The database ID
         """
         await self._make_request("POST", f"/databases/{database_id}/maintenance")
-    
+
     async def get_migration_status(self, database_id: str) -> Dict[str, Any]:
         """
         Get migration status.
@@ -3897,7 +3985,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/databases/{database_id}/migration")
         return result.get("migration", {})
-    
+
     async def start_migration(
         self,
         database_id: str,
@@ -3929,7 +4017,7 @@ class VultrDNSServer:
             "ssl": ssl
         }
         await self._make_request("POST", f"/databases/{database_id}/migration", data)
-    
+
     async def stop_migration(self, database_id: str) -> None:
         """
         Stop database migration.
@@ -3938,7 +4026,7 @@ class VultrDNSServer:
             database_id: The database ID
         """
         await self._make_request("DELETE", f"/databases/{database_id}/migration")
-    
+
     # Kafka-specific methods
     async def list_kafka_topics(self, database_id: str) -> List[Dict[str, Any]]:
         """
@@ -3952,7 +4040,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/databases/{database_id}/topics")
         return result.get("topics", [])
-    
+
     async def create_kafka_topic(
         self,
         database_id: str,
@@ -3985,7 +4073,7 @@ class VultrDNSServer:
         }
         result = await self._make_request("POST", f"/databases/{database_id}/topics", data)
         return result.get("topic", {})
-    
+
     async def get_kafka_topic(self, database_id: str, topic_name: str) -> Dict[str, Any]:
         """
         Get Kafka topic details.
@@ -3999,7 +4087,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/databases/{database_id}/topics/{topic_name}")
         return result.get("topic", {})
-    
+
     async def update_kafka_topic(
         self,
         database_id: str,
@@ -4024,7 +4112,7 @@ class VultrDNSServer:
             Updated topic information
         """
         data = {}
-        
+
         if partitions is not None:
             data["partitions"] = partitions
         if replication is not None:
@@ -4033,10 +4121,10 @@ class VultrDNSServer:
             data["retention_hours"] = retention_hours
         if retention_bytes is not None:
             data["retention_bytes"] = retention_bytes
-        
+
         result = await self._make_request("PUT", f"/databases/{database_id}/topics/{topic_name}", data)
         return result.get("topic", {})
-    
+
     async def delete_kafka_topic(self, database_id: str, topic_name: str) -> None:
         """
         Delete Kafka topic.
@@ -4057,7 +4145,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/storage-gateways")
         return result.get("storage_gateway", [])
-    
+
     async def get_storage_gateway(self, gateway_id: str) -> Dict[str, Any]:
         """
         Get storage gateway details.
@@ -4070,7 +4158,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/storage-gateways/{gateway_id}")
         return result.get("storage_gateway", {})
-    
+
     async def create_storage_gateway(
         self,
         label: str,
@@ -4103,10 +4191,10 @@ class VultrDNSServer:
         }
         if tags is not None:
             data["tags"] = tags
-        
+
         result = await self._make_request("POST", "/storage-gateways", data=data)
         return result.get("storage_gateway", {})
-    
+
     async def update_storage_gateway(
         self,
         gateway_id: str,
@@ -4126,10 +4214,10 @@ class VultrDNSServer:
             data["label"] = label
         if tags is not None:
             data["tags"] = tags
-        
+
         if data:
             await self._make_request("PUT", f"/storage-gateways/{gateway_id}", data=data)
-    
+
     async def delete_storage_gateway(self, gateway_id: str) -> None:
         """
         Delete a storage gateway.
@@ -4138,7 +4226,7 @@ class VultrDNSServer:
             gateway_id: The storage gateway ID to delete
         """
         await self._make_request("DELETE", f"/storage-gateways/{gateway_id}")
-    
+
     async def add_storage_gateway_export(
         self,
         gateway_id: str,
@@ -4158,7 +4246,7 @@ class VultrDNSServer:
         data = [export_config]
         result = await self._make_request("POST", f"/storage-gateways/{gateway_id}/exports", data=data)
         return result.get("vpc", {})  # Note: API response uses "vpc" key based on schema
-    
+
     async def delete_storage_gateway_export(
         self,
         gateway_id: str,
@@ -4183,7 +4271,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/object-storage")
         return result.get("object_storages", [])
-    
+
     async def get_object_storage(self, object_storage_id: str) -> Dict[str, Any]:
         """
         Get Object Storage details.
@@ -4196,7 +4284,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/object-storage/{object_storage_id}")
         return result.get("object_storage", {})
-    
+
     async def create_object_storage(
         self,
         cluster_id: int,
@@ -4218,7 +4306,7 @@ class VultrDNSServer:
         }
         result = await self._make_request("POST", "/object-storage", data=data)
         return result.get("object_storage", {})
-    
+
     async def update_object_storage(
         self,
         object_storage_id: str,
@@ -4233,7 +4321,7 @@ class VultrDNSServer:
         """
         data = {"label": label}
         await self._make_request("PUT", f"/object-storage/{object_storage_id}", data=data)
-    
+
     async def delete_object_storage(self, object_storage_id: str) -> None:
         """
         Delete an Object Storage instance.
@@ -4242,7 +4330,7 @@ class VultrDNSServer:
             object_storage_id: The Object Storage ID to delete
         """
         await self._make_request("DELETE", f"/object-storage/{object_storage_id}")
-    
+
     async def regenerate_object_storage_keys(self, object_storage_id: str) -> Dict[str, Any]:
         """
         Regenerate the access keys for an Object Storage instance.
@@ -4255,7 +4343,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("POST", f"/object-storage/{object_storage_id}/regenerate-keys")
         return result.get("object_storage", {})
-    
+
     async def list_object_storage_clusters(self) -> List[Dict[str, Any]]:
         """
         List all Object Storage clusters.
@@ -4265,7 +4353,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/object-storage/clusters")
         return result.get("object_storage_clusters", [])
-    
+
     async def list_object_storage_cluster_tiers(self, cluster_id: int) -> List[Dict[str, Any]]:
         """
         List all available tiers for a specific Object Storage cluster.
@@ -4278,7 +4366,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/object-storage/clusters/{cluster_id}/tiers")
         return result.get("tiers", [])
-    
+
     # Serverless Inference methods
     async def list_inference_subscriptions(self) -> List[Dict[str, Any]]:
         """
@@ -4289,7 +4377,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/inference")
         return result.get("subscriptions", [])
-    
+
     async def get_inference_subscription(self, inference_id: str) -> Dict[str, Any]:
         """
         Get information about a Serverless Inference subscription.
@@ -4302,7 +4390,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/inference/{inference_id}")
         return result.get("subscription", {})
-    
+
     async def create_inference_subscription(self, label: str) -> Dict[str, Any]:
         """
         Create a new Serverless Inference subscription.
@@ -4316,7 +4404,7 @@ class VultrDNSServer:
         data = {"label": label}
         result = await self._make_request("POST", "/inference", data=data)
         return result.get("subscription", {})
-    
+
     async def update_inference_subscription(self, inference_id: str, label: str) -> Dict[str, Any]:
         """
         Update a Serverless Inference subscription.
@@ -4331,7 +4419,7 @@ class VultrDNSServer:
         data = {"label": label}
         result = await self._make_request("PATCH", f"/inference/{inference_id}", data=data)
         return result.get("subscription", {})
-    
+
     async def delete_inference_subscription(self, inference_id: str) -> None:
         """
         Delete a Serverless Inference subscription.
@@ -4340,7 +4428,7 @@ class VultrDNSServer:
             inference_id: The inference subscription ID to delete
         """
         await self._make_request("DELETE", f"/inference/{inference_id}")
-    
+
     async def get_inference_usage(self, inference_id: str) -> Dict[str, Any]:
         """
         Get usage information for a Serverless Inference subscription.
@@ -4357,7 +4445,7 @@ class VultrDNSServer:
     # =============================================================================
     # Subaccount Management Methods
     # =============================================================================
-    
+
     async def list_subaccounts(self) -> List[Dict[str, Any]]:
         """
         List all subaccounts.
@@ -4367,7 +4455,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/subaccounts")
         return result.get("subaccounts", [])
-    
+
     async def create_subaccount(
         self,
         email: str,
@@ -4390,14 +4478,14 @@ class VultrDNSServer:
             data["subaccount_name"] = subaccount_name
         if subaccount_id:
             data["subaccount_id"] = subaccount_id
-            
+
         result = await self._make_request("POST", "/subaccounts", data=data)
         return result.get("subaccount", {})
 
     # =============================================================================
     # User Management Methods
     # =============================================================================
-    
+
     async def list_users(self) -> List[Dict[str, Any]]:
         """
         List all users in your account.
@@ -4407,7 +4495,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", "/users")
         return result.get("users", [])
-    
+
     async def get_user(self, user_id: str) -> Dict[str, Any]:
         """
         Get user information.
@@ -4420,7 +4508,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/users/{user_id}")
         return result.get("user", {})
-    
+
     async def create_user(
         self,
         email: str,
@@ -4454,13 +4542,13 @@ class VultrDNSServer:
             "api_enabled": api_enabled,
             "service_user": service_user
         }
-        
+
         if acls is not None:
             data["acls"] = acls
-        
+
         result = await self._make_request("POST", "/users", data=data)
         return result.get("user", {})
-    
+
     async def update_user(
         self,
         user_id: str,
@@ -4479,15 +4567,15 @@ class VultrDNSServer:
             Updated user information
         """
         data = {}
-        
+
         if api_enabled is not None:
             data["api_enabled"] = api_enabled
         if acls is not None:
             data["acls"] = acls
-        
+
         result = await self._make_request("PATCH", f"/users/{user_id}", data=data)
         return result.get("user", {})
-    
+
     async def delete_user(self, user_id: str) -> None:
         """
         Delete a user.
@@ -4496,7 +4584,7 @@ class VultrDNSServer:
             user_id: The user ID to delete
         """
         await self._make_request("DELETE", f"/users/{user_id}")
-    
+
     # User IP Whitelist Management
     async def get_user_ip_whitelist(self, user_id: str) -> List[Dict[str, Any]]:
         """
@@ -4510,7 +4598,7 @@ class VultrDNSServer:
         """
         result = await self._make_request("GET", f"/users/{user_id}/ip-whitelist")
         return result.get("ip_whitelist", [])
-    
+
     async def get_user_ip_whitelist_entry(
         self,
         user_id: str,
@@ -4531,7 +4619,7 @@ class VultrDNSServer:
         params = {"subnet": subnet, "subnet_size": subnet_size}
         result = await self._make_request("GET", f"/users/{user_id}/ip-whitelist/entry", params=params)
         return result.get("ip_whitelist_entry", {})
-    
+
     async def add_user_ip_whitelist_entry(
         self,
         user_id: str,
@@ -4551,7 +4639,7 @@ class VultrDNSServer:
             "subnet_size": subnet_size
         }
         await self._make_request("POST", f"/users/{user_id}/ip-whitelist", data=data)
-    
+
     async def remove_user_ip_whitelist_entry(
         self,
         user_id: str,
@@ -4588,18 +4676,18 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
     """
     if api_key is None:
         api_key = os.getenv("VULTR_API_KEY")
-    
+
     if not api_key:
         raise ValueError(
             "VULTR_API_KEY must be provided either as parameter or environment variable"
         )
-    
+
     # Initialize MCP server
     server = Server("mcp-vultr")
-    
+
     # Initialize Vultr client
     vultr_client = VultrDNSServer(api_key)
-    
+
     # Add resources for client discovery
     @server.list_resources()
     async def list_resources() -> List[Resource]:
@@ -4612,13 +4700,13 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                 mimeType="application/json"
             ),
             Resource(
-                uri="vultr://capabilities", 
+                uri="vultr://capabilities",
                 name="Server Capabilities",
                 description="Vultr DNS server capabilities and supported features",
                 mimeType="application/json"
             )
         ]
-    
+
     @server.read_resource()
     async def read_resource(uri: str) -> str:
         """Read a specific resource."""
@@ -4628,7 +4716,7 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                 return str(domains)
             except Exception as e:
                 return f"Error loading domains: {str(e)}"
-        
+
         elif uri == "vultr://capabilities":
             capabilities = {
                 "supported_record_types": [
@@ -4639,7 +4727,7 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                         "requires_priority": False
                     },
                     {
-                        "type": "AAAA", 
+                        "type": "AAAA",
                         "description": "IPv6 address record",
                         "example": "2001:db8::1",
                         "requires_priority": False
@@ -4684,7 +4772,7 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                 "max_ttl": 86400
             }
             return str(capabilities)
-        
+
         elif uri.startswith("vultr://records/"):
             domain = uri.replace("vultr://records/", "")
             try:
@@ -4696,9 +4784,9 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                 })
             except Exception as e:
                 return f"Error loading records for {domain}: {str(e)}"
-        
+
         return "Resource not found"
-    
+
     # Define MCP tools
     @server.list_tools()
     async def list_tools() -> List[Tool]:
@@ -4926,7 +5014,7 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                 }
             )
         ]
-    
+
     @server.call_tool()
     async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         """Handle tool calls."""
@@ -4934,34 +5022,34 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
             if name == "list_dns_domains":
                 domains = await vultr_client.list_domains()
                 return [TextContent(type="text", text=str(domains))]
-            
+
             elif name == "get_dns_domain":
                 domain = arguments["domain"]
                 result = await vultr_client.get_domain(domain)
                 return [TextContent(type="text", text=str(result))]
-            
+
             elif name == "create_dns_domain":
                 domain = arguments["domain"]
                 ip = arguments["ip"]
                 result = await vultr_client.create_domain(domain, ip)
                 return [TextContent(type="text", text=str(result))]
-            
+
             elif name == "delete_dns_domain":
                 domain = arguments["domain"]
                 await vultr_client.delete_domain(domain)
                 return [TextContent(type="text", text=f"Domain {domain} deleted successfully")]
-            
+
             elif name == "list_dns_records":
                 domain = arguments["domain"]
                 records = await vultr_client.list_records(domain)
                 return [TextContent(type="text", text=str(records))]
-            
+
             elif name == "get_dns_record":
                 domain = arguments["domain"]
                 record_id = arguments["record_id"]
                 result = await vultr_client.get_record(domain, record_id)
                 return [TextContent(type="text", text=str(result))]
-            
+
             elif name == "create_dns_record":
                 domain = arguments["domain"]
                 record_type = arguments["record_type"]
@@ -4971,7 +5059,7 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                 priority = arguments.get("priority")
                 result = await vultr_client.create_record(domain, record_type, name, data, ttl, priority)
                 return [TextContent(type="text", text=str(result))]
-            
+
             elif name == "update_dns_record":
                 domain = arguments["domain"]
                 record_id = arguments["record_id"]
@@ -4982,42 +5070,42 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                 priority = arguments.get("priority")
                 result = await vultr_client.update_record(domain, record_id, record_type, name, data, ttl, priority)
                 return [TextContent(type="text", text=str(result))]
-            
+
             elif name == "delete_dns_record":
                 domain = arguments["domain"]
                 record_id = arguments["record_id"]
                 await vultr_client.delete_record(domain, record_id)
                 return [TextContent(type="text", text=f"DNS record {record_id} deleted successfully")]
-            
+
             elif name == "validate_dns_record":
                 record_type = arguments["record_type"]
                 name = arguments["name"]
                 data = arguments["data"]
                 ttl = arguments.get("ttl")
                 priority = arguments.get("priority")
-                
+
                 validation_result = {
                     "valid": True,
                     "errors": [],
                     "warnings": [],
                     "suggestions": []
                 }
-                
+
                 # Validate record type
                 valid_types = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV']
                 if record_type.upper() not in valid_types:
                     validation_result["valid"] = False
                     validation_result["errors"].append(f"Invalid record type. Must be one of: {', '.join(valid_types)}")
-                
+
                 record_type = record_type.upper()
-                
+
                 # Validate TTL
                 if ttl is not None:
                     if ttl < 60 or ttl > 86400:
                         validation_result["warnings"].append("TTL should be between 60 and 86400 seconds")
                     elif ttl < 300:
                         validation_result["warnings"].append("Low TTL values may impact DNS performance")
-                
+
                 # Record-specific validation
                 if record_type == 'A':
                     try:
@@ -5025,7 +5113,7 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                     except ipaddress.AddressValueError:
                         validation_result["valid"] = False
                         validation_result["errors"].append("Invalid IPv4 address format")
-                
+
                 elif record_type == 'AAAA':
                     try:
                         ipv6_addr = ipaddress.IPv6Address(data)
@@ -5034,7 +5122,7 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                             validation_result["suggestions"].append("Consider using a native IPv6 address instead of IPv4-mapped format")
                         elif ipv6_addr.compressed != data:
                             validation_result["suggestions"].append(f"Consider using compressed format: {ipv6_addr.compressed}")
-                        
+
                         # Check for common special addresses
                         if ipv6_addr.is_loopback:
                             validation_result["warnings"].append("This is the IPv6 loopback address (::1)")
@@ -5042,16 +5130,16 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                             validation_result["warnings"].append("This is an IPv6 link-local address (fe80::/10)")
                         elif ipv6_addr.is_private:
                             validation_result["warnings"].append("This is an IPv6 private address")
-                            
+
                     except ipaddress.AddressValueError as e:
                         validation_result["valid"] = False
                         validation_result["errors"].append(f"Invalid IPv6 address: {str(e)}")
-                
+
                 elif record_type == 'CNAME':
                     if name == '@' or name == '':
                         validation_result["valid"] = False
                         validation_result["errors"].append("CNAME records cannot be used for root domain (@)")
-                
+
                 elif record_type == 'MX':
                     if priority is None:
                         validation_result["valid"] = False
@@ -5059,7 +5147,7 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                     elif priority < 0 or priority > 65535:
                         validation_result["valid"] = False
                         validation_result["errors"].append("MX priority must be between 0 and 65535")
-                
+
                 elif record_type == 'SRV':
                     if priority is None:
                         validation_result["valid"] = False
@@ -5068,7 +5156,7 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                     if len(srv_parts) != 3:
                         validation_result["valid"] = False
                         validation_result["errors"].append("SRV data must be in format: 'weight port target'")
-                
+
                 result = {
                     "record_type": record_type,
                     "name": name,
@@ -5078,11 +5166,11 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                     "validation": validation_result
                 }
                 return [TextContent(type="text", text=str(result))]
-            
+
             elif name == "analyze_dns_records":
                 domain = arguments["domain"]
                 records = await vultr_client.list_records(domain)
-                
+
                 # Analyze records
                 record_types = {}
                 total_records = len(records)
@@ -5091,16 +5179,16 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                 has_www = False
                 has_mx = False
                 has_spf = False
-                
+
                 for record in records:
                     record_type = record.get('type', 'UNKNOWN')
                     record_name = record.get('name', '')
                     record_data = record.get('data', '')
                     ttl = record.get('ttl', 300)
-                    
+
                     record_types[record_type] = record_types.get(record_type, 0) + 1
                     ttl_values.append(ttl)
-                    
+
                     if record_type == 'A' and record_name in ['@', domain]:
                         has_root_a = True
                     if record_name == 'www':
@@ -5109,11 +5197,11 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                         has_mx = True
                     if record_type == 'TXT' and 'spf1' in record_data.lower():
                         has_spf = True
-                
+
                 # Generate recommendations
                 recommendations = []
                 issues = []
-                
+
                 if not has_root_a:
                     recommendations.append("Consider adding an A record for the root domain (@)")
                 if not has_www:
@@ -5122,13 +5210,13 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                     recommendations.append("Consider adding MX records if you plan to use email")
                 if has_mx and not has_spf:
                     recommendations.append("Add SPF record (TXT) to prevent email spoofing")
-                
+
                 avg_ttl = sum(ttl_values) / len(ttl_values) if ttl_values else 0
                 low_ttl_count = sum(1 for ttl in ttl_values if ttl < 300)
-                
+
                 if low_ttl_count > total_records * 0.5:
                     issues.append("Many records have very low TTL values, which may impact performance")
-                
+
                 result = {
                     "domain": domain,
                     "analysis": {
@@ -5147,13 +5235,13 @@ def create_mcp_server(api_key: Optional[str] = None) -> Server:
                     "records_detail": records
                 }
                 return [TextContent(type="text", text=str(result))]
-            
+
             else:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]
-        
+
         except Exception as e:
             return [TextContent(type="text", text=f"Error: {str(e)}")]
-    
+
     return server
 
 

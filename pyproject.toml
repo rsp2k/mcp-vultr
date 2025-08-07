@@ -56,9 +56,15 @@ dev = [
     "pytest-cov>=4.0.0",
     "black>=23.0.0",
     "isort>=5.12.0",
-    "flake8>=6.0.0",
+    "ruff>=0.1.14",
     "mypy>=1.0.0",
-    "pre-commit>=3.0.0"
+    "pre-commit>=3.0.0",
+    "rich>=13.0.0",
+    "structlog>=23.0.0",
+    "tenacity>=8.0.0",
+    "cachetools>=5.0.0",
+    "bandit>=1.7.0",
+    "safety>=3.0.0"
 ]
 docs = [
     "sphinx>=6.0.0",
@@ -115,7 +121,7 @@ line_length = 88
 known_first_party = ["mcp_vultr"]
 
 [tool.mypy]
-python_version = "1.12.0"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -133,6 +139,66 @@ show_error_codes = true
 [[tool.mypy.overrides]]
 module = ["mcp.*"]
 ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py38"
+line-length = 88
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "ARG", # flake8-unused-arguments
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+    "B904",  # Allow raise without from for now
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*" = ["ARG", "S101"]  # Allow unused args and assert in tests
+
+[tool.bandit]
+exclude_dirs = ["tests", "build", "dist"]
+skips = [
+    "B101",  # assert_used - okay in test files
+    "B601",  # paramiko_calls - we don't use paramiko
+    "B603",  # subprocess_without_shell_equals_true - we control inputs
+]
+
+[tool.bandit.assert_used]
+skips = ['*_test.py', 'test_*.py']
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

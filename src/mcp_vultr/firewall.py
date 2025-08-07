@@ -4,7 +4,8 @@ Vultr Firewall FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr firewall groups and rules.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from fastmcp import FastMCP
 
 
@@ -19,14 +20,14 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with firewall management tools
     """
     mcp = FastMCP(name="vultr-firewall")
-    
+
     # Helper function to check if a string looks like a UUID
     def is_uuid_format(s: str) -> bool:
         """Check if a string looks like a UUID."""
         if len(s) == 36 and s.count('-') == 4:
             return True
         return False
-    
+
     # Helper function to get firewall group ID from description
     async def get_firewall_group_id(identifier: str) -> str:
         """
@@ -44,21 +45,21 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
         # If it looks like a UUID, return it as-is
         if is_uuid_format(identifier):
             return identifier
-            
+
         # Otherwise, search for it by description
         groups = await vultr_client.list_firewall_groups()
         for group in groups:
             if group.get("description") == identifier:
                 return group["id"]
-        
+
         raise ValueError(f"Firewall group '{identifier}' not found")
-    
+
     # Firewall Group resources
     @mcp.resource("firewall://groups")
     async def list_groups_resource() -> List[Dict[str, Any]]:
         """List all firewall groups in your Vultr account."""
         return await vultr_client.list_firewall_groups()
-    
+
     @mcp.resource("firewall://groups/{firewall_group_id}")
     async def get_group_resource(firewall_group_id: str) -> Dict[str, Any]:
         """Get information about a specific firewall group.
@@ -68,7 +69,7 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_firewall_group_id(firewall_group_id)
         return await vultr_client.get_firewall_group(actual_id)
-    
+
     @mcp.resource("firewall://groups/{firewall_group_id}/rules")
     async def list_rules_resource(firewall_group_id: str) -> List[Dict[str, Any]]:
         """List all rules in a firewall group.
@@ -78,7 +79,7 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_firewall_group_id(firewall_group_id)
         return await vultr_client.list_firewall_rules(actual_id)
-    
+
     @mcp.resource("firewall://groups/{firewall_group_id}/rules/{firewall_rule_id}")
     async def get_rule_resource(firewall_group_id: str, firewall_rule_id: str) -> Dict[str, Any]:
         """Get information about a specific firewall rule.
@@ -89,7 +90,7 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_firewall_group_id(firewall_group_id)
         return await vultr_client.get_firewall_rule(actual_id, firewall_rule_id)
-    
+
     # Firewall Group tools
     @mcp.tool
     async def list_groups() -> List[Dict[str, Any]]:
@@ -106,7 +107,7 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
             - max_rule_count: Maximum allowed rules
         """
         return await vultr_client.list_firewall_groups()
-    
+
     @mcp.tool
     async def get_group(firewall_group_id: str) -> Dict[str, Any]:
         """Get information about a specific firewall group.
@@ -119,7 +120,7 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_firewall_group_id(firewall_group_id)
         return await vultr_client.get_firewall_group(actual_id)
-    
+
     @mcp.tool
     async def create_group(description: str) -> Dict[str, Any]:
         """Create a new firewall group.
@@ -131,7 +132,7 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
             Created firewall group information
         """
         return await vultr_client.create_firewall_group(description)
-    
+
     @mcp.tool
     async def update_group(firewall_group_id: str, description: str) -> Dict[str, str]:
         """Update a firewall group description.
@@ -146,7 +147,7 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
         actual_id = await get_firewall_group_id(firewall_group_id)
         await vultr_client.update_firewall_group(actual_id, description)
         return {"status": "success", "message": f"Firewall group {firewall_group_id} updated successfully"}
-    
+
     @mcp.tool
     async def delete_group(firewall_group_id: str) -> Dict[str, str]:
         """Delete a firewall group.
@@ -160,7 +161,7 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
         actual_id = await get_firewall_group_id(firewall_group_id)
         await vultr_client.delete_firewall_group(actual_id)
         return {"status": "success", "message": f"Firewall group {firewall_group_id} deleted successfully"}
-    
+
     # Firewall Rule tools
     @mcp.tool
     async def list_rules(firewall_group_id: str) -> List[Dict[str, Any]]:
@@ -174,7 +175,7 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_firewall_group_id(firewall_group_id)
         return await vultr_client.list_firewall_rules(actual_id)
-    
+
     @mcp.tool
     async def get_rule(firewall_group_id: str, firewall_rule_id: str) -> Dict[str, Any]:
         """Get information about a specific firewall rule.
@@ -188,7 +189,7 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_firewall_group_id(firewall_group_id)
         return await vultr_client.get_firewall_rule(actual_id, firewall_rule_id)
-    
+
     @mcp.tool
     async def create_rule(
         firewall_group_id: str,
@@ -229,7 +230,7 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
         return await vultr_client.create_firewall_rule(
             actual_id, ip_type, protocol, subnet, subnet_size, port, source, notes
         )
-    
+
     @mcp.tool
     async def delete_rule(firewall_group_id: str, firewall_rule_id: str) -> Dict[str, str]:
         """Delete a firewall rule.
@@ -244,7 +245,7 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
         actual_id = await get_firewall_group_id(firewall_group_id)
         await vultr_client.delete_firewall_rule(actual_id, firewall_rule_id)
         return {"status": "success", "message": f"Firewall rule {firewall_rule_id} deleted successfully"}
-    
+
     @mcp.tool
     async def setup_web_server_rules(firewall_group_id: str, allow_ssh_from: str = "0.0.0.0/0") -> List[Dict[str, Any]]:
         """Set up common firewall rules for a web server.
@@ -264,32 +265,32 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_firewall_group_id(firewall_group_id)
         rules = []
-        
+
         # Parse SSH subnet
         ssh_parts = allow_ssh_from.split('/')
         ssh_subnet = ssh_parts[0]
         ssh_size = int(ssh_parts[1]) if len(ssh_parts) > 1 else 0
-        
+
         # HTTP
         rules.append(await vultr_client.create_firewall_rule(
             actual_id, "v4", "tcp", "0.0.0.0", 0, port="80", notes="HTTP"
         ))
-        
+
         # HTTPS
         rules.append(await vultr_client.create_firewall_rule(
             actual_id, "v4", "tcp", "0.0.0.0", 0, port="443", notes="HTTPS"
         ))
-        
+
         # SSH
         rules.append(await vultr_client.create_firewall_rule(
             actual_id, "v4", "tcp", ssh_subnet, ssh_size, port="22", notes="SSH"
         ))
-        
+
         # ICMP (ping)
         rules.append(await vultr_client.create_firewall_rule(
             actual_id, "v4", "icmp", "0.0.0.0", 0, notes="ICMP/Ping"
         ))
-        
+
         return rules
-    
+
     return mcp

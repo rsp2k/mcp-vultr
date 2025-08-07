@@ -5,7 +5,8 @@ This module contains FastMCP tools and resources for managing Vultr users,
 API keys, permissions, and security settings.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from fastmcp import FastMCP
 
 
@@ -20,14 +21,14 @@ def create_users_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with user management tools
     """
     mcp = FastMCP(name="vultr-users")
-    
+
     # Helper function to check if a string looks like a UUID
     def is_uuid_format(s: str) -> bool:
         """Check if a string looks like a UUID."""
         if len(s) == 36 and s.count('-') == 4:
             return True
         return False
-    
+
     # Helper function to get user ID from email or UUID
     async def get_user_id(identifier: str) -> str:
         """
@@ -45,21 +46,21 @@ def create_users_mcp(vultr_client) -> FastMCP:
         # If it looks like a UUID, return it as-is
         if is_uuid_format(identifier):
             return identifier
-            
+
         # Otherwise, search for it by email
         users = await vultr_client.list_users()
         for user in users:
             if user.get("email") == identifier:
                 return user["id"]
-        
+
         raise ValueError(f"User '{identifier}' not found (searched by email)")
-    
+
     # User resources
     @mcp.resource("users://list")
     async def list_users_resource() -> List[Dict[str, Any]]:
         """List all users in your Vultr account."""
         return await vultr_client.list_users()
-    
+
     @mcp.resource("users://{user_id}")
     async def get_user_resource(user_id: str) -> Dict[str, Any]:
         """Get information about a specific user.
@@ -69,7 +70,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_user_id(user_id)
         return await vultr_client.get_user(actual_id)
-    
+
     @mcp.resource("users://{user_id}/ip-whitelist")
     async def get_user_ip_whitelist_resource(user_id: str) -> List[Dict[str, Any]]:
         """Get IP whitelist for a specific user.
@@ -79,7 +80,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_user_id(user_id)
         return await vultr_client.get_user_ip_whitelist(actual_id)
-    
+
     # User management tools
     @mcp.tool
     async def list() -> List[Dict[str, Any]]:
@@ -97,7 +98,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
             - acls: List of permissions granted to the user
         """
         return await vultr_client.list_users()
-    
+
     @mcp.tool
     async def get(user_id: str) -> Dict[str, Any]:
         """Get detailed information about a specific user.
@@ -110,7 +111,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_user_id(user_id)
         return await vultr_client.get_user(actual_id)
-    
+
     @mcp.tool
     async def create(
         email: str,
@@ -150,7 +151,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
         """
         if acls is None:
             acls = ["subscriptions_view"]  # Default minimal permissions
-            
+
         return await vultr_client.create_user(
             email=email,
             first_name=first_name,
@@ -160,7 +161,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
             service_user=service_user,
             acls=acls
         )
-    
+
     @mcp.tool
     async def update(
         user_id: str,
@@ -196,7 +197,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
             api_enabled=api_enabled,
             acls=acls
         )
-    
+
     @mcp.tool
     async def delete(user_id: str) -> Dict[str, str]:
         """Delete a user.
@@ -210,7 +211,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
         actual_id = await get_user_id(user_id)
         await vultr_client.delete_user(actual_id)
         return {"status": "success", "message": f"User {user_id} deleted successfully"}
-    
+
     # IP Whitelist management tools
     @mcp.tool
     async def get_ip_whitelist(user_id: str) -> List[Dict[str, Any]]:
@@ -224,7 +225,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_user_id(user_id)
         return await vultr_client.get_user_ip_whitelist(actual_id)
-    
+
     @mcp.tool
     async def get_ip_whitelist_entry(
         user_id: str,
@@ -243,7 +244,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_user_id(user_id)
         return await vultr_client.get_user_ip_whitelist_entry(actual_id, subnet, subnet_size)
-    
+
     @mcp.tool
     async def add_ip_whitelist_entry(
         user_id: str,
@@ -263,10 +264,10 @@ def create_users_mcp(vultr_client) -> FastMCP:
         actual_id = await get_user_id(user_id)
         await vultr_client.add_user_ip_whitelist_entry(actual_id, subnet, subnet_size)
         return {
-            "status": "success", 
+            "status": "success",
             "message": f"IP {subnet}/{subnet_size} added to whitelist for user {user_id}"
         }
-    
+
     @mcp.tool
     async def remove_ip_whitelist_entry(
         user_id: str,
@@ -286,10 +287,10 @@ def create_users_mcp(vultr_client) -> FastMCP:
         actual_id = await get_user_id(user_id)
         await vultr_client.remove_user_ip_whitelist_entry(actual_id, subnet, subnet_size)
         return {
-            "status": "success", 
+            "status": "success",
             "message": f"IP {subnet}/{subnet_size} removed from whitelist for user {user_id}"
         }
-    
+
     # Helper and management tools
     @mcp.tool
     async def setup_standard_user(
@@ -321,26 +322,26 @@ def create_users_mcp(vultr_client) -> FastMCP:
             "readonly": ["subscriptions_view", "support"],
             "basic": ["subscriptions_view", "dns", "support"],
             "developer": [
-                "subscriptions_view", "subscriptions", "provisioning", 
+                "subscriptions_view", "subscriptions", "provisioning",
                 "dns", "support", "objstore", "loadbalancer", "firewall"
             ],
             "admin": [
-                "subscriptions_view", "subscriptions", "provisioning", "billing", 
-                "support", "abuse", "dns", "upgrade", "objstore", "loadbalancer", 
+                "subscriptions_view", "subscriptions", "provisioning", "billing",
+                "support", "abuse", "dns", "upgrade", "objstore", "loadbalancer",
                 "firewall", "alerts"
             ],
             "superadmin": [
                 "manage_users", "subscriptions_view", "subscriptions", "provisioning",
-                "billing", "support", "abuse", "dns", "upgrade", "objstore", 
+                "billing", "support", "abuse", "dns", "upgrade", "objstore",
                 "loadbalancer", "firewall", "alerts"
             ]
         }
-        
+
         if permissions_level not in permission_sets:
             raise ValueError(f"Invalid permissions_level. Must be one of: {list(permission_sets.keys())}")
-        
+
         acls = permission_sets[permissions_level]
-        
+
         return await vultr_client.create_user(
             email=email,
             first_name=first_name,
@@ -350,7 +351,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
             service_user=False,
             acls=acls
         )
-    
+
     @mcp.tool
     async def setup_service_user(
         email: str,
@@ -371,12 +372,12 @@ def create_users_mcp(vultr_client) -> FastMCP:
         """
         if permissions is None:
             permissions = ["subscriptions_view", "provisioning", "dns"]
-        
+
         # Generate a secure password for the service user (won't be used for login)
         import secrets
         import string
         password = ''.join(secrets.choice(string.ascii_letters + string.digits + "!@#$%^&*") for _ in range(16))
-        
+
         return await vultr_client.create_user(
             email=email,
             first_name=first_name,
@@ -386,7 +387,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
             service_user=True,
             acls=permissions
         )
-    
+
     @mcp.tool
     async def analyze_user_permissions(user_id: str) -> Dict[str, Any]:
         """Analyze a user's current permissions and provide recommendations.
@@ -403,15 +404,15 @@ def create_users_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_user_id(user_id)
         user = await vultr_client.get_user(actual_id)
-        
+
         current_permissions = user.get("acls", [])
-        
+
         # Analyze permissions
         permission_descriptions = {
             "manage_users": "Can create, modify, and delete other users - HIGH PRIVILEGE",
             "subscriptions_view": "Can view subscription information - SAFE",
             "subscriptions": "Can manage subscriptions and resources - MODERATE PRIVILEGE",
-            "provisioning": "Can create and destroy infrastructure - HIGH PRIVILEGE", 
+            "provisioning": "Can create and destroy infrastructure - HIGH PRIVILEGE",
             "billing": "Can access billing information - MODERATE PRIVILEGE",
             "support": "Can access support tickets - SAFE",
             "abuse": "Can handle abuse reports - MODERATE PRIVILEGE",
@@ -422,10 +423,10 @@ def create_users_mcp(vultr_client) -> FastMCP:
             "firewall": "Can manage firewall rules - HIGH PRIVILEGE",
             "alerts": "Can manage alerts and notifications - SAFE"
         }
-        
+
         permission_analysis = []
         high_privilege_count = 0
-        
+
         for perm in current_permissions:
             description = permission_descriptions.get(perm, "Unknown permission")
             if "HIGH PRIVILEGE" in description:
@@ -435,32 +436,32 @@ def create_users_mcp(vultr_client) -> FastMCP:
                 "description": description,
                 "risk_level": "HIGH" if "HIGH PRIVILEGE" in description else "MODERATE" if "MODERATE PRIVILEGE" in description else "LOW"
             })
-        
+
         # Generate recommendations
         recommendations = []
-        
+
         if "manage_users" in current_permissions:
             recommendations.append("User has user management privileges - ensure this is necessary")
-        
+
         if high_privilege_count > 3:
             recommendations.append("User has multiple high-privilege permissions - consider principle of least privilege")
-        
+
         if user.get("api_enabled") and not user.get("service_user"):
             whitelist = await vultr_client.get_user_ip_whitelist(actual_id)
             if not whitelist:
                 recommendations.append("API-enabled user has no IP whitelist - consider adding IP restrictions")
-        
+
         if "provisioning" in current_permissions and "billing" not in current_permissions:
             recommendations.append("User can provision resources but can't see billing - may cause cost control issues")
-        
+
         # Suggest permission changes
         suggested_changes = []
         if len(current_permissions) == 0:
             suggested_changes.append("Add 'subscriptions_view' for basic account visibility")
-        
+
         if "firewall" in current_permissions and "provisioning" not in current_permissions:
             suggested_changes.append("Consider adding 'provisioning' since user manages security but can't create resources")
-        
+
         return {
             "user_id": actual_id,
             "user_email": user.get("email"),
@@ -473,7 +474,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
             "high_privilege_permissions": [p["permission"] for p in permission_analysis if p["risk_level"] == "HIGH"],
             "permission_count": len(current_permissions)
         }
-    
+
     @mcp.tool
     async def list_available_permissions() -> Dict[str, Any]:
         """List all available permissions that can be granted to users.
@@ -489,7 +490,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
             },
             "subscriptions_view": {
                 "description": "View subscription information",
-                "risk_level": "LOW", 
+                "risk_level": "LOW",
                 "category": "Billing"
             },
             "subscriptions": {
@@ -548,7 +549,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
                 "category": "Monitoring"
             }
         }
-        
+
         return {
             "permissions": permissions,
             "categories": list(set(p["category"] for p in permissions.values())),
@@ -557,5 +558,5 @@ def create_users_mcp(vultr_client) -> FastMCP:
             "recommended_developer_set": ["subscriptions_view", "subscriptions", "provisioning", "dns", "support"],
             "recommended_admin_set": ["subscriptions_view", "subscriptions", "provisioning", "billing", "support", "dns", "upgrade", "objstore", "loadbalancer"]
         }
-    
+
     return mcp

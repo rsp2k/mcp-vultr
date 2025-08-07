@@ -4,7 +4,8 @@ Vultr ISO FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr ISO images.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List
+
 from fastmcp import FastMCP
 
 
@@ -19,7 +20,7 @@ def create_iso_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with ISO management tools
     """
     mcp = FastMCP(name="vultr-iso")
-    
+
     @mcp.tool()
     async def list_isos() -> List[Dict[str, Any]]:
         """
@@ -29,7 +30,7 @@ def create_iso_mcp(vultr_client) -> FastMCP:
             List of available ISO images
         """
         return await vultr_client.list_isos()
-    
+
     @mcp.tool()
     async def get_iso(iso_id: str) -> Dict[str, Any]:
         """
@@ -42,7 +43,7 @@ def create_iso_mcp(vultr_client) -> FastMCP:
             ISO image details
         """
         return await vultr_client.get_iso(iso_id)
-    
+
     @mcp.tool()
     async def create_iso(url: str) -> Dict[str, Any]:
         """
@@ -55,7 +56,7 @@ def create_iso_mcp(vultr_client) -> FastMCP:
             Created ISO details
         """
         return await vultr_client.create_iso(url)
-    
+
     @mcp.tool()
     async def delete_iso(iso_id: str) -> str:
         """
@@ -69,7 +70,7 @@ def create_iso_mcp(vultr_client) -> FastMCP:
         """
         await vultr_client.delete_iso(iso_id)
         return f"Successfully deleted ISO {iso_id}"
-    
+
     @mcp.tool()
     async def list_public_isos() -> List[Dict[str, Any]]:
         """
@@ -82,7 +83,7 @@ def create_iso_mcp(vultr_client) -> FastMCP:
         # Filter to show only public ISOs (those without a filename, indicating they're Vultr-provided)
         public_isos = [iso for iso in all_isos if not iso.get("filename")]
         return public_isos
-    
+
     @mcp.tool()
     async def list_custom_isos() -> List[Dict[str, Any]]:
         """
@@ -95,7 +96,7 @@ def create_iso_mcp(vultr_client) -> FastMCP:
         # Filter to show only custom ISOs (those with a filename, indicating they're user-uploaded)
         custom_isos = [iso for iso in all_isos if iso.get("filename")]
         return custom_isos
-    
+
     @mcp.tool()
     async def get_iso_by_name(name: str) -> Dict[str, Any]:
         """
@@ -108,12 +109,12 @@ def create_iso_mcp(vultr_client) -> FastMCP:
             ISO details if found
         """
         all_isos = await vultr_client.list_isos()
-        
+
         for iso in all_isos:
-            if (iso.get("name", "").lower() == name.lower() or 
+            if (iso.get("name", "").lower() == name.lower() or
                 iso.get("filename", "").lower() == name.lower()):
                 return iso
-        
+
         raise ValueError(f"ISO with name '{name}' not found")
-    
+
     return mcp

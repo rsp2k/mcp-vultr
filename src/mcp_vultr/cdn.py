@@ -4,7 +4,8 @@ Vultr CDN FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr CDN zones.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from fastmcp import FastMCP
 
 
@@ -19,28 +20,28 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with CDN management tools
     """
     mcp = FastMCP(name="vultr-cdn")
-    
+
     # Helper function to check if string is UUID format
     def is_uuid_format(value: str) -> bool:
         """Check if a string looks like a UUID."""
         import re
         uuid_pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         return bool(re.match(uuid_pattern, value, re.IGNORECASE))
-    
+
     # Helper function to get CDN zone ID from domain or ID
     async def get_cdn_zone_id(identifier: str) -> str:
         """Get the CDN zone ID from origin domain or existing ID."""
         if is_uuid_format(identifier):
             return identifier
-        
+
         zones = await vultr_client.list_cdn_zones()
         for zone in zones:
-            if (zone.get("origin_domain") == identifier or 
+            if (zone.get("origin_domain") == identifier or
                 zone.get("cdn_domain") == identifier):
                 return zone["id"]
-        
+
         raise ValueError(f"CDN zone '{identifier}' not found")
-    
+
     @mcp.tool()
     async def list_cdn_zones() -> List[Dict[str, Any]]:
         """
@@ -50,7 +51,7 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
             List of CDN zones with details
         """
         return await vultr_client.list_cdn_zones()
-    
+
     @mcp.tool()
     async def get_cdn_zone(zone_identifier: str) -> Dict[str, Any]:
         """
@@ -65,7 +66,7 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
         """
         zone_id = await get_cdn_zone_id(zone_identifier)
         return await vultr_client.get_cdn_zone(zone_id)
-    
+
     @mcp.tool()
     async def create_cdn_zone(
         origin_domain: str,
@@ -103,7 +104,7 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
             block_ip_addresses=block_ip_addresses,
             regions=regions
         )
-    
+
     @mcp.tool()
     async def update_cdn_zone(
         zone_identifier: str,
@@ -140,7 +141,7 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
             block_ip_addresses=block_ip_addresses,
             regions=regions
         )
-    
+
     @mcp.tool()
     async def delete_cdn_zone(zone_identifier: str) -> str:
         """
@@ -156,7 +157,7 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
         zone_id = await get_cdn_zone_id(zone_identifier)
         await vultr_client.delete_cdn_zone(zone_id)
         return f"Successfully deleted CDN zone {zone_identifier}"
-    
+
     @mcp.tool()
     async def purge_cdn_zone(zone_identifier: str) -> Dict[str, Any]:
         """
@@ -171,7 +172,7 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
         """
         zone_id = await get_cdn_zone_id(zone_identifier)
         return await vultr_client.purge_cdn_zone(zone_id)
-    
+
     @mcp.tool()
     async def get_cdn_zone_stats(zone_identifier: str) -> Dict[str, Any]:
         """
@@ -186,7 +187,7 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
         """
         zone_id = await get_cdn_zone_id(zone_identifier)
         return await vultr_client.get_cdn_zone_stats(zone_id)
-    
+
     @mcp.tool()
     async def get_cdn_zone_logs(
         zone_identifier: str,
@@ -211,7 +212,7 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_cdn_zone_logs(
             zone_id, start_date, end_date, per_page
         )
-    
+
     @mcp.tool()
     async def create_cdn_ssl_certificate(
         zone_identifier: str,
@@ -236,7 +237,7 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
         return await vultr_client.create_cdn_ssl_certificate(
             zone_id, certificate, private_key, certificate_chain
         )
-    
+
     @mcp.tool()
     async def get_cdn_ssl_certificate(zone_identifier: str) -> Dict[str, Any]:
         """
@@ -251,7 +252,7 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
         """
         zone_id = await get_cdn_zone_id(zone_identifier)
         return await vultr_client.get_cdn_ssl_certificate(zone_id)
-    
+
     @mcp.tool()
     async def delete_cdn_ssl_certificate(zone_identifier: str) -> str:
         """
@@ -267,7 +268,7 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
         zone_id = await get_cdn_zone_id(zone_identifier)
         await vultr_client.delete_cdn_ssl_certificate(zone_id)
         return f"Successfully removed SSL certificate from CDN zone {zone_identifier}"
-    
+
     @mcp.tool()
     async def get_cdn_available_regions() -> List[Dict[str, Any]]:
         """
@@ -277,7 +278,7 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
             List of available CDN regions with details
         """
         return await vultr_client.get_cdn_available_regions()
-    
+
     @mcp.tool()
     async def analyze_cdn_performance(zone_identifier: str, days: int = 7) -> Dict[str, Any]:
         """
@@ -292,20 +293,20 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
             Performance analysis including cache hit ratio, bandwidth usage, and recommendations
         """
         zone_id = await get_cdn_zone_id(zone_identifier)
-        
+
         # Get zone details and stats
         zone_info = await vultr_client.get_cdn_zone(zone_id)
         stats = await vultr_client.get_cdn_zone_stats(zone_id)
-        
+
         # Calculate performance metrics
         total_requests = stats.get("total_requests", 0)
         cache_hits = stats.get("cache_hits", 0)
         bandwidth_used = stats.get("bandwidth_bytes", 0)
-        
+
         cache_hit_ratio = (cache_hits / total_requests * 100) if total_requests > 0 else 0
         avg_daily_requests = total_requests / days if days > 0 else 0
         avg_daily_bandwidth = bandwidth_used / days if days > 0 else 0
-        
+
         # Generate recommendations
         recommendations = []
         if cache_hit_ratio < 80:
@@ -316,7 +317,7 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
             recommendations.append("Enable gzip compression to reduce bandwidth usage.")
         if not zone_info.get("block_bad_bots"):
             recommendations.append("Consider enabling bad bot blocking for better security.")
-        
+
         return {
             "zone_domain": zone_info.get("origin_domain"),
             "analysis_period_days": days,
@@ -337,7 +338,7 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
             "recommendations": recommendations,
             "status": "excellent" if cache_hit_ratio >= 90 else "good" if cache_hit_ratio >= 80 else "needs_optimization"
         }
-    
+
     @mcp.tool()
     async def setup_cdn_for_website(
         origin_domain: str,
@@ -366,7 +367,7 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
             block_bad_bots=enable_security,
             regions=regions
         )
-        
+
         setup_info = {
             "cdn_zone": cdn_zone,
             "cdn_domain": cdn_zone.get("cdn_domain"),
@@ -382,20 +383,20 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
                 "Monitor cache hit ratio and adjust cache settings as needed"
             ]
         }
-        
+
         if enable_security:
             setup_info["security_features"] = [
                 "AI/crawler bot blocking enabled",
                 "Bad bot blocking enabled"
             ]
-        
+
         if enable_compression:
             setup_info["performance_features"] = [
                 "Gzip compression enabled for faster load times"
             ]
-        
+
         return setup_info
-    
+
     @mcp.tool()
     async def get_cdn_zone_summary(zone_identifier: str) -> Dict[str, Any]:
         """
@@ -409,20 +410,20 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
             Comprehensive CDN zone summary including configuration, stats, and SSL info
         """
         zone_id = await get_cdn_zone_id(zone_identifier)
-        
+
         # Get all relevant information
         zone_info = await vultr_client.get_cdn_zone(zone_id)
-        
+
         try:
             stats = await vultr_client.get_cdn_zone_stats(zone_id)
         except Exception:
             stats = {"error": "Stats unavailable"}
-        
+
         try:
             ssl_info = await vultr_client.get_cdn_ssl_certificate(zone_id)
         except Exception:
             ssl_info = {"status": "No SSL certificate configured"}
-        
+
         return {
             "zone_info": zone_info,
             "statistics": stats,
@@ -437,5 +438,5 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
                 "ssl_configured": ssl_info.get("status") != "No SSL certificate configured"
             }
         }
-    
+
     return mcp

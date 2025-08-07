@@ -4,7 +4,8 @@ Vultr Kubernetes FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr Kubernetes Engine (VKE) clusters.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from fastmcp import FastMCP
 
 
@@ -19,14 +20,14 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with Kubernetes management tools
     """
     mcp = FastMCP(name="vultr-kubernetes")
-    
+
     # Helper function to check if string is UUID format
     def is_uuid_format(value: str) -> bool:
         """Check if a string looks like a UUID."""
         import re
         uuid_pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         return bool(re.match(uuid_pattern, value, re.IGNORECASE))
-    
+
     # Helper function to get cluster ID from label or existing ID
     async def get_cluster_id(identifier: str) -> str:
         """
@@ -43,14 +44,14 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         """
         if is_uuid_format(identifier):
             return identifier
-        
+
         clusters = await vultr_client.list_kubernetes_clusters()
         for cluster in clusters:
             if cluster.get("label") == identifier:
                 return cluster["id"]
-        
+
         raise ValueError(f"Kubernetes cluster '{identifier}' not found")
-    
+
     # Helper function to get node pool ID from label within a cluster
     async def get_nodepool_id(cluster_identifier: str, nodepool_identifier: str) -> tuple[str, str]:
         """
@@ -67,17 +68,17 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             ValueError: If the cluster or node pool is not found
         """
         cluster_id = await get_cluster_id(cluster_identifier)
-        
+
         if is_uuid_format(nodepool_identifier):
             return cluster_id, nodepool_identifier
-        
+
         nodepools = await vultr_client.list_kubernetes_node_pools(cluster_id)
         for nodepool in nodepools:
             if nodepool.get("label") == nodepool_identifier:
                 return cluster_id, nodepool["id"]
-        
+
         raise ValueError(f"Node pool '{nodepool_identifier}' not found in cluster '{cluster_identifier}'")
-    
+
     # Helper function to get node ID from label within a node pool
     async def get_node_id(cluster_identifier: str, nodepool_identifier: str, node_identifier: str) -> tuple[str, str, str]:
         """
@@ -95,23 +96,23 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             ValueError: If the cluster, node pool, or node is not found
         """
         cluster_id, nodepool_id = await get_nodepool_id(cluster_identifier, nodepool_identifier)
-        
+
         if is_uuid_format(node_identifier):
             return cluster_id, nodepool_id, node_identifier
-        
+
         nodes = await vultr_client.list_kubernetes_nodes(cluster_id, nodepool_id)
         for node in nodes:
             if node.get("label") == node_identifier:
                 return cluster_id, nodepool_id, node["id"]
-        
+
         raise ValueError(f"Node '{node_identifier}' not found in node pool '{nodepool_identifier}'")
-    
+
     # Kubernetes cluster resources
     @mcp.resource("kubernetes://clusters")
     async def list_clusters_resource() -> List[Dict[str, Any]]:
         """List all Kubernetes clusters in your Vultr account."""
         return await vultr_client.list_kubernetes_clusters()
-    
+
     @mcp.resource("kubernetes://cluster/{cluster_id}")
     async def get_cluster_resource(cluster_id: str) -> Dict[str, Any]:
         """Get information about a specific Kubernetes cluster.
@@ -121,7 +122,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_cluster_id(cluster_id)
         return await vultr_client.get_kubernetes_cluster(actual_id)
-    
+
     @mcp.resource("kubernetes://cluster/{cluster_id}/node-pools")
     async def list_node_pools_resource(cluster_id: str) -> List[Dict[str, Any]]:
         """List all node pools for a specific cluster.
@@ -131,7 +132,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_cluster_id(cluster_id)
         return await vultr_client.list_kubernetes_node_pools(actual_id)
-    
+
     # Kubernetes cluster tools
     @mcp.tool()
     async def list_kubernetes_clusters() -> List[Dict[str, Any]]:
@@ -152,7 +153,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             - ip: Cluster IP address
         """
         return await vultr_client.list_kubernetes_clusters()
-    
+
     @mcp.tool()
     async def get_kubernetes_cluster(cluster_identifier: str) -> Dict[str, Any]:
         """
@@ -167,7 +168,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         """
         cluster_id = await get_cluster_id(cluster_identifier)
         return await vultr_client.get_kubernetes_cluster(cluster_id)
-    
+
     @mcp.tool()
     async def create_kubernetes_cluster(
         label: str,
@@ -206,7 +207,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             enable_firewall=enable_firewall,
             ha_controlplanes=ha_controlplanes
         )
-    
+
     @mcp.tool()
     async def update_kubernetes_cluster(
         cluster_identifier: str,
@@ -226,7 +227,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         cluster_id = await get_cluster_id(cluster_identifier)
         await vultr_client.update_kubernetes_cluster(cluster_id, label=label)
         return {"status": "success", "message": f"Cluster {cluster_identifier} updated successfully"}
-    
+
     @mcp.tool()
     async def delete_kubernetes_cluster(cluster_identifier: str) -> Dict[str, str]:
         """
@@ -242,7 +243,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         cluster_id = await get_cluster_id(cluster_identifier)
         await vultr_client.delete_kubernetes_cluster(cluster_id)
         return {"status": "success", "message": f"Cluster {cluster_identifier} deleted successfully"}
-    
+
     @mcp.tool()
     async def delete_kubernetes_cluster_with_resources(cluster_identifier: str) -> Dict[str, str]:
         """
@@ -258,7 +259,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         cluster_id = await get_cluster_id(cluster_identifier)
         await vultr_client.delete_kubernetes_cluster_with_resources(cluster_id)
         return {"status": "success", "message": f"Cluster {cluster_identifier} and all related resources deleted successfully"}
-    
+
     @mcp.tool()
     async def get_kubernetes_cluster_config(cluster_identifier: str) -> Dict[str, Any]:
         """
@@ -273,7 +274,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         """
         cluster_id = await get_cluster_id(cluster_identifier)
         return await vultr_client.get_kubernetes_cluster_config(cluster_id)
-    
+
     @mcp.tool()
     async def get_kubernetes_cluster_resources(cluster_identifier: str) -> Dict[str, Any]:
         """
@@ -288,7 +289,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         """
         cluster_id = await get_cluster_id(cluster_identifier)
         return await vultr_client.get_kubernetes_cluster_resources(cluster_id)
-    
+
     @mcp.tool()
     async def get_kubernetes_available_upgrades(cluster_identifier: str) -> List[str]:
         """
@@ -303,7 +304,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         """
         cluster_id = await get_cluster_id(cluster_identifier)
         return await vultr_client.get_kubernetes_available_upgrades(cluster_id)
-    
+
     @mcp.tool()
     async def upgrade_kubernetes_cluster(
         cluster_identifier: str,
@@ -323,7 +324,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         cluster_id = await get_cluster_id(cluster_identifier)
         await vultr_client.upgrade_kubernetes_cluster(cluster_id, upgrade_version)
         return {"status": "success", "message": f"Cluster {cluster_identifier} upgrade to {upgrade_version} initiated"}
-    
+
     # Node pool management tools
     @mcp.tool()
     async def list_kubernetes_node_pools(cluster_identifier: str) -> List[Dict[str, Any]]:
@@ -339,7 +340,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         """
         cluster_id = await get_cluster_id(cluster_identifier)
         return await vultr_client.list_kubernetes_node_pools(cluster_id)
-    
+
     @mcp.tool()
     async def get_kubernetes_node_pool(
         cluster_identifier: str,
@@ -358,7 +359,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         """
         cluster_id, nodepool_id = await get_nodepool_id(cluster_identifier, nodepool_identifier)
         return await vultr_client.get_kubernetes_node_pool(cluster_id, nodepool_id)
-    
+
     @mcp.tool()
     async def create_kubernetes_node_pool(
         cluster_identifier: str,
@@ -401,7 +402,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             max_nodes=max_nodes,
             labels=labels
         )
-    
+
     @mcp.tool()
     async def update_kubernetes_node_pool(
         cluster_identifier: str,
@@ -442,7 +443,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             labels=labels
         )
         return {"status": "success", "message": f"Node pool {nodepool_identifier} updated successfully"}
-    
+
     @mcp.tool()
     async def delete_kubernetes_node_pool(
         cluster_identifier: str,
@@ -462,7 +463,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         cluster_id, nodepool_id = await get_nodepool_id(cluster_identifier, nodepool_identifier)
         await vultr_client.delete_kubernetes_node_pool(cluster_id, nodepool_id)
         return {"status": "success", "message": f"Node pool {nodepool_identifier} deleted successfully"}
-    
+
     # Node management tools
     @mcp.tool()
     async def list_kubernetes_nodes(
@@ -482,7 +483,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         """
         cluster_id, nodepool_id = await get_nodepool_id(cluster_identifier, nodepool_identifier)
         return await vultr_client.list_kubernetes_nodes(cluster_id, nodepool_id)
-    
+
     @mcp.tool()
     async def get_kubernetes_node(
         cluster_identifier: str,
@@ -503,7 +504,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         """
         cluster_id, nodepool_id, node_id = await get_node_id(cluster_identifier, nodepool_identifier, node_identifier)
         return await vultr_client.get_kubernetes_node(cluster_id, nodepool_id, node_id)
-    
+
     @mcp.tool()
     async def delete_kubernetes_node(
         cluster_identifier: str,
@@ -525,7 +526,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         cluster_id, nodepool_id, node_id = await get_node_id(cluster_identifier, nodepool_identifier, node_identifier)
         await vultr_client.delete_kubernetes_node(cluster_id, nodepool_id, node_id)
         return {"status": "success", "message": f"Node {node_identifier} deleted successfully"}
-    
+
     @mcp.tool()
     async def recycle_kubernetes_node(
         cluster_identifier: str,
@@ -547,7 +548,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         cluster_id, nodepool_id, node_id = await get_node_id(cluster_identifier, nodepool_identifier, node_identifier)
         await vultr_client.recycle_kubernetes_node(cluster_id, nodepool_id, node_id)
         return {"status": "success", "message": f"Node {node_identifier} recycling initiated"}
-    
+
     # Utility and information tools
     @mcp.tool()
     async def get_kubernetes_versions() -> List[str]:
@@ -558,7 +559,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             List of available Kubernetes versions for new clusters
         """
         return await vultr_client.get_kubernetes_versions()
-    
+
     @mcp.tool()
     async def get_kubernetes_cluster_status(cluster_identifier: str) -> Dict[str, Any]:
         """
@@ -572,20 +573,20 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             Comprehensive cluster status including health, resources, and node status
         """
         cluster_id = await get_cluster_id(cluster_identifier)
-        
+
         # Get cluster details
         cluster_info = await vultr_client.get_kubernetes_cluster(cluster_id)
-        
+
         # Get resource usage
         try:
             resources = await vultr_client.get_kubernetes_cluster_resources(cluster_id)
         except Exception:
             resources = {"error": "Resources unavailable"}
-        
+
         # Get node pools and their status
         try:
             node_pools = await vultr_client.list_kubernetes_node_pools(cluster_id)
-            
+
             # Get node details for each pool
             node_pool_details = []
             for pool in node_pools:
@@ -604,14 +605,14 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
                         "nodes": [],
                         "error": "Could not fetch nodes"
                     })
-                    
+
         except Exception:
             node_pool_details = [{"error": "Could not fetch node pools"}]
-        
+
         # Calculate overall health
         total_nodes = sum(detail.get("node_count", 0) for detail in node_pool_details)
         healthy_nodes = sum(detail.get("healthy_nodes", 0) for detail in node_pool_details)
-        
+
         cluster_health = "healthy"
         if total_nodes == 0:
             cluster_health = "no_nodes"
@@ -619,7 +620,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             cluster_health = "degraded"
         elif cluster_info.get("status") != "active":
             cluster_health = "unhealthy"
-        
+
         return {
             "cluster_info": cluster_info,
             "health_status": cluster_health,
@@ -637,7 +638,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
                 "node_pool_count": len(node_pools) if isinstance(node_pools, list) else 0
             }
         }
-    
+
     @mcp.tool()
     async def scale_kubernetes_node_pool(
         cluster_identifier: str,
@@ -658,13 +659,13 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         """
         if target_node_count < 1:
             raise ValueError("Target node count must be at least 1")
-            
+
         cluster_id, nodepool_id = await get_nodepool_id(cluster_identifier, nodepool_identifier)
-        
+
         # Get current node pool info
         current_pool = await vultr_client.get_kubernetes_node_pool(cluster_id, nodepool_id)
         current_count = current_pool.get("node_quantity", 0)
-        
+
         if current_count == target_node_count:
             return {
                 "status": "no_change",
@@ -672,16 +673,16 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
                 "current_nodes": current_count,
                 "target_nodes": target_node_count
             }
-        
+
         # Update the node pool with new count
         await vultr_client.update_kubernetes_node_pool(
             cluster_id,
             nodepool_id,
             node_quantity=target_node_count
         )
-        
+
         scaling_direction = "up" if target_node_count > current_count else "down"
-        
+
         return {
             "status": "scaling_initiated",
             "message": f"Scaling node pool {nodepool_identifier} {scaling_direction} from {current_count} to {target_node_count} nodes",
@@ -689,7 +690,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             "target_nodes": target_node_count,
             "scaling_direction": scaling_direction
         }
-    
+
     @mcp.tool()
     async def analyze_kubernetes_cluster_costs(cluster_identifier: str) -> Dict[str, Any]:
         """
@@ -703,26 +704,26 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             Cost analysis including per-node costs and total estimated monthly cost
         """
         cluster_id = await get_cluster_id(cluster_identifier)
-        
+
         # Get cluster and node pool information
         cluster_info = await vultr_client.get_kubernetes_cluster(cluster_id)
         node_pools = await vultr_client.list_kubernetes_node_pools(cluster_id)
-        
+
         # Calculate costs (Note: This would need actual pricing data from Vultr API)
         # For now, we'll provide structure and placeholder calculations
-        
+
         cost_breakdown = []
         total_monthly_cost = 0
         total_nodes = 0
-        
+
         for pool in node_pools:
             node_count = pool.get("node_quantity", 0)
             plan = pool.get("plan", "unknown")
-            
+
             # Placeholder cost calculation - would need real pricing API
             estimated_cost_per_node = 10.00  # Placeholder $10/month per node
             pool_monthly_cost = node_count * estimated_cost_per_node
-            
+
             cost_breakdown.append({
                 "node_pool_label": pool.get("label"),
                 "plan": plan,
@@ -730,15 +731,15 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
                 "estimated_cost_per_node": estimated_cost_per_node,
                 "estimated_monthly_cost": pool_monthly_cost
             })
-            
+
             total_monthly_cost += pool_monthly_cost
             total_nodes += node_count
-        
+
         # Add control plane costs (if HA is enabled)
         ha_enabled = cluster_info.get("ha_controlplanes", False)
         control_plane_cost = 20.00 if ha_enabled else 0.00  # Placeholder
         total_monthly_cost += control_plane_cost
-        
+
         return {
             "cluster_label": cluster_info.get("label"),
             "total_nodes": total_nodes,
@@ -756,7 +757,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             ],
             "note": "Cost estimates are approximate. Check Vultr pricing for accurate costs."
         }
-    
+
     @mcp.tool()
     async def setup_kubernetes_cluster_for_workload(
         label: str,
@@ -781,7 +782,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         # Get available Kubernetes versions and use the latest stable
         versions = await vultr_client.get_kubernetes_versions()
         latest_version = versions[0] if versions else "v1.28.0"  # Fallback
-        
+
         # Configure based on workload type and environment
         workload_configs = {
             "web": {
@@ -825,9 +826,9 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
                 }]
             }
         }
-        
+
         config = workload_configs.get(workload_type, workload_configs["web"])
-        
+
         # Create the cluster
         cluster = await vultr_client.create_kubernetes_cluster(
             label=label,
@@ -837,7 +838,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             enable_firewall=environment == "production",
             ha_controlplanes=environment == "production"
         )
-        
+
         # Generate setup recommendations
         recommendations = {
             "next_steps": [
@@ -878,7 +879,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
                 "Use namespaces for isolation"
             ]
         }
-        
+
         return {
             "cluster": cluster,
             "configuration": {
@@ -890,5 +891,5 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             },
             "recommendations": recommendations
         }
-    
+
     return mcp

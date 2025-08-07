@@ -5,7 +5,8 @@ This module contains FastMCP tools and resources for managing Vultr Object Stora
 (S3-compatible) instances, including storage management, access keys, and cluster information.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List
+
 from fastmcp import FastMCP
 
 
@@ -20,14 +21,14 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with Object Storage management tools
     """
     mcp = FastMCP(name="vultr-object-storage")
-    
+
     # Helper function to check if a string looks like a UUID
     def is_uuid_format(s: str) -> bool:
         """Check if a string looks like a UUID."""
         import re
         uuid_pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         return bool(re.match(uuid_pattern, s, re.IGNORECASE))
-    
+
     # Helper function to get Object Storage ID from label or UUID
     async def get_object_storage_id(identifier: str) -> str:
         """
@@ -45,21 +46,21 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
         # If it looks like a UUID, return it as-is
         if is_uuid_format(identifier):
             return identifier
-            
+
         # Otherwise, search for it by label
         storages = await vultr_client.list_object_storage()
         for storage in storages:
             if storage.get("label") == identifier:
                 return storage["id"]
-        
+
         raise ValueError(f"Object Storage '{identifier}' not found (searched by label)")
-    
+
     # Object Storage resources
     @mcp.resource("object-storage://list")
     async def list_object_storage_resource() -> List[Dict[str, Any]]:
         """List all Object Storage instances in your Vultr account."""
         return await vultr_client.list_object_storage()
-    
+
     @mcp.resource("object-storage://{object_storage_id}")
     async def get_object_storage_resource(object_storage_id: str) -> Dict[str, Any]:
         """Get information about a specific Object Storage instance.
@@ -69,12 +70,12 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_object_storage_id(object_storage_id)
         return await vultr_client.get_object_storage(actual_id)
-    
+
     @mcp.resource("object-storage://clusters")
     async def list_clusters_resource() -> List[Dict[str, Any]]:
         """List all Object Storage clusters."""
         return await vultr_client.list_object_storage_clusters()
-    
+
     @mcp.resource("object-storage://clusters/{cluster_id}/tiers")
     async def list_cluster_tiers_resource(cluster_id: str) -> List[Dict[str, Any]]:
         """List available tiers for a specific Object Storage cluster.
@@ -83,7 +84,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
             cluster_id: The cluster ID
         """
         return await vultr_client.list_object_storage_cluster_tiers(int(cluster_id))
-    
+
     # Object Storage management tools
     @mcp.tool()
     async def list() -> List[Dict[str, Any]]:
@@ -102,7 +103,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
             - date_created: Creation date
         """
         return await vultr_client.list_object_storage()
-    
+
     @mcp.tool()
     async def get(object_storage_id: str) -> Dict[str, Any]:
         """Get detailed information about a specific Object Storage instance.
@@ -115,7 +116,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_object_storage_id(object_storage_id)
         return await vultr_client.get_object_storage(actual_id)
-    
+
     @mcp.tool()
     async def create(
         cluster_id: int,
@@ -134,7 +135,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
             cluster_id=cluster_id,
             label=label
         )
-    
+
     @mcp.tool()
     async def update(
         object_storage_id: str,
@@ -152,7 +153,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
         actual_id = await get_object_storage_id(object_storage_id)
         await vultr_client.update_object_storage(actual_id, label)
         return {"status": "success", "message": f"Object Storage {object_storage_id} updated successfully"}
-    
+
     @mcp.tool()
     async def delete(object_storage_id: str) -> Dict[str, str]:
         """Delete an Object Storage instance.
@@ -166,7 +167,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
         actual_id = await get_object_storage_id(object_storage_id)
         await vultr_client.delete_object_storage(actual_id)
         return {"status": "success", "message": f"Object Storage {object_storage_id} deleted successfully"}
-    
+
     @mcp.tool()
     async def regenerate_keys(object_storage_id: str) -> Dict[str, Any]:
         """Regenerate the S3 access keys for an Object Storage instance.
@@ -179,7 +180,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_object_storage_id(object_storage_id)
         return await vultr_client.regenerate_object_storage_keys(actual_id)
-    
+
     # Cluster and tier information tools
     @mcp.tool()
     async def list_clusters() -> List[Dict[str, Any]]:
@@ -193,7 +194,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
             - deploy: Deployment status
         """
         return await vultr_client.list_object_storage_clusters()
-    
+
     @mcp.tool()
     async def list_cluster_tiers(cluster_id: int) -> List[Dict[str, Any]]:
         """List all available tiers for a specific Object Storage cluster.
@@ -205,7 +206,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
             List of available tiers for the cluster with pricing and limits
         """
         return await vultr_client.list_object_storage_cluster_tiers(cluster_id)
-    
+
     # Helper tools for Object Storage management
     @mcp.tool()
     async def get_s3_config(object_storage_id: str) -> Dict[str, Any]:
@@ -224,7 +225,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_object_storage_id(object_storage_id)
         storage = await vultr_client.get_object_storage(actual_id)
-        
+
         return {
             "endpoint": f"https://{storage.get('s3_hostname', '')}",
             "access_key": storage.get("s3_access_key", ""),
@@ -241,7 +242,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
                 }
             }
         }
-    
+
     @mcp.tool()
     async def find_by_region(region: str) -> List[Dict[str, Any]]:
         """Find all Object Storage instances in a specific region.
@@ -254,7 +255,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
         """
         all_storages = await vultr_client.list_object_storage()
         return [storage for storage in all_storages if storage.get("region") == region]
-    
+
     @mcp.tool()
     async def get_storage_summary() -> Dict[str, Any]:
         """Get a summary of all Object Storage instances.
@@ -267,25 +268,25 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
             - cluster_usage: Count by cluster
         """
         storages = await vultr_client.list_object_storage()
-        
+
         summary = {
             "total_instances": len(storages),
             "regions": {},
             "status_breakdown": {},
             "cluster_usage": {}
         }
-        
+
         for storage in storages:
             region = storage.get("region", "unknown")
             status = storage.get("status", "unknown")
             cluster_id = storage.get("cluster_id", "unknown")
-            
+
             summary["regions"][region] = summary["regions"].get(region, 0) + 1
             summary["status_breakdown"][status] = summary["status_breakdown"].get(status, 0) + 1
             summary["cluster_usage"][str(cluster_id)] = summary["cluster_usage"].get(str(cluster_id), 0) + 1
-        
+
         return summary
-    
+
     @mcp.tool()
     async def validate_s3_access(object_storage_id: str) -> Dict[str, Any]:
         """Validate that an Object Storage instance has valid S3 credentials.
@@ -302,12 +303,12 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_object_storage_id(object_storage_id)
         storage = await vultr_client.get_object_storage(actual_id)
-        
+
         has_hostname = bool(storage.get("s3_hostname"))
         has_access_key = bool(storage.get("s3_access_key"))
         has_secret_key = bool(storage.get("s3_secret_key"))
         is_active = storage.get("status") == "active"
-        
+
         suggestions = []
         if not is_active:
             suggestions.append("Object Storage is not in 'active' status - wait for provisioning to complete")
@@ -315,7 +316,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
             suggestions.append("Missing access keys - try regenerating keys")
         if not has_hostname:
             suggestions.append("Missing S3 hostname - check Object Storage configuration")
-        
+
         return {
             "valid": has_hostname and has_access_key and has_secret_key and is_active,
             "endpoint": f"https://{storage.get('s3_hostname', '')}" if has_hostname else None,
@@ -329,5 +330,5 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
                 "is_active": is_active
             }
         }
-    
+
     return mcp

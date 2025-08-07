@@ -1,0 +1,76 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run security scans daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Security Scan
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+    
+    - name: Install dependencies
+      run: uv sync --extra dev
+    
+    - name: Run Bandit security scan
+      run: |
+        uv run bandit -r src/ -f json -o bandit-results.json || true
+        uv run bandit -r src/ -f txt
+      continue-on-error: true
+    
+    - name: Upload Bandit results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: bandit-results
+        path: bandit-results.json
+        retention-days: 30
+    
+    - name: Run Safety scan
+      run: |
+        uv run safety check --json --output safety-results.json || true
+        uv run safety check
+      continue-on-error: true
+    
+    - name: Upload Safety results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: safety-results
+        path: safety-results.json
+        retention-days: 30
+    
+    - name: Run Ruff security checks
+      run: |
+        uv run ruff check src/ --select S --format github
+      continue-on-error: true
+
+  dependency-review:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+    - name: 'Checkout Repository'
+      uses: actions/checkout@v4
+    
+    - name: 'Dependency Review'
+      uses: actions/dependency-review-action@v4
+      with:
+        fail-on-severity: moderate
