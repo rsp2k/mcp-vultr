@@ -73,7 +73,8 @@ class VultrDNSServer:
         self, 
         method: str, 
         endpoint: str, 
-        data: Optional[Dict] = None
+        data: Optional[Dict] = None,
+        params: Optional[Dict] = None
     ) -> Dict[str, Any]:
         """Make an HTTP request to the Vultr API."""
         url = f"{self.API_BASE}{endpoint}"
@@ -86,7 +87,8 @@ class VultrDNSServer:
                 method=method,
                 url=url,
                 headers=self.headers,
-                json=data
+                json=data,
+                params=params
             )
             
             if response.status_code not in [200, 201, 204]:
@@ -1157,6 +1159,3418 @@ class VultrDNSServer:
             
         result = await self._make_request("POST", "/reserved-ips/convert", data=data)
         return result.get("reserved_ip", {})
+
+    # Container Registry API Methods
+    async def list_container_registries(self) -> List[Dict[str, Any]]:
+        """
+        List all container registry subscriptions.
+        
+        Returns:
+            List of container registry information
+        """
+        result = await self._make_request("GET", "/registry")
+        return result.get("registries", [])
+    
+    async def get_container_registry(self, registry_id: str) -> Dict[str, Any]:
+        """
+        Get container registry details.
+        
+        Args:
+            registry_id: The container registry ID
+            
+        Returns:
+            Container registry information
+        """
+        result = await self._make_request("GET", f"/registry/{registry_id}")
+        return result.get("registry", {})
+    
+    async def create_container_registry(
+        self,
+        name: str,
+        plan: str,
+        region: str
+    ) -> Dict[str, Any]:
+        """
+        Create a new container registry subscription.
+        
+        Args:
+            name: Name for the container registry
+            plan: Registry plan (e.g., "start_up", "business", "premium")
+            region: Region for the registry
+            
+        Returns:
+            Created container registry information
+        """
+        data = {
+            "name": name,
+            "plan": plan,
+            "region": region
+        }
+        result = await self._make_request("POST", "/registry", data=data)
+        return result.get("registry", {})
+    
+    async def update_container_registry(self, registry_id: str, plan: str) -> None:
+        """
+        Update container registry plan.
+        
+        Args:
+            registry_id: The container registry ID
+            plan: New registry plan
+        """
+        data = {"plan": plan}
+        await self._make_request("PUT", f"/registry/{registry_id}", data=data)
+    
+    async def delete_container_registry(self, registry_id: str) -> None:
+        """
+        Delete a container registry subscription.
+        
+        Args:
+            registry_id: The container registry ID to delete
+        """
+        await self._make_request("DELETE", f"/registry/{registry_id}")
+    
+    async def list_registry_plans(self) -> List[Dict[str, Any]]:
+        """
+        List all available container registry plans.
+        
+        Returns:
+            List of available plans
+        """
+        result = await self._make_request("GET", "/registry/plan/list")
+        return result.get("plans", [])
+    
+    async def generate_docker_credentials(
+        self,
+        registry_id: str,
+        expiry_seconds: Optional[int] = None,
+        read_write: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Generate Docker credentials for container registry.
+        
+        Args:
+            registry_id: The container registry ID
+            expiry_seconds: Expiration time in seconds (optional)
+            read_write: Whether to grant read-write access (default: True)
+            
+        Returns:
+            Docker credentials information
+        """
+        params = {"read_write": str(read_write).lower()}
+        if expiry_seconds is not None:
+            params["expiry_seconds"] = str(expiry_seconds)
+        
+        result = await self._make_request(
+            "OPTIONS", 
+            f"/registry/{registry_id}/docker-credentials",
+            params=params
+        )
+        return result
+    
+    async def generate_kubernetes_credentials(
+        self,
+        registry_id: str,
+        expiry_seconds: Optional[int] = None,
+        read_write: bool = True,
+        base64_encode: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Generate Kubernetes credentials for container registry.
+        
+        Args:
+            registry_id: The container registry ID
+            expiry_seconds: Expiration time in seconds (optional)
+            read_write: Whether to grant read-write access (default: True)
+            base64_encode: Whether to base64 encode the credentials (default: True)
+            
+        Returns:
+            Kubernetes credentials YAML
+        """
+        params = {
+            "read_write": str(read_write).lower(),
+            "base64_encode": str(base64_encode).lower()
+        }
+        if expiry_seconds is not None:
+            params["expiry_seconds"] = str(expiry_seconds)
+        
+        result = await self._make_request(
+            "OPTIONS", 
+            f"/registry/{registry_id}/docker-credentials/kubernetes",
+            params=params
+        )
+        return result
+
+    # Block Storage API Methods
+    async def list_block_storage(self) -> List[Dict[str, Any]]:
+        """
+        List all block storage volumes in your account.
+        
+        Returns:
+            List of block storage volume information
+        """
+        result = await self._make_request("GET", "/blocks")
+        return result.get("blocks", [])
+    
+    async def get_block_storage(self, block_id: str) -> Dict[str, Any]:
+        """
+        Get block storage volume details.
+        
+        Args:
+            block_id: The block storage volume ID
+            
+        Returns:
+            Block storage volume information
+        """
+        result = await self._make_request("GET", f"/blocks/{block_id}")
+        return result.get("block", {})
+    
+    async def create_block_storage(
+        self,
+        region: str,
+        size_gb: int,
+        label: Optional[str] = None,
+        block_type: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new block storage volume.
+        
+        Args:
+            region: Region ID where the volume will be created
+            size_gb: Size in GB (10-40000 depending on block_type)
+            label: Optional label for the volume
+            block_type: Optional block storage type
+            
+        Returns:
+            Created block storage volume information
+        """
+        data = {
+            "region": region,
+            "size_gb": size_gb
+        }
+        if label is not None:
+            data["label"] = label
+        if block_type is not None:
+            data["block_type"] = block_type
+            
+        result = await self._make_request("POST", "/blocks", data=data)
+        return result.get("block", {})
+    
+    async def update_block_storage(
+        self, 
+        block_id: str, 
+        size_gb: Optional[int] = None, 
+        label: Optional[str] = None
+    ) -> None:
+        """
+        Update block storage volume configuration.
+        
+        Args:
+            block_id: The block storage volume ID
+            size_gb: New size in GB (can only increase)
+            label: New label for the volume
+        """
+        data = {}
+        if size_gb is not None:
+            data["size_gb"] = size_gb
+        if label is not None:
+            data["label"] = label
+        
+        if data:  # Only make request if there are changes
+            await self._make_request("PATCH", f"/blocks/{block_id}", data=data)
+    
+    async def delete_block_storage(self, block_id: str) -> None:
+        """
+        Delete a block storage volume.
+        
+        Args:
+            block_id: The block storage volume ID to delete
+        """
+        await self._make_request("DELETE", f"/blocks/{block_id}")
+    
+    async def attach_block_storage(self, block_id: str, instance_id: str, live: bool = True) -> None:
+        """
+        Attach block storage volume to an instance.
+        
+        Args:
+            block_id: The block storage volume ID
+            instance_id: The instance ID to attach to
+            live: Whether to attach without rebooting the instance (default: True)
+        """
+        data = {
+            "instance_id": instance_id,
+            "live": live
+        }
+        await self._make_request("POST", f"/blocks/{block_id}/attach", data=data)
+    
+    async def detach_block_storage(self, block_id: str, live: bool = True) -> None:
+        """
+        Detach block storage volume from its instance.
+        
+        Args:
+            block_id: The block storage volume ID
+            live: Whether to detach without rebooting the instance (default: True)
+        """
+        data = {"live": live}
+        await self._make_request("POST", f"/blocks/{block_id}/detach", data=data)
+
+    # VPC API Methods
+    async def list_vpcs(self) -> List[Dict[str, Any]]:
+        """
+        List all VPCs in your account.
+        
+        Returns:
+            List of VPC information
+        """
+        result = await self._make_request("GET", "/vpcs")
+        return result.get("vpcs", [])
+    
+    async def get_vpc(self, vpc_id: str) -> Dict[str, Any]:
+        """
+        Get VPC details.
+        
+        Args:
+            vpc_id: The VPC ID
+            
+        Returns:
+            VPC information
+        """
+        result = await self._make_request("GET", f"/vpcs/{vpc_id}")
+        return result.get("vpc", {})
+    
+    async def create_vpc(
+        self,
+        region: str,
+        description: str,
+        v4_subnet: Optional[str] = None,
+        v4_subnet_mask: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new VPC.
+        
+        Args:
+            region: Region ID where the VPC will be created
+            description: Description/label for the VPC
+            v4_subnet: IPv4 subnet for the VPC (e.g., "10.0.0.0")
+            v4_subnet_mask: IPv4 subnet mask (e.g., 24)
+            
+        Returns:
+            Created VPC information
+        """
+        data = {
+            "region": region,
+            "description": description
+        }
+        if v4_subnet is not None:
+            data["v4_subnet"] = v4_subnet
+        if v4_subnet_mask is not None:
+            data["v4_subnet_mask"] = v4_subnet_mask
+            
+        result = await self._make_request("POST", "/vpcs", data=data)
+        return result.get("vpc", {})
+    
+    async def update_vpc(self, vpc_id: str, description: str) -> None:
+        """
+        Update VPC description.
+        
+        Args:
+            vpc_id: The VPC ID
+            description: New description for the VPC
+        """
+        data = {"description": description}
+        await self._make_request("PUT", f"/vpcs/{vpc_id}", data=data)
+    
+    async def delete_vpc(self, vpc_id: str) -> None:
+        """
+        Delete a VPC.
+        
+        Args:
+            vpc_id: The VPC ID to delete
+        """
+        await self._make_request("DELETE", f"/vpcs/{vpc_id}")
+    
+    # VPC 2.0 API Methods
+    async def list_vpc2s(self) -> List[Dict[str, Any]]:
+        """
+        List all VPC 2.0 networks in your account.
+        
+        Returns:
+            List of VPC 2.0 information
+        """
+        result = await self._make_request("GET", "/vpc2")
+        return result.get("vpc2s", [])
+    
+    async def get_vpc2(self, vpc2_id: str) -> Dict[str, Any]:
+        """
+        Get VPC 2.0 details.
+        
+        Args:
+            vpc2_id: The VPC 2.0 ID
+            
+        Returns:
+            VPC 2.0 information
+        """
+        result = await self._make_request("GET", f"/vpc2/{vpc2_id}")
+        return result.get("vpc2", {})
+    
+    async def create_vpc2(
+        self,
+        region: str,
+        description: str,
+        ip_type: str = "v4",
+        ip_block: Optional[str] = None,
+        prefix_length: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new VPC 2.0 network.
+        
+        Args:
+            region: Region ID where the VPC 2.0 will be created
+            description: Description/label for the VPC 2.0
+            ip_type: IP type ("v4" or "v6")
+            ip_block: IP block for the VPC 2.0 (e.g., "10.0.0.0")
+            prefix_length: Prefix length (e.g., 24 for /24)
+            
+        Returns:
+            Created VPC 2.0 information
+        """
+        data = {
+            "region": region,
+            "description": description,
+            "ip_type": ip_type
+        }
+        if ip_block is not None:
+            data["ip_block"] = ip_block
+        if prefix_length is not None:
+            data["prefix_length"] = prefix_length
+            
+        result = await self._make_request("POST", "/vpc2", data=data)
+        return result.get("vpc2", {})
+    
+    async def update_vpc2(self, vpc2_id: str, description: str) -> None:
+        """
+        Update VPC 2.0 description.
+        
+        Args:
+            vpc2_id: The VPC 2.0 ID
+            description: New description for the VPC 2.0
+        """
+        data = {"description": description}
+        await self._make_request("PUT", f"/vpc2/{vpc2_id}", data=data)
+    
+    async def delete_vpc2(self, vpc2_id: str) -> None:
+        """
+        Delete a VPC 2.0 network.
+        
+        Args:
+            vpc2_id: The VPC 2.0 ID to delete
+        """
+        await self._make_request("DELETE", f"/vpc2/{vpc2_id}")
+    
+    # VPC Instance Attachment Methods
+    async def attach_vpc_to_instance(self, instance_id: str, vpc_id: str) -> None:
+        """
+        Attach a VPC to an instance.
+        
+        Args:
+            instance_id: The instance ID
+            vpc_id: The VPC ID to attach
+        """
+        data = {"vpc_id": vpc_id}
+        await self._make_request("POST", f"/instances/{instance_id}/vpcs/attach", data=data)
+    
+    async def detach_vpc_from_instance(self, instance_id: str, vpc_id: str) -> None:
+        """
+        Detach a VPC from an instance.
+        
+        Args:
+            instance_id: The instance ID
+            vpc_id: The VPC ID to detach
+        """
+        data = {"vpc_id": vpc_id}
+        await self._make_request("POST", f"/instances/{instance_id}/vpcs/detach", data=data)
+    
+    async def attach_vpc2_to_instance(self, instance_id: str, vpc2_id: str, ip_address: Optional[str] = None) -> None:
+        """
+        Attach a VPC 2.0 to an instance.
+        
+        Args:
+            instance_id: The instance ID
+            vpc2_id: The VPC 2.0 ID to attach
+            ip_address: Optional specific IP address to assign
+        """
+        data = {"vpc2_id": vpc2_id}
+        if ip_address is not None:
+            data["ip_address"] = ip_address
+        await self._make_request("POST", f"/instances/{instance_id}/vpc2/attach", data=data)
+    
+    async def detach_vpc2_from_instance(self, instance_id: str, vpc2_id: str) -> None:
+        """
+        Detach a VPC 2.0 from an instance.
+        
+        Args:
+            instance_id: The instance ID
+            vpc2_id: The VPC 2.0 ID to detach
+        """
+        data = {"vpc2_id": vpc2_id}
+        await self._make_request("POST", f"/instances/{instance_id}/vpc2/detach", data=data)
+    
+    async def list_instance_vpcs(self, instance_id: str) -> List[Dict[str, Any]]:
+        """
+        List VPCs attached to an instance.
+        
+        Args:
+            instance_id: The instance ID
+            
+        Returns:
+            List of VPCs attached to the instance
+        """
+        result = await self._make_request("GET", f"/instances/{instance_id}/vpcs")
+        return result.get("vpcs", [])
+    
+    async def list_instance_vpc2s(self, instance_id: str) -> List[Dict[str, Any]]:
+        """
+        List VPC 2.0 networks attached to an instance.
+        
+        Args:
+            instance_id: The instance ID
+            
+        Returns:
+            List of VPC 2.0 networks attached to the instance
+        """
+        result = await self._make_request("GET", f"/instances/{instance_id}/vpc2")
+        return result.get("vpc2s", [])
+
+    # =============================================================================
+    # ISO Management Methods
+    # =============================================================================
+    
+    async def list_isos(self) -> List[Dict[str, Any]]:
+        """
+        List all available ISO images.
+        
+        Returns:
+            List of ISO images
+        """
+        result = await self._make_request("GET", "/iso")
+        return result.get("isos", [])
+    
+    async def get_iso(self, iso_id: str) -> Dict[str, Any]:
+        """
+        Get details of a specific ISO image.
+        
+        Args:
+            iso_id: The ISO ID
+            
+        Returns:
+            ISO image details
+        """
+        result = await self._make_request("GET", f"/iso/{iso_id}")
+        return result.get("iso", {})
+    
+    async def create_iso(self, url: str) -> Dict[str, Any]:
+        """
+        Create a new ISO image from URL.
+        
+        Args:
+            url: The URL to create the ISO from
+            
+        Returns:
+            Created ISO details
+        """
+        data = {"url": url}
+        result = await self._make_request("POST", "/iso", data=data)
+        return result.get("iso", {})
+    
+    async def delete_iso(self, iso_id: str) -> None:
+        """
+        Delete an ISO image.
+        
+        Args:
+            iso_id: The ISO ID to delete
+        """
+        await self._make_request("DELETE", f"/iso/{iso_id}")
+
+    # =============================================================================
+    # Operating System Methods
+    # =============================================================================
+    
+    async def list_operating_systems(self) -> List[Dict[str, Any]]:
+        """
+        List all available operating systems.
+        
+        Returns:
+            List of operating systems
+        """
+        result = await self._make_request("GET", "/os")
+        return result.get("os", [])
+    
+    async def get_operating_system(self, os_id: str) -> Dict[str, Any]:
+        """
+        Get details of a specific operating system.
+        
+        Args:
+            os_id: The operating system ID
+            
+        Returns:
+            Operating system details
+        """
+        # The OS endpoint doesn't have individual get, so filter from list
+        operating_systems = await self.list_operating_systems()
+        for os_item in operating_systems:
+            if str(os_item.get("id")) == str(os_id):
+                return os_item
+        raise VultrResourceNotFoundError(404, f"Operating system {os_id} not found")
+
+    # =============================================================================
+    # Plans Methods
+    # =============================================================================
+    
+    async def list_plans(self, plan_type: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        List all available plans.
+        
+        Args:
+            plan_type: Optional plan type filter (e.g., 'all', 'vc2', 'vhf', 'voc')
+            
+        Returns:
+            List of plans
+        """
+        params = {}
+        if plan_type:
+            params["type"] = plan_type
+        
+        result = await self._make_request("GET", "/plans", params=params)
+        return result.get("plans", [])
+    
+    async def get_plan(self, plan_id: str) -> Dict[str, Any]:
+        """
+        Get details of a specific plan.
+        
+        Args:
+            plan_id: The plan ID
+            
+        Returns:
+            Plan details
+        """
+        # The plans endpoint doesn't have individual get, so filter from list
+        plans = await self.list_plans()
+        for plan in plans:
+            if plan.get("id") == plan_id:
+                return plan
+        raise VultrResourceNotFoundError(404, f"Plan {plan_id} not found")
+
+    # =============================================================================
+    # Applications Methods
+    # =============================================================================
+    
+    async def list_applications(self, app_type: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        List all available applications (marketplace and one-click).
+        
+        Args:
+            app_type: Optional filter by type ('marketplace', 'one-click', or None for all)
+            
+        Returns:
+            List of applications
+        """
+        params = {}
+        if app_type:
+            params["type"] = app_type
+        
+        result = await self._make_request("GET", "/applications", params=params)
+        return result.get("applications", [])
+    
+    async def get_marketplace_app_variables(self, image_id: str) -> Dict[str, Any]:
+        """
+        Get configuration variables for a marketplace application.
+        
+        Args:
+            image_id: The marketplace application image ID
+            
+        Returns:
+            Application variables information
+        """
+        result = await self._make_request("GET", f"/marketplace/apps/{image_id}/variables")
+        return result
+
+    # =============================================================================
+    # Startup Scripts Methods
+    # =============================================================================
+    
+    async def list_startup_scripts(self) -> List[Dict[str, Any]]:
+        """
+        List all startup scripts.
+        
+        Returns:
+            List of startup scripts
+        """
+        result = await self._make_request("GET", "/startup-scripts")
+        return result.get("startup_scripts", [])
+    
+    async def get_startup_script(self, script_id: str) -> Dict[str, Any]:
+        """
+        Get details of a specific startup script.
+        
+        Args:
+            script_id: The startup script ID
+            
+        Returns:
+            Startup script details
+        """
+        result = await self._make_request("GET", f"/startup-scripts/{script_id}")
+        return result.get("startup_script", {})
+    
+    async def create_startup_script(
+        self,
+        name: str,
+        script: str,
+        script_type: str = "boot"
+    ) -> Dict[str, Any]:
+        """
+        Create a new startup script.
+        
+        Args:
+            name: Name for the startup script
+            script: The script content
+            script_type: Type of script ('boot' or 'pxe')
+            
+        Returns:
+            Created startup script details
+        """
+        data = {
+            "name": name,
+            "script": script,
+            "type": script_type
+        }
+        result = await self._make_request("POST", "/startup-scripts", data=data)
+        return result.get("startup_script", {})
+    
+    async def update_startup_script(
+        self,
+        script_id: str,
+        name: Optional[str] = None,
+        script: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Update a startup script.
+        
+        Args:
+            script_id: The startup script ID
+            name: New name for the script
+            script: New script content
+            
+        Returns:
+            Updated startup script details
+        """
+        data = {}
+        if name is not None:
+            data["name"] = name
+        if script is not None:
+            data["script"] = script
+        
+        result = await self._make_request("PATCH", f"/startup-scripts/{script_id}", data=data)
+        return result.get("startup_script", {})
+    
+    async def delete_startup_script(self, script_id: str) -> None:
+        """
+        Delete a startup script.
+        
+        Args:
+            script_id: The startup script ID to delete
+        """
+        await self._make_request("DELETE", f"/startup-scripts/{script_id}")
+
+    # =============================================================================
+    # Billing Methods
+    # =============================================================================
+    
+    async def get_account_info(self) -> Dict[str, Any]:
+        """
+        Get account information including billing details.
+        
+        Returns:
+            Account information and billing details
+        """
+        result = await self._make_request("GET", "/account")
+        return result.get("account", {})
+    
+    async def list_billing_history(
+        self,
+        date_range: Optional[int] = None,
+        cursor: Optional[str] = None,
+        per_page: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        List billing history.
+        
+        Args:
+            date_range: Number of days to include (default: 30)
+            cursor: Cursor for pagination
+            per_page: Number of items per page
+            
+        Returns:
+            Billing history with pagination info
+        """
+        params = {}
+        if date_range is not None:
+            params["date_range"] = date_range
+        if cursor is not None:
+            params["cursor"] = cursor
+        if per_page is not None:
+            params["per_page"] = per_page
+        
+        return await self._make_request("GET", "/billing/history", params=params)
+    
+    async def list_invoices(
+        self,
+        cursor: Optional[str] = None,
+        per_page: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        List invoices.
+        
+        Args:
+            cursor: Cursor for pagination
+            per_page: Number of items per page
+            
+        Returns:
+            List of invoices with pagination info
+        """
+        params = {}
+        if cursor is not None:
+            params["cursor"] = cursor
+        if per_page is not None:
+            params["per_page"] = per_page
+        
+        return await self._make_request("GET", "/billing/invoices", params=params)
+    
+    async def get_invoice(self, invoice_id: str) -> Dict[str, Any]:
+        """
+        Get a specific invoice.
+        
+        Args:
+            invoice_id: The invoice ID
+            
+        Returns:
+            Invoice details
+        """
+        result = await self._make_request("GET", f"/billing/invoices/{invoice_id}")
+        return result.get("invoice", {})
+    
+    async def list_invoice_items(
+        self,
+        invoice_id: str,
+        cursor: Optional[str] = None,
+        per_page: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        List items in a specific invoice.
+        
+        Args:
+            invoice_id: The invoice ID
+            cursor: Cursor for pagination
+            per_page: Number of items per page
+            
+        Returns:
+            Invoice items with pagination info
+        """
+        params = {}
+        if cursor is not None:
+            params["cursor"] = cursor
+        if per_page is not None:
+            params["per_page"] = per_page
+        
+        return await self._make_request("GET", f"/billing/invoices/{invoice_id}/items", params=params)
+    
+    async def get_current_balance(self) -> Dict[str, Any]:
+        """
+        Get current account balance.
+        
+        Returns:
+            Current account balance information
+        """
+        account = await self.get_account_info()
+        return {
+            "balance": account.get("balance", 0),
+            "pending_charges": account.get("pending_charges", 0),
+            "last_payment_date": account.get("last_payment_date"),
+            "last_payment_amount": account.get("last_payment_amount")
+        }
+    
+    async def get_monthly_usage_summary(self, year: int, month: int) -> Dict[str, Any]:
+        """
+        Get monthly usage summary for billing analysis.
+        
+        Args:
+            year: Year (e.g., 2024)
+            month: Month (1-12)
+            
+        Returns:
+            Monthly usage and cost summary
+        """
+        # Get billing history for the specified month
+        # Calculate date range from start of month to end of month
+        from datetime import datetime, timedelta
+        import calendar
+        
+        start_date = datetime(year, month, 1)
+        end_date = datetime(year, month, calendar.monthrange(year, month)[1])
+        current_date = datetime.now()
+        
+        # Calculate days from start of month to now (or end of month if past)
+        if end_date > current_date:
+            days = (current_date - start_date).days + 1
+        else:
+            days = (end_date - start_date).days + 1
+        
+        billing_data = await self.list_billing_history(date_range=days)
+        
+        # Process billing history to create summary
+        billing_history = billing_data.get("billing_history", [])
+        
+        total_cost = 0
+        service_costs = {}
+        transaction_count = 0
+        
+        for item in billing_history:
+            if item.get("date"):
+                item_date = datetime.fromisoformat(item["date"].replace("Z", "+00:00"))
+                if item_date.year == year and item_date.month == month:
+                    amount = float(item.get("amount", 0))
+                    total_cost += amount
+                    transaction_count += 1
+                    
+                    description = item.get("description", "Unknown")
+                    service_type = description.split()[0] if description else "Unknown"
+                    
+                    if service_type not in service_costs:
+                        service_costs[service_type] = 0
+                    service_costs[service_type] += amount
+        
+        return {
+            "year": year,
+            "month": month,
+            "total_cost": round(total_cost, 2),
+            "transaction_count": transaction_count,
+            "service_breakdown": service_costs,
+            "average_daily_cost": round(total_cost / max(days, 1), 2) if days > 0 else 0
+        }
+
+    # =============================================================================
+    # Bare Metal Server Methods
+    # =============================================================================
+    
+    async def list_bare_metal_servers(self) -> List[Dict[str, Any]]:
+        """
+        List all bare metal servers.
+        
+        Returns:
+            List of bare metal servers
+        """
+        result = await self._make_request("GET", "/bare-metals")
+        return result.get("bare_metals", [])
+    
+    async def get_bare_metal_server(self, baremetal_id: str) -> Dict[str, Any]:
+        """
+        Get details of a specific bare metal server.
+        
+        Args:
+            baremetal_id: The bare metal server ID
+            
+        Returns:
+            Bare metal server details
+        """
+        result = await self._make_request("GET", f"/bare-metals/{baremetal_id}")
+        return result.get("bare_metal", {})
+    
+    async def create_bare_metal_server(
+        self,
+        region: str,
+        plan: str,
+        os_id: Optional[str] = None,
+        iso_id: Optional[str] = None,
+        script_id: Optional[str] = None,
+        ssh_key_ids: Optional[List[str]] = None,
+        label: Optional[str] = None,
+        tag: Optional[str] = None,
+        user_data: Optional[str] = None,
+        enable_ipv6: Optional[bool] = None,
+        enable_private_network: Optional[bool] = None,
+        attach_private_network: Optional[List[str]] = None,
+        attach_vpc: Optional[List[str]] = None,
+        attach_vpc2: Optional[List[str]] = None,
+        enable_ddos_protection: Optional[bool] = None,
+        hostname: Optional[str] = None,
+        persistent_pxe: Optional[bool] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new bare metal server.
+        
+        Args:
+            region: Region to deploy in
+            plan: Bare metal plan ID
+            os_id: Operating system ID
+            iso_id: ISO ID for custom installation
+            script_id: Startup script ID
+            ssh_key_ids: List of SSH key IDs
+            label: Server label
+            tag: Server tag
+            user_data: Cloud-init user data
+            enable_ipv6: Enable IPv6
+            enable_private_network: Enable private network
+            attach_private_network: Private network IDs to attach
+            attach_vpc: VPC IDs to attach
+            attach_vpc2: VPC 2.0 IDs to attach
+            enable_ddos_protection: Enable DDoS protection
+            hostname: Server hostname
+            persistent_pxe: Enable persistent PXE
+            
+        Returns:
+            Created bare metal server details
+        """
+        data = {
+            "region": region,
+            "plan": plan
+        }
+        
+        if os_id is not None:
+            data["os_id"] = os_id
+        if iso_id is not None:
+            data["iso_id"] = iso_id
+        if script_id is not None:
+            data["script_id"] = script_id
+        if ssh_key_ids is not None:
+            data["sshkey_id"] = ssh_key_ids
+        if label is not None:
+            data["label"] = label
+        if tag is not None:
+            data["tag"] = tag
+        if user_data is not None:
+            data["user_data"] = user_data
+        if enable_ipv6 is not None:
+            data["enable_ipv6"] = enable_ipv6
+        if enable_private_network is not None:
+            data["enable_private_network"] = enable_private_network
+        if attach_private_network is not None:
+            data["attach_private_network"] = attach_private_network
+        if attach_vpc is not None:
+            data["attach_vpc"] = attach_vpc
+        if attach_vpc2 is not None:
+            data["attach_vpc2"] = attach_vpc2
+        if enable_ddos_protection is not None:
+            data["enable_ddos_protection"] = enable_ddos_protection
+        if hostname is not None:
+            data["hostname"] = hostname
+        if persistent_pxe is not None:
+            data["persistent_pxe"] = persistent_pxe
+        
+        result = await self._make_request("POST", "/bare-metals", data=data)
+        return result.get("bare_metal", {})
+    
+    async def update_bare_metal_server(
+        self,
+        baremetal_id: str,
+        label: Optional[str] = None,
+        tag: Optional[str] = None,
+        user_data: Optional[str] = None,
+        enable_ddos_protection: Optional[bool] = None
+    ) -> Dict[str, Any]:
+        """
+        Update a bare metal server.
+        
+        Args:
+            baremetal_id: The bare metal server ID
+            label: New label
+            tag: New tag
+            user_data: New user data
+            enable_ddos_protection: Enable/disable DDoS protection
+            
+        Returns:
+            Updated bare metal server details
+        """
+        data = {}
+        if label is not None:
+            data["label"] = label
+        if tag is not None:
+            data["tag"] = tag
+        if user_data is not None:
+            data["user_data"] = user_data
+        if enable_ddos_protection is not None:
+            data["enable_ddos_protection"] = enable_ddos_protection
+        
+        result = await self._make_request("PATCH", f"/bare-metals/{baremetal_id}", data=data)
+        return result.get("bare_metal", {})
+    
+    async def delete_bare_metal_server(self, baremetal_id: str) -> None:
+        """
+        Delete a bare metal server.
+        
+        Args:
+            baremetal_id: The bare metal server ID to delete
+        """
+        await self._make_request("DELETE", f"/bare-metals/{baremetal_id}")
+    
+    async def start_bare_metal_server(self, baremetal_id: str) -> None:
+        """
+        Start a bare metal server.
+        
+        Args:
+            baremetal_id: The bare metal server ID
+        """
+        await self._make_request("POST", f"/bare-metals/{baremetal_id}/start")
+    
+    async def stop_bare_metal_server(self, baremetal_id: str) -> None:
+        """
+        Stop a bare metal server.
+        
+        Args:
+            baremetal_id: The bare metal server ID
+        """
+        await self._make_request("POST", f"/bare-metals/{baremetal_id}/halt")
+    
+    async def reboot_bare_metal_server(self, baremetal_id: str) -> None:
+        """
+        Reboot a bare metal server.
+        
+        Args:
+            baremetal_id: The bare metal server ID
+        """
+        await self._make_request("POST", f"/bare-metals/{baremetal_id}/reboot")
+    
+    async def reinstall_bare_metal_server(
+        self,
+        baremetal_id: str,
+        hostname: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Reinstall a bare metal server.
+        
+        Args:
+            baremetal_id: The bare metal server ID
+            hostname: New hostname for the server
+            
+        Returns:
+            Reinstall operation details
+        """
+        data = {}
+        if hostname is not None:
+            data["hostname"] = hostname
+        
+        result = await self._make_request("POST", f"/bare-metals/{baremetal_id}/reinstall", data=data)
+        return result.get("bare_metal", {})
+    
+    async def get_bare_metal_bandwidth(self, baremetal_id: str) -> Dict[str, Any]:
+        """
+        Get bandwidth usage for a bare metal server.
+        
+        Args:
+            baremetal_id: The bare metal server ID
+            
+        Returns:
+            Bandwidth usage information
+        """
+        result = await self._make_request("GET", f"/bare-metals/{baremetal_id}/bandwidth")
+        return result.get("bandwidth", {})
+    
+    async def get_bare_metal_neighbors(self, baremetal_id: str) -> List[Dict[str, Any]]:
+        """
+        Get neighbors (other servers on same physical host) for a bare metal server.
+        
+        Args:
+            baremetal_id: The bare metal server ID
+            
+        Returns:
+            List of neighboring servers
+        """
+        result = await self._make_request("GET", f"/bare-metals/{baremetal_id}/neighbors")
+        return result.get("neighbors", [])
+    
+    async def get_bare_metal_user_data(self, baremetal_id: str) -> Dict[str, Any]:
+        """
+        Get user data for a bare metal server.
+        
+        Args:
+            baremetal_id: The bare metal server ID
+            
+        Returns:
+            User data information
+        """
+        result = await self._make_request("GET", f"/bare-metals/{baremetal_id}/user-data")
+        return result.get("user_data", {})
+    
+    async def list_bare_metal_plans(self, plan_type: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        List available bare metal plans.
+        
+        Args:
+            plan_type: Optional plan type filter
+            
+        Returns:
+            List of bare metal plans
+        """
+        params = {}
+        if plan_type:
+            params["type"] = plan_type
+        
+        result = await self._make_request("GET", "/plans-metal", params=params)
+        return result.get("plans_metal", [])
+    
+    async def get_bare_metal_plan(self, plan_id: str) -> Dict[str, Any]:
+        """
+        Get details of a specific bare metal plan.
+        
+        Args:
+            plan_id: The plan ID
+            
+        Returns:
+            Bare metal plan details
+        """
+        plans = await self.list_bare_metal_plans()
+        for plan in plans:
+            if plan.get("id") == plan_id:
+                return plan
+        raise VultrResourceNotFoundError(404, f"Bare metal plan {plan_id} not found")
+
+    # =============================================================================
+    # CDN Methods
+    # =============================================================================
+    
+    async def list_cdn_zones(self) -> List[Dict[str, Any]]:
+        """
+        List all CDN zones.
+        
+        Returns:
+            List of CDN zones
+        """
+        result = await self._make_request("GET", "/cdns")
+        return result.get("cdns", [])
+    
+    async def get_cdn_zone(self, cdn_id: str) -> Dict[str, Any]:
+        """
+        Get details of a specific CDN zone.
+        
+        Args:
+            cdn_id: The CDN zone ID
+            
+        Returns:
+            CDN zone details
+        """
+        result = await self._make_request("GET", f"/cdns/{cdn_id}")
+        return result.get("cdn", {})
+    
+    async def create_cdn_zone(
+        self,
+        origin_domain: str,
+        origin_scheme: str = "https",
+        cors_policy: Optional[str] = None,
+        gzip_compression: Optional[bool] = None,
+        block_ai_bots: Optional[bool] = None,
+        block_bad_bots: Optional[bool] = None,
+        block_ip_addresses: Optional[List[str]] = None,
+        regions: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new CDN zone.
+        
+        Args:
+            origin_domain: Origin domain for the CDN
+            origin_scheme: Origin scheme (http or https)
+            cors_policy: CORS policy configuration
+            gzip_compression: Enable gzip compression
+            block_ai_bots: Block AI/crawler bots
+            block_bad_bots: Block known bad bots
+            block_ip_addresses: List of IP addresses to block
+            regions: List of regions to enable CDN in
+            
+        Returns:
+            Created CDN zone details
+        """
+        data = {
+            "origin_domain": origin_domain,
+            "origin_scheme": origin_scheme
+        }
+        
+        if cors_policy is not None:
+            data["cors_policy"] = cors_policy
+        if gzip_compression is not None:
+            data["gzip_compression"] = gzip_compression
+        if block_ai_bots is not None:
+            data["block_ai_bots"] = block_ai_bots
+        if block_bad_bots is not None:
+            data["block_bad_bots"] = block_bad_bots
+        if block_ip_addresses is not None:
+            data["block_ip_addresses"] = block_ip_addresses
+        if regions is not None:
+            data["regions"] = regions
+        
+        result = await self._make_request("POST", "/cdns", data=data)
+        return result.get("cdn", {})
+    
+    async def update_cdn_zone(
+        self,
+        cdn_id: str,
+        cors_policy: Optional[str] = None,
+        gzip_compression: Optional[bool] = None,
+        block_ai_bots: Optional[bool] = None,
+        block_bad_bots: Optional[bool] = None,
+        block_ip_addresses: Optional[List[str]] = None,
+        regions: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Update a CDN zone configuration.
+        
+        Args:
+            cdn_id: The CDN zone ID
+            cors_policy: CORS policy configuration
+            gzip_compression: Enable gzip compression
+            block_ai_bots: Block AI/crawler bots
+            block_bad_bots: Block known bad bots
+            block_ip_addresses: List of IP addresses to block
+            regions: List of regions to enable CDN in
+            
+        Returns:
+            Updated CDN zone details
+        """
+        data = {}
+        
+        if cors_policy is not None:
+            data["cors_policy"] = cors_policy
+        if gzip_compression is not None:
+            data["gzip_compression"] = gzip_compression
+        if block_ai_bots is not None:
+            data["block_ai_bots"] = block_ai_bots
+        if block_bad_bots is not None:
+            data["block_bad_bots"] = block_bad_bots
+        if block_ip_addresses is not None:
+            data["block_ip_addresses"] = block_ip_addresses
+        if regions is not None:
+            data["regions"] = regions
+        
+        result = await self._make_request("PATCH", f"/cdns/{cdn_id}", data=data)
+        return result.get("cdn", {})
+    
+    async def delete_cdn_zone(self, cdn_id: str) -> None:
+        """
+        Delete a CDN zone.
+        
+        Args:
+            cdn_id: The CDN zone ID to delete
+        """
+        await self._make_request("DELETE", f"/cdns/{cdn_id}")
+    
+    async def purge_cdn_zone(self, cdn_id: str) -> Dict[str, Any]:
+        """
+        Purge all cached content from a CDN zone.
+        
+        Args:
+            cdn_id: The CDN zone ID
+            
+        Returns:
+            Purge operation details
+        """
+        result = await self._make_request("POST", f"/cdns/{cdn_id}/purge")
+        return result.get("purge", {})
+    
+    async def get_cdn_zone_stats(self, cdn_id: str) -> Dict[str, Any]:
+        """
+        Get statistics for a CDN zone.
+        
+        Args:
+            cdn_id: The CDN zone ID
+            
+        Returns:
+            CDN zone statistics
+        """
+        result = await self._make_request("GET", f"/cdns/{cdn_id}/stats")
+        return result.get("stats", {})
+    
+    async def get_cdn_zone_logs(
+        self,
+        cdn_id: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        per_page: Optional[int] = None,
+        cursor: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get access logs for a CDN zone.
+        
+        Args:
+            cdn_id: The CDN zone ID
+            start_date: Start date for logs (ISO format)
+            end_date: End date for logs (ISO format)
+            per_page: Number of items per page
+            cursor: Cursor for pagination
+            
+        Returns:
+            CDN zone access logs
+        """
+        params = {}
+        if start_date is not None:
+            params["start_date"] = start_date
+        if end_date is not None:
+            params["end_date"] = end_date
+        if per_page is not None:
+            params["per_page"] = per_page
+        if cursor is not None:
+            params["cursor"] = cursor
+        
+        result = await self._make_request("GET", f"/cdns/{cdn_id}/logs", params=params)
+        return result.get("logs", {})
+    
+    async def create_cdn_ssl_certificate(
+        self,
+        cdn_id: str,
+        certificate: str,
+        private_key: str,
+        certificate_chain: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Upload SSL certificate for a CDN zone.
+        
+        Args:
+            cdn_id: The CDN zone ID
+            certificate: SSL certificate content
+            private_key: Private key content
+            certificate_chain: Certificate chain (optional)
+            
+        Returns:
+            SSL certificate details
+        """
+        data = {
+            "certificate": certificate,
+            "private_key": private_key
+        }
+        
+        if certificate_chain is not None:
+            data["certificate_chain"] = certificate_chain
+        
+        result = await self._make_request("POST", f"/cdns/{cdn_id}/ssl", data=data)
+        return result.get("ssl", {})
+    
+    async def get_cdn_ssl_certificate(self, cdn_id: str) -> Dict[str, Any]:
+        """
+        Get SSL certificate information for a CDN zone.
+        
+        Args:
+            cdn_id: The CDN zone ID
+            
+        Returns:
+            SSL certificate information
+        """
+        result = await self._make_request("GET", f"/cdns/{cdn_id}/ssl")
+        return result.get("ssl", {})
+    
+    async def delete_cdn_ssl_certificate(self, cdn_id: str) -> None:
+        """
+        Remove SSL certificate from a CDN zone.
+        
+        Args:
+            cdn_id: The CDN zone ID
+        """
+        await self._make_request("DELETE", f"/cdns/{cdn_id}/ssl")
+    
+    async def get_cdn_available_regions(self) -> List[Dict[str, Any]]:
+        """
+        Get list of available CDN regions.
+        
+        Returns:
+            List of available CDN regions
+        """
+        result = await self._make_request("GET", "/cdns/regions")
+        return result.get("regions", [])
+
+    # Kubernetes Engine (VKE) API Methods
+    async def list_kubernetes_clusters(self) -> List[Dict[str, Any]]:
+        """
+        List all Kubernetes clusters.
+        
+        Returns:
+            List of Kubernetes cluster information
+        """
+        result = await self._make_request("GET", "/kubernetes/clusters")
+        return result.get("vke_clusters", [])
+    
+    async def get_kubernetes_cluster(self, cluster_id: str) -> Dict[str, Any]:
+        """
+        Get Kubernetes cluster details.
+        
+        Args:
+            cluster_id: The cluster ID
+            
+        Returns:
+            Kubernetes cluster information
+        """
+        result = await self._make_request("GET", f"/kubernetes/clusters/{cluster_id}")
+        return result.get("vke_cluster", {})
+    
+    async def create_kubernetes_cluster(
+        self,
+        label: str,
+        region: str,
+        version: str,
+        node_pools: List[Dict[str, Any]],
+        enable_firewall: bool = False,
+        ha_controlplanes: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Create a new Kubernetes cluster.
+        
+        Args:
+            label: Label for the cluster
+            region: Region code
+            version: Kubernetes version
+            node_pools: List of node pool configurations
+            enable_firewall: Enable firewall for cluster
+            ha_controlplanes: Enable high availability control planes
+            
+        Returns:
+            Created cluster information
+        """
+        data = {
+            "label": label,
+            "region": region,
+            "version": version,
+            "node_pools": node_pools
+        }
+        if enable_firewall:
+            data["enable_firewall"] = enable_firewall
+        if ha_controlplanes:
+            data["ha_controlplanes"] = ha_controlplanes
+        
+        result = await self._make_request("POST", "/kubernetes/clusters", data)
+        return result.get("vke_cluster", {})
+    
+    async def update_kubernetes_cluster(
+        self,
+        cluster_id: str,
+        label: Optional[str] = None
+    ) -> None:
+        """
+        Update a Kubernetes cluster.
+        
+        Args:
+            cluster_id: The cluster ID
+            label: New label for the cluster
+        """
+        data = {}
+        if label is not None:
+            data["label"] = label
+        
+        if data:
+            await self._make_request("PATCH", f"/kubernetes/clusters/{cluster_id}", data)
+    
+    async def delete_kubernetes_cluster(self, cluster_id: str) -> None:
+        """
+        Delete a Kubernetes cluster.
+        
+        Args:
+            cluster_id: The cluster ID
+        """
+        await self._make_request("DELETE", f"/kubernetes/clusters/{cluster_id}")
+    
+    async def delete_kubernetes_cluster_with_resources(self, cluster_id: str) -> None:
+        """
+        Delete a Kubernetes cluster and all related resources.
+        
+        Args:
+            cluster_id: The cluster ID
+        """
+        await self._make_request("DELETE", f"/kubernetes/clusters/{cluster_id}/delete-with-linked-resources")
+    
+    async def get_kubernetes_cluster_config(self, cluster_id: str) -> Dict[str, Any]:
+        """
+        Get the kubeconfig for a Kubernetes cluster.
+        
+        Args:
+            cluster_id: The cluster ID
+            
+        Returns:
+            Kubeconfig content
+        """
+        result = await self._make_request("GET", f"/kubernetes/clusters/{cluster_id}/config")
+        return result
+    
+    async def get_kubernetes_cluster_resources(self, cluster_id: str) -> Dict[str, Any]:
+        """
+        Get resource usage information for a Kubernetes cluster.
+        
+        Args:
+            cluster_id: The cluster ID
+            
+        Returns:
+            Cluster resource usage
+        """
+        result = await self._make_request("GET", f"/kubernetes/clusters/{cluster_id}/resources")
+        return result.get("resources", {})
+    
+    async def get_kubernetes_available_upgrades(self, cluster_id: str) -> List[str]:
+        """
+        Get available Kubernetes version upgrades for a cluster.
+        
+        Args:
+            cluster_id: The cluster ID
+            
+        Returns:
+            List of available versions for upgrade
+        """
+        result = await self._make_request("GET", f"/kubernetes/clusters/{cluster_id}/available-upgrades")
+        return result.get("available_upgrades", [])
+    
+    async def upgrade_kubernetes_cluster(self, cluster_id: str, upgrade_version: str) -> None:
+        """
+        Start a Kubernetes cluster upgrade.
+        
+        Args:
+            cluster_id: The cluster ID
+            upgrade_version: Target Kubernetes version
+        """
+        data = {"upgrade_version": upgrade_version}
+        await self._make_request("POST", f"/kubernetes/clusters/{cluster_id}/upgrades", data)
+    
+    async def get_kubernetes_versions(self) -> List[str]:
+        """
+        Get list of available Kubernetes versions.
+        
+        Returns:
+            List of available Kubernetes versions
+        """
+        result = await self._make_request("GET", "/kubernetes/versions")
+        return result.get("versions", [])
+    
+    # Kubernetes Node Pool API Methods
+    async def list_kubernetes_node_pools(self, cluster_id: str) -> List[Dict[str, Any]]:
+        """
+        List all node pools for a Kubernetes cluster.
+        
+        Args:
+            cluster_id: The cluster ID
+            
+        Returns:
+            List of node pools
+        """
+        result = await self._make_request("GET", f"/kubernetes/clusters/{cluster_id}/node-pools")
+        return result.get("node_pools", [])
+    
+    async def get_kubernetes_node_pool(self, cluster_id: str, nodepool_id: str) -> Dict[str, Any]:
+        """
+        Get node pool details.
+        
+        Args:
+            cluster_id: The cluster ID
+            nodepool_id: The node pool ID
+            
+        Returns:
+            Node pool information
+        """
+        result = await self._make_request("GET", f"/kubernetes/clusters/{cluster_id}/node-pools/{nodepool_id}")
+        return result.get("node_pool", {})
+    
+    async def create_kubernetes_node_pool(
+        self,
+        cluster_id: str,
+        node_quantity: int,
+        plan: str,
+        label: str,
+        tag: Optional[str] = None,
+        auto_scaler: Optional[bool] = None,
+        min_nodes: Optional[int] = None,
+        max_nodes: Optional[int] = None,
+        labels: Optional[Dict[str, str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new node pool in a Kubernetes cluster.
+        
+        Args:
+            cluster_id: The cluster ID
+            node_quantity: Number of nodes
+            plan: Plan ID
+            label: Node pool label
+            tag: Optional tag
+            auto_scaler: Enable auto-scaling
+            min_nodes: Minimum nodes for auto-scaling
+            max_nodes: Maximum nodes for auto-scaling
+            labels: Node labels map
+            
+        Returns:
+            Created node pool information
+        """
+        data = {
+            "node_quantity": node_quantity,
+            "plan": plan,
+            "label": label
+        }
+        if tag is not None:
+            data["tag"] = tag
+        if auto_scaler is not None:
+            data["auto_scaler"] = auto_scaler
+        if min_nodes is not None:
+            data["min_nodes"] = min_nodes
+        if max_nodes is not None:
+            data["max_nodes"] = max_nodes
+        if labels is not None:
+            data["labels"] = labels
+        
+        result = await self._make_request("POST", f"/kubernetes/clusters/{cluster_id}/node-pools", data)
+        return result.get("node_pool", {})
+    
+    async def update_kubernetes_node_pool(
+        self,
+        cluster_id: str,
+        nodepool_id: str,
+        node_quantity: Optional[int] = None,
+        tag: Optional[str] = None,
+        auto_scaler: Optional[bool] = None,
+        min_nodes: Optional[int] = None,
+        max_nodes: Optional[int] = None,
+        labels: Optional[Dict[str, str]] = None
+    ) -> None:
+        """
+        Update a node pool configuration.
+        
+        Args:
+            cluster_id: The cluster ID
+            nodepool_id: The node pool ID
+            node_quantity: New number of nodes
+            tag: New tag
+            auto_scaler: Enable/disable auto-scaling
+            min_nodes: Minimum nodes for auto-scaling
+            max_nodes: Maximum nodes for auto-scaling
+            labels: Node labels map
+        """
+        data = {}
+        if node_quantity is not None:
+            data["node_quantity"] = node_quantity
+        if tag is not None:
+            data["tag"] = tag
+        if auto_scaler is not None:
+            data["auto_scaler"] = auto_scaler
+        if min_nodes is not None:
+            data["min_nodes"] = min_nodes
+        if max_nodes is not None:
+            data["max_nodes"] = max_nodes
+        if labels is not None:
+            data["labels"] = labels
+        
+        if data:
+            await self._make_request("PATCH", f"/kubernetes/clusters/{cluster_id}/node-pools/{nodepool_id}", data)
+    
+    async def delete_kubernetes_node_pool(self, cluster_id: str, nodepool_id: str) -> None:
+        """
+        Delete a node pool from a Kubernetes cluster.
+        
+        Args:
+            cluster_id: The cluster ID
+            nodepool_id: The node pool ID
+        """
+        await self._make_request("DELETE", f"/kubernetes/clusters/{cluster_id}/node-pools/{nodepool_id}")
+    
+    # Kubernetes Node API Methods
+    async def list_kubernetes_nodes(self, cluster_id: str, nodepool_id: str) -> List[Dict[str, Any]]:
+        """
+        List all nodes in a specific node pool.
+        
+        Args:
+            cluster_id: The cluster ID
+            nodepool_id: The node pool ID
+            
+        Returns:
+            List of nodes
+        """
+        result = await self._make_request("GET", f"/kubernetes/clusters/{cluster_id}/node-pools/{nodepool_id}/nodes")
+        return result.get("nodes", [])
+    
+    async def get_kubernetes_node(self, cluster_id: str, nodepool_id: str, node_id: str) -> Dict[str, Any]:
+        """
+        Get node details.
+        
+        Args:
+            cluster_id: The cluster ID
+            nodepool_id: The node pool ID
+            node_id: The node ID
+            
+        Returns:
+            Node information
+        """
+        result = await self._make_request("GET", f"/kubernetes/clusters/{cluster_id}/node-pools/{nodepool_id}/nodes/{node_id}")
+        return result.get("node", {})
+    
+    async def delete_kubernetes_node(self, cluster_id: str, nodepool_id: str, node_id: str) -> None:
+        """
+        Delete a specific node from a node pool.
+        
+        Args:
+            cluster_id: The cluster ID
+            nodepool_id: The node pool ID
+            node_id: The node ID
+        """
+        await self._make_request("DELETE", f"/kubernetes/clusters/{cluster_id}/node-pools/{nodepool_id}/nodes/{node_id}")
+    
+    async def recycle_kubernetes_node(self, cluster_id: str, nodepool_id: str, node_id: str) -> None:
+        """
+        Recycle (restart) a specific node.
+        
+        Args:
+            cluster_id: The cluster ID
+            nodepool_id: The node pool ID
+            node_id: The node ID
+        """
+        await self._make_request("POST", f"/kubernetes/clusters/{cluster_id}/node-pools/{nodepool_id}/nodes/{node_id}/recycle")
+
+    # Load Balancer API Methods
+    async def list_load_balancers(self) -> List[Dict[str, Any]]:
+        """
+        List all load balancers.
+        
+        Returns:
+            List of load balancer information
+        """
+        result = await self._make_request("GET", "/load-balancers")
+        return result.get("load_balancers", [])
+    
+    async def get_load_balancer(self, load_balancer_id: str) -> Dict[str, Any]:
+        """
+        Get load balancer details.
+        
+        Args:
+            load_balancer_id: The load balancer ID
+            
+        Returns:
+            Load balancer information
+        """
+        result = await self._make_request("GET", f"/load-balancers/{load_balancer_id}")
+        return result.get("load_balancer", {})
+    
+    async def create_load_balancer(
+        self,
+        region: str,
+        balancing_algorithm: str = "roundrobin",
+        ssl_redirect: bool = False,
+        http2: bool = False,
+        http3: bool = False,
+        proxy_protocol: bool = False,
+        timeout: int = 600,
+        label: Optional[str] = None,
+        nodes: int = 1,
+        health_check: Optional[Dict[str, Any]] = None,
+        forwarding_rules: Optional[List[Dict[str, Any]]] = None,
+        ssl: Optional[Dict[str, str]] = None,
+        firewall_rules: Optional[List[Dict[str, Any]]] = None,
+        auto_ssl: Optional[Dict[str, str]] = None,
+        global_regions: Optional[List[str]] = None,
+        vpc: Optional[str] = None,
+        private_network: Optional[str] = None,
+        sticky_session: Optional[Dict[str, str]] = None,
+        instances: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new load balancer.
+        
+        Args:
+            region: Region code
+            balancing_algorithm: Algorithm to use ('roundrobin' or 'leastconn')
+            ssl_redirect: Redirect HTTP traffic to HTTPS
+            http2: Enable HTTP/2 support
+            http3: Enable HTTP/3 support
+            proxy_protocol: Enable proxy protocol
+            timeout: Connection timeout in seconds
+            label: Label for the load balancer
+            nodes: Number of backend nodes
+            health_check: Health check configuration
+            forwarding_rules: List of forwarding rules
+            ssl: SSL configuration
+            firewall_rules: List of firewall rules
+            auto_ssl: Auto SSL configuration
+            global_regions: List of global region codes
+            vpc: VPC ID to attach to
+            private_network: Private network ID (legacy)
+            sticky_session: Sticky session configuration
+            instances: List of instance IDs to attach
+            
+        Returns:
+            Created load balancer information
+        """
+        data = {
+            "region": region,
+            "balancing_algorithm": balancing_algorithm,
+            "ssl_redirect": ssl_redirect,
+            "http2": http2,
+            "http3": http3,
+            "proxy_protocol": proxy_protocol,
+            "timeout": timeout,
+            "nodes": nodes
+        }
+        
+        if label is not None:
+            data["label"] = label
+        if health_check is not None:
+            data["health_check"] = health_check
+        if forwarding_rules is not None:
+            data["forwarding_rules"] = forwarding_rules
+        if ssl is not None:
+            data["ssl"] = ssl
+        if firewall_rules is not None:
+            data["firewall_rules"] = firewall_rules
+        if auto_ssl is not None:
+            data["auto_ssl"] = auto_ssl
+        if global_regions is not None:
+            data["global_regions"] = global_regions
+        if vpc is not None:
+            data["vpc"] = vpc
+        if private_network is not None:
+            data["private_network"] = private_network
+        if sticky_session is not None:
+            data["sticky_session"] = sticky_session
+        if instances is not None:
+            data["instances"] = instances
+        
+        result = await self._make_request("POST", "/load-balancers", data)
+        return result.get("load_balancer", {})
+    
+    async def update_load_balancer(
+        self,
+        load_balancer_id: str,
+        ssl: Optional[Dict[str, str]] = None,
+        sticky_session: Optional[Dict[str, str]] = None,
+        forwarding_rules: Optional[List[Dict[str, Any]]] = None,
+        health_check: Optional[Dict[str, Any]] = None,
+        proxy_protocol: Optional[bool] = None,
+        timeout: Optional[int] = None,
+        ssl_redirect: Optional[bool] = None,
+        http2: Optional[bool] = None,
+        http3: Optional[bool] = None,
+        nodes: Optional[int] = None,
+        balancing_algorithm: Optional[str] = None,
+        instances: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Update an existing load balancer.
+        
+        Args:
+            load_balancer_id: The load balancer ID
+            ssl: SSL configuration
+            sticky_session: Sticky session configuration
+            forwarding_rules: Updated forwarding rules
+            health_check: Updated health check configuration
+            proxy_protocol: Enable/disable proxy protocol
+            timeout: Connection timeout in seconds
+            ssl_redirect: Enable/disable SSL redirect
+            http2: Enable/disable HTTP/2
+            http3: Enable/disable HTTP/3
+            nodes: Number of backend nodes
+            balancing_algorithm: Balancing algorithm
+            instances: List of instance IDs to attach
+            
+        Returns:
+            Updated load balancer information
+        """
+        data = {}
+        
+        if ssl is not None:
+            data["ssl"] = ssl
+        if sticky_session is not None:
+            data["sticky_session"] = sticky_session
+        if forwarding_rules is not None:
+            data["forwarding_rules"] = forwarding_rules
+        if health_check is not None:
+            data["health_check"] = health_check
+        if proxy_protocol is not None:
+            data["proxy_protocol"] = proxy_protocol
+        if timeout is not None:
+            data["timeout"] = timeout
+        if ssl_redirect is not None:
+            data["ssl_redirect"] = ssl_redirect
+        if http2 is not None:
+            data["http2"] = http2
+        if http3 is not None:
+            data["http3"] = http3
+        if nodes is not None:
+            data["nodes"] = nodes
+        if balancing_algorithm is not None:
+            data["balancing_algorithm"] = balancing_algorithm
+        if instances is not None:
+            data["instances"] = instances
+        
+        result = await self._make_request("PATCH", f"/load-balancers/{load_balancer_id}", data)
+        return result.get("load_balancer", {})
+    
+    async def delete_load_balancer(self, load_balancer_id: str) -> None:
+        """
+        Delete a load balancer.
+        
+        Args:
+            load_balancer_id: The load balancer ID
+        """
+        await self._make_request("DELETE", f"/load-balancers/{load_balancer_id}")
+    
+    async def delete_load_balancer_ssl(self, load_balancer_id: str) -> None:
+        """
+        Delete SSL certificate from a load balancer.
+        
+        Args:
+            load_balancer_id: The load balancer ID
+        """
+        await self._make_request("DELETE", f"/load-balancers/{load_balancer_id}/ssl")
+    
+    async def disable_load_balancer_auto_ssl(self, load_balancer_id: str) -> None:
+        """
+        Disable Auto SSL for a load balancer.
+        
+        Args:
+            load_balancer_id: The load balancer ID
+        """
+        await self._make_request("DELETE", f"/load-balancers/{load_balancer_id}/auto_ssl")
+    
+    # Load Balancer Forwarding Rules API Methods
+    async def list_load_balancer_forwarding_rules(self, load_balancer_id: str) -> List[Dict[str, Any]]:
+        """
+        List forwarding rules for a load balancer.
+        
+        Args:
+            load_balancer_id: The load balancer ID
+            
+        Returns:
+            List of forwarding rules
+        """
+        result = await self._make_request("GET", f"/load-balancers/{load_balancer_id}/forwarding-rules")
+        return result.get("forwarding_rules", [])
+    
+    async def create_load_balancer_forwarding_rule(
+        self,
+        load_balancer_id: str,
+        frontend_protocol: str,
+        frontend_port: int,
+        backend_protocol: str,
+        backend_port: int
+    ) -> Dict[str, Any]:
+        """
+        Create a forwarding rule for a load balancer.
+        
+        Args:
+            load_balancer_id: The load balancer ID
+            frontend_protocol: Frontend protocol
+            frontend_port: Frontend port number
+            backend_protocol: Backend protocol
+            backend_port: Backend port number
+            
+        Returns:
+            Created forwarding rule information
+        """
+        data = {
+            "frontend_protocol": frontend_protocol,
+            "frontend_port": frontend_port,
+            "backend_protocol": backend_protocol,
+            "backend_port": backend_port
+        }
+        
+        result = await self._make_request("POST", f"/load-balancers/{load_balancer_id}/forwarding-rules", data)
+        return result.get("forwarding_rule", {})
+    
+    async def get_load_balancer_forwarding_rule(self, load_balancer_id: str, forwarding_rule_id: str) -> Dict[str, Any]:
+        """
+        Get details of a specific forwarding rule.
+        
+        Args:
+            load_balancer_id: The load balancer ID
+            forwarding_rule_id: The forwarding rule ID
+            
+        Returns:
+            Forwarding rule details
+        """
+        result = await self._make_request("GET", f"/load-balancers/{load_balancer_id}/forwarding-rules/{forwarding_rule_id}")
+        return result.get("forwarding_rule", {})
+    
+    async def delete_load_balancer_forwarding_rule(self, load_balancer_id: str, forwarding_rule_id: str) -> None:
+        """
+        Delete a forwarding rule from a load balancer.
+        
+        Args:
+            load_balancer_id: The load balancer ID
+            forwarding_rule_id: The forwarding rule ID
+        """
+        await self._make_request("DELETE", f"/load-balancers/{load_balancer_id}/forwarding-rules/{forwarding_rule_id}")
+    
+    # Load Balancer Firewall Rules API Methods
+    async def list_load_balancer_firewall_rules(self, load_balancer_id: str) -> List[Dict[str, Any]]:
+        """
+        List firewall rules for a load balancer.
+        
+        Args:
+            load_balancer_id: The load balancer ID
+            
+        Returns:
+            List of firewall rules
+        """
+        result = await self._make_request("GET", f"/load-balancers/{load_balancer_id}/firewall-rules")
+        return result.get("firewall_rules", [])
+    
+    async def get_load_balancer_firewall_rule(self, load_balancer_id: str, firewall_rule_id: str) -> Dict[str, Any]:
+        """
+        Get details of a specific firewall rule.
+        
+        Args:
+            load_balancer_id: The load balancer ID
+            firewall_rule_id: The firewall rule ID
+            
+        Returns:
+            Firewall rule details
+        """
+        result = await self._make_request("GET", f"/load-balancers/{load_balancer_id}/firewall-rules/{firewall_rule_id}")
+        return result.get("firewall_rule", {})
+
+    # Managed Database API Methods
+    async def list_managed_databases(self) -> List[Dict[str, Any]]:
+        """
+        List all managed databases.
+        
+        Returns:
+            List of managed database information
+        """
+        result = await self._make_request("GET", "/databases")
+        return result.get("databases", [])
+    
+    async def get_managed_database(self, database_id: str) -> Dict[str, Any]:
+        """
+        Get managed database details.
+        
+        Args:
+            database_id: The database ID
+            
+        Returns:
+            Database information
+        """
+        result = await self._make_request("GET", f"/databases/{database_id}")
+        return result.get("database", {})
+    
+    async def create_managed_database(
+        self,
+        database_engine: str,
+        database_engine_version: str,
+        region: str,
+        plan: str,
+        label: str,
+        tag: Optional[str] = None,
+        vpc_id: Optional[str] = None,
+        trusted_ips: Optional[List[str]] = None,
+        mysql_sql_modes: Optional[List[str]] = None,
+        mysql_require_primary_key: Optional[bool] = None,
+        mysql_slow_query_log: Optional[bool] = None,
+        valkey_eviction_policy: Optional[str] = None,
+        kafka_rest_enabled: Optional[bool] = None,
+        kafka_schema_registry_enabled: Optional[bool] = None,
+        kafka_connect_enabled: Optional[bool] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new managed database.
+        
+        Args:
+            database_engine: Database engine (mysql, pg, valkey, kafka)
+            database_engine_version: Engine version
+            region: Region code
+            plan: Plan ID
+            label: Database label
+            tag: Optional tag
+            vpc_id: VPC ID
+            trusted_ips: List of trusted IP addresses
+            mysql_sql_modes: MySQL SQL modes
+            mysql_require_primary_key: Require primary key (MySQL)
+            mysql_slow_query_log: Enable slow query log (MySQL)
+            valkey_eviction_policy: Eviction policy (Valkey)
+            kafka_rest_enabled: Enable Kafka REST
+            kafka_schema_registry_enabled: Enable Schema Registry
+            kafka_connect_enabled: Enable Kafka Connect
+            
+        Returns:
+            Created database information
+        """
+        data = {
+            "database_engine": database_engine,
+            "database_engine_version": database_engine_version,
+            "region": region,
+            "plan": plan,
+            "label": label
+        }
+        
+        if tag is not None:
+            data["tag"] = tag
+        if vpc_id is not None:
+            data["vpc_id"] = vpc_id
+        if trusted_ips is not None:
+            data["trusted_ips"] = trusted_ips
+        if mysql_sql_modes is not None:
+            data["mysql_sql_modes"] = mysql_sql_modes
+        if mysql_require_primary_key is not None:
+            data["mysql_require_primary_key"] = mysql_require_primary_key
+        if mysql_slow_query_log is not None:
+            data["mysql_slow_query_log"] = mysql_slow_query_log
+        if valkey_eviction_policy is not None:
+            data["valkey_eviction_policy"] = valkey_eviction_policy
+        if kafka_rest_enabled is not None:
+            data["kafka_rest_enabled"] = kafka_rest_enabled
+        if kafka_schema_registry_enabled is not None:
+            data["kafka_schema_registry_enabled"] = kafka_schema_registry_enabled
+        if kafka_connect_enabled is not None:
+            data["kafka_connect_enabled"] = kafka_connect_enabled
+        
+        result = await self._make_request("POST", "/databases", data)
+        return result.get("database", {})
+    
+    async def update_managed_database(
+        self,
+        database_id: str,
+        region: Optional[str] = None,
+        plan: Optional[str] = None,
+        label: Optional[str] = None,
+        tag: Optional[str] = None,
+        vpc_id: Optional[str] = None,
+        timezone: Optional[str] = None,
+        trusted_ips: Optional[List[str]] = None,
+        mysql_sql_modes: Optional[List[str]] = None,
+        mysql_require_primary_key: Optional[bool] = None,
+        mysql_slow_query_log: Optional[bool] = None,
+        valkey_eviction_policy: Optional[str] = None,
+        kafka_rest_enabled: Optional[bool] = None,
+        kafka_schema_registry_enabled: Optional[bool] = None,
+        kafka_connect_enabled: Optional[bool] = None
+    ) -> Dict[str, Any]:
+        """
+        Update a managed database.
+        
+        Args:
+            database_id: The database ID
+            region: New region
+            plan: New plan
+            label: New label
+            tag: New tag
+            vpc_id: New VPC ID
+            timezone: Database timezone
+            trusted_ips: Updated trusted IPs
+            mysql_sql_modes: MySQL SQL modes
+            mysql_require_primary_key: Require primary key setting
+            mysql_slow_query_log: Slow query log setting
+            valkey_eviction_policy: Eviction policy
+            kafka_rest_enabled: Kafka REST setting
+            kafka_schema_registry_enabled: Schema Registry setting
+            kafka_connect_enabled: Kafka Connect setting
+            
+        Returns:
+            Updated database information
+        """
+        data = {}
+        
+        if region is not None:
+            data["region"] = region
+        if plan is not None:
+            data["plan"] = plan
+        if label is not None:
+            data["label"] = label
+        if tag is not None:
+            data["tag"] = tag
+        if vpc_id is not None:
+            data["vpc_id"] = vpc_id
+        if timezone is not None:
+            data["timezone"] = timezone
+        if trusted_ips is not None:
+            data["trusted_ips"] = trusted_ips
+        if mysql_sql_modes is not None:
+            data["mysql_sql_modes"] = mysql_sql_modes
+        if mysql_require_primary_key is not None:
+            data["mysql_require_primary_key"] = mysql_require_primary_key
+        if mysql_slow_query_log is not None:
+            data["mysql_slow_query_log"] = mysql_slow_query_log
+        if valkey_eviction_policy is not None:
+            data["valkey_eviction_policy"] = valkey_eviction_policy
+        if kafka_rest_enabled is not None:
+            data["kafka_rest_enabled"] = kafka_rest_enabled
+        if kafka_schema_registry_enabled is not None:
+            data["kafka_schema_registry_enabled"] = kafka_schema_registry_enabled
+        if kafka_connect_enabled is not None:
+            data["kafka_connect_enabled"] = kafka_connect_enabled
+        
+        result = await self._make_request("PUT", f"/databases/{database_id}", data)
+        return result.get("database", {})
+    
+    async def delete_managed_database(self, database_id: str) -> None:
+        """
+        Delete a managed database.
+        
+        Args:
+            database_id: The database ID
+        """
+        await self._make_request("DELETE", f"/databases/{database_id}")
+    
+    async def get_database_usage(self, database_id: str) -> Dict[str, Any]:
+        """
+        Get database usage statistics.
+        
+        Args:
+            database_id: The database ID
+            
+        Returns:
+            Usage information
+        """
+        result = await self._make_request("GET", f"/databases/{database_id}/usage")
+        return result.get("usage", {})
+    
+    # Database User Management
+    async def list_database_users(self, database_id: str) -> List[Dict[str, Any]]:
+        """
+        List database users.
+        
+        Args:
+            database_id: The database ID
+            
+        Returns:
+            List of database users
+        """
+        result = await self._make_request("GET", f"/databases/{database_id}/users")
+        return result.get("users", [])
+    
+    async def create_database_user(
+        self,
+        database_id: str,
+        username: str,
+        password: Optional[str] = None,
+        encryption: Optional[str] = None,
+        access_level: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a database user.
+        
+        Args:
+            database_id: The database ID
+            username: Username for the new user
+            password: Password (auto-generated if not provided)
+            encryption: Password encryption type
+            access_level: Permission level
+            
+        Returns:
+            Created user information
+        """
+        data = {"username": username}
+        
+        if password is not None:
+            data["password"] = password
+        if encryption is not None:
+            data["encryption"] = encryption
+        if access_level is not None:
+            data["access_level"] = access_level
+        
+        result = await self._make_request("POST", f"/databases/{database_id}/users", data)
+        return result.get("user", {})
+    
+    async def get_database_user(self, database_id: str, username: str) -> Dict[str, Any]:
+        """
+        Get database user details.
+        
+        Args:
+            database_id: The database ID
+            username: The username
+            
+        Returns:
+            User information
+        """
+        result = await self._make_request("GET", f"/databases/{database_id}/users/{username}")
+        return result.get("user", {})
+    
+    async def update_database_user(
+        self,
+        database_id: str,
+        username: str,
+        password: Optional[str] = None,
+        access_level: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Update a database user.
+        
+        Args:
+            database_id: The database ID
+            username: The username to update
+            password: New password
+            access_level: New permission level
+            
+        Returns:
+            Updated user information
+        """
+        data = {}
+        
+        if password is not None:
+            data["password"] = password
+        if access_level is not None:
+            data["access_level"] = access_level
+        
+        result = await self._make_request("PUT", f"/databases/{database_id}/users/{username}", data)
+        return result.get("user", {})
+    
+    async def delete_database_user(self, database_id: str, username: str) -> None:
+        """
+        Delete a database user.
+        
+        Args:
+            database_id: The database ID
+            username: The username to delete
+        """
+        await self._make_request("DELETE", f"/databases/{database_id}/users/{username}")
+    
+    async def update_database_user_access_control(
+        self,
+        database_id: str,
+        username: str,
+        acl_categories: Optional[List[str]] = None,
+        acl_channels: Optional[List[str]] = None,
+        acl_commands: Optional[List[str]] = None,
+        acl_keys: Optional[List[str]] = None
+    ) -> None:
+        """
+        Update database user access control (Valkey/Redis).
+        
+        Args:
+            database_id: The database ID
+            username: The username
+            acl_categories: ACL categories
+            acl_channels: ACL channels
+            acl_commands: ACL commands
+            acl_keys: ACL keys
+        """
+        data = {}
+        
+        if acl_categories is not None:
+            data["acl_categories"] = acl_categories
+        if acl_channels is not None:
+            data["acl_channels"] = acl_channels
+        if acl_commands is not None:
+            data["acl_commands"] = acl_commands
+        if acl_keys is not None:
+            data["acl_keys"] = acl_keys
+        
+        await self._make_request("PUT", f"/databases/{database_id}/users/{username}/access-control", data)
+    
+    # Logical Database Management
+    async def list_logical_databases(self, database_id: str) -> List[Dict[str, Any]]:
+        """
+        List logical databases.
+        
+        Args:
+            database_id: The database ID
+            
+        Returns:
+            List of logical databases
+        """
+        result = await self._make_request("GET", f"/databases/{database_id}/dbs")
+        return result.get("dbs", [])
+    
+    async def create_logical_database(self, database_id: str, name: str) -> Dict[str, Any]:
+        """
+        Create a logical database.
+        
+        Args:
+            database_id: The database ID
+            name: Name for the logical database
+            
+        Returns:
+            Created logical database information
+        """
+        data = {"name": name}
+        result = await self._make_request("POST", f"/databases/{database_id}/dbs", data)
+        return result.get("db", {})
+    
+    async def get_logical_database(self, database_id: str, db_name: str) -> Dict[str, Any]:
+        """
+        Get logical database details.
+        
+        Args:
+            database_id: The database ID
+            db_name: The logical database name
+            
+        Returns:
+            Logical database information
+        """
+        result = await self._make_request("GET", f"/databases/{database_id}/dbs/{db_name}")
+        return result.get("db", {})
+    
+    async def delete_logical_database(self, database_id: str, db_name: str) -> None:
+        """
+        Delete a logical database.
+        
+        Args:
+            database_id: The database ID
+            db_name: The logical database name
+        """
+        await self._make_request("DELETE", f"/databases/{database_id}/dbs/{db_name}")
+    
+    # Connection Pool Management
+    async def list_connection_pools(self, database_id: str) -> List[Dict[str, Any]]:
+        """
+        List connection pools.
+        
+        Args:
+            database_id: The database ID
+            
+        Returns:
+            List of connection pools
+        """
+        result = await self._make_request("GET", f"/databases/{database_id}/connection-pools")
+        return result.get("connection_pools", [])
+    
+    async def create_connection_pool(
+        self,
+        database_id: str,
+        name: str,
+        database: str,
+        username: str,
+        mode: str,
+        size: int
+    ) -> Dict[str, Any]:
+        """
+        Create a connection pool.
+        
+        Args:
+            database_id: The database ID
+            name: Pool name
+            database: Target database
+            username: Database username
+            mode: Pool mode
+            size: Pool size
+            
+        Returns:
+            Created pool information
+        """
+        data = {
+            "name": name,
+            "database": database,
+            "username": username,
+            "mode": mode,
+            "size": size
+        }
+        result = await self._make_request("POST", f"/databases/{database_id}/connection-pools", data)
+        return result.get("connection_pool", {})
+    
+    async def get_connection_pool(self, database_id: str, pool_name: str) -> Dict[str, Any]:
+        """
+        Get connection pool details.
+        
+        Args:
+            database_id: The database ID
+            pool_name: The pool name
+            
+        Returns:
+            Connection pool information
+        """
+        result = await self._make_request("GET", f"/databases/{database_id}/connection-pools/{pool_name}")
+        return result.get("connection_pool", {})
+    
+    async def update_connection_pool(
+        self,
+        database_id: str,
+        pool_name: str,
+        database: Optional[str] = None,
+        username: Optional[str] = None,
+        mode: Optional[str] = None,
+        size: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Update a connection pool.
+        
+        Args:
+            database_id: The database ID
+            pool_name: The pool name
+            database: New target database
+            username: New username
+            mode: New mode
+            size: New size
+            
+        Returns:
+            Updated pool information
+        """
+        data = {}
+        
+        if database is not None:
+            data["database"] = database
+        if username is not None:
+            data["username"] = username
+        if mode is not None:
+            data["mode"] = mode
+        if size is not None:
+            data["size"] = size
+        
+        result = await self._make_request("PUT", f"/databases/{database_id}/connection-pools/{pool_name}", data)
+        return result.get("connection_pool", {})
+    
+    async def delete_connection_pool(self, database_id: str, pool_name: str) -> None:
+        """
+        Delete a connection pool.
+        
+        Args:
+            database_id: The database ID
+            pool_name: The pool name
+        """
+        await self._make_request("DELETE", f"/databases/{database_id}/connection-pools/{pool_name}")
+    
+    # Database Backup Management
+    async def list_database_backups(self, database_id: str) -> List[Dict[str, Any]]:
+        """
+        List database backups.
+        
+        Args:
+            database_id: The database ID
+            
+        Returns:
+            List of backups
+        """
+        result = await self._make_request("GET", f"/databases/{database_id}/backups")
+        return result.get("backups", [])
+    
+    async def restore_database_from_backup(
+        self,
+        database_id: str,
+        backup_label: str,
+        database_label: str,
+        plan: str,
+        region: str,
+        vpc_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Restore database from backup.
+        
+        Args:
+            database_id: The source database ID
+            backup_label: The backup label
+            database_label: Label for new database
+            plan: Plan for new database
+            region: Region for new database
+            vpc_id: VPC ID
+            
+        Returns:
+            Restoration information
+        """
+        data = {
+            "backup_label": backup_label,
+            "label": database_label,
+            "plan": plan,
+            "region": region
+        }
+        
+        if vpc_id is not None:
+            data["vpc_id"] = vpc_id
+        
+        result = await self._make_request("POST", f"/databases/{database_id}/restore", data)
+        return result.get("database", {})
+    
+    async def fork_database(
+        self,
+        database_id: str,
+        label: str,
+        region: str,
+        plan: str,
+        vpc_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Fork a database.
+        
+        Args:
+            database_id: The source database ID
+            label: Label for forked database
+            region: Region for new database
+            plan: Plan for new database
+            vpc_id: VPC ID
+            
+        Returns:
+            Forked database information
+        """
+        data = {
+            "label": label,
+            "region": region,
+            "plan": plan
+        }
+        
+        if vpc_id is not None:
+            data["vpc_id"] = vpc_id
+        
+        result = await self._make_request("POST", f"/databases/{database_id}/fork", data)
+        return result.get("database", {})
+    
+    # Read Replica Management
+    async def create_read_replica(
+        self,
+        database_id: str,
+        label: str,
+        region: str,
+        plan: str
+    ) -> Dict[str, Any]:
+        """
+        Create a read replica.
+        
+        Args:
+            database_id: The source database ID
+            label: Label for read replica
+            region: Region for replica
+            plan: Plan for replica
+            
+        Returns:
+            Read replica information
+        """
+        data = {
+            "label": label,
+            "region": region,
+            "plan": plan
+        }
+        
+        result = await self._make_request("POST", f"/databases/{database_id}/read-replica", data)
+        return result.get("database", {})
+    
+    async def promote_read_replica(self, database_id: str) -> None:
+        """
+        Promote a read replica to standalone.
+        
+        Args:
+            database_id: The read replica database ID
+        """
+        await self._make_request("POST", f"/databases/{database_id}/promote-read-replica")
+    
+    # Database Plans
+    async def list_database_plans(self) -> List[Dict[str, Any]]:
+        """
+        List database plans.
+        
+        Returns:
+            List of available database plans
+        """
+        result = await self._make_request("GET", "/databases/plans")
+        return result.get("plans", [])
+    
+    # Maintenance and Migration
+    async def list_database_versions(self, database_id: str) -> List[Dict[str, Any]]:
+        """
+        List available database versions for upgrade.
+        
+        Args:
+            database_id: The database ID
+            
+        Returns:
+            List of available versions
+        """
+        result = await self._make_request("GET", f"/databases/{database_id}/version-upgrade")
+        return result.get("available_versions", [])
+    
+    async def start_version_upgrade(self, database_id: str, version: str) -> None:
+        """
+        Start database version upgrade.
+        
+        Args:
+            database_id: The database ID
+            version: Target version
+        """
+        data = {"version": version}
+        await self._make_request("POST", f"/databases/{database_id}/version-upgrade", data)
+    
+    async def get_maintenance_updates(self, database_id: str) -> List[Dict[str, Any]]:
+        """
+        Get maintenance updates.
+        
+        Args:
+            database_id: The database ID
+            
+        Returns:
+            List of maintenance updates
+        """
+        result = await self._make_request("GET", f"/databases/{database_id}/maintenance")
+        return result.get("available_updates", [])
+    
+    async def start_maintenance(self, database_id: str) -> None:
+        """
+        Start maintenance on database.
+        
+        Args:
+            database_id: The database ID
+        """
+        await self._make_request("POST", f"/databases/{database_id}/maintenance")
+    
+    async def get_migration_status(self, database_id: str) -> Dict[str, Any]:
+        """
+        Get migration status.
+        
+        Args:
+            database_id: The database ID
+            
+        Returns:
+            Migration status
+        """
+        result = await self._make_request("GET", f"/databases/{database_id}/migration")
+        return result.get("migration", {})
+    
+    async def start_migration(
+        self,
+        database_id: str,
+        host: str,
+        port: int,
+        username: str,
+        password: str,
+        database: str,
+        ssl: bool = True
+    ) -> None:
+        """
+        Start database migration.
+        
+        Args:
+            database_id: The destination database ID
+            host: Source host
+            port: Source port
+            username: Source username
+            password: Source password
+            database: Source database
+            ssl: Use SSL
+        """
+        data = {
+            "host": host,
+            "port": port,
+            "username": username,
+            "password": password,
+            "database": database,
+            "ssl": ssl
+        }
+        await self._make_request("POST", f"/databases/{database_id}/migration", data)
+    
+    async def stop_migration(self, database_id: str) -> None:
+        """
+        Stop database migration.
+        
+        Args:
+            database_id: The database ID
+        """
+        await self._make_request("DELETE", f"/databases/{database_id}/migration")
+    
+    # Kafka-specific methods
+    async def list_kafka_topics(self, database_id: str) -> List[Dict[str, Any]]:
+        """
+        List Kafka topics.
+        
+        Args:
+            database_id: The Kafka database ID
+            
+        Returns:
+            List of topics
+        """
+        result = await self._make_request("GET", f"/databases/{database_id}/topics")
+        return result.get("topics", [])
+    
+    async def create_kafka_topic(
+        self,
+        database_id: str,
+        name: str,
+        partitions: int = 3,
+        replication: int = 2,
+        retention_hours: int = 168,
+        retention_bytes: int = 1073741824
+    ) -> Dict[str, Any]:
+        """
+        Create a Kafka topic.
+        
+        Args:
+            database_id: The Kafka database ID
+            name: Topic name
+            partitions: Number of partitions
+            replication: Replication factor
+            retention_hours: Retention hours
+            retention_bytes: Retention bytes
+            
+        Returns:
+            Created topic information
+        """
+        data = {
+            "name": name,
+            "partitions": partitions,
+            "replication": replication,
+            "retention_hours": retention_hours,
+            "retention_bytes": retention_bytes
+        }
+        result = await self._make_request("POST", f"/databases/{database_id}/topics", data)
+        return result.get("topic", {})
+    
+    async def get_kafka_topic(self, database_id: str, topic_name: str) -> Dict[str, Any]:
+        """
+        Get Kafka topic details.
+        
+        Args:
+            database_id: The Kafka database ID
+            topic_name: The topic name
+            
+        Returns:
+            Topic information
+        """
+        result = await self._make_request("GET", f"/databases/{database_id}/topics/{topic_name}")
+        return result.get("topic", {})
+    
+    async def update_kafka_topic(
+        self,
+        database_id: str,
+        topic_name: str,
+        partitions: Optional[int] = None,
+        replication: Optional[int] = None,
+        retention_hours: Optional[int] = None,
+        retention_bytes: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Update Kafka topic.
+        
+        Args:
+            database_id: The Kafka database ID
+            topic_name: The topic name
+            partitions: Number of partitions
+            replication: Replication factor
+            retention_hours: Retention hours
+            retention_bytes: Retention bytes
+            
+        Returns:
+            Updated topic information
+        """
+        data = {}
+        
+        if partitions is not None:
+            data["partitions"] = partitions
+        if replication is not None:
+            data["replication"] = replication
+        if retention_hours is not None:
+            data["retention_hours"] = retention_hours
+        if retention_bytes is not None:
+            data["retention_bytes"] = retention_bytes
+        
+        result = await self._make_request("PUT", f"/databases/{database_id}/topics/{topic_name}", data)
+        return result.get("topic", {})
+    
+    async def delete_kafka_topic(self, database_id: str, topic_name: str) -> None:
+        """
+        Delete Kafka topic.
+        
+        Args:
+            database_id: The Kafka database ID
+            topic_name: The topic name
+        """
+        await self._make_request("DELETE", f"/databases/{database_id}/topics/{topic_name}")
+
+    # Storage Gateway API Methods
+    async def list_storage_gateways(self) -> List[Dict[str, Any]]:
+        """
+        List all storage gateways in your account.
+        
+        Returns:
+            List of storage gateway information
+        """
+        result = await self._make_request("GET", "/storage-gateways")
+        return result.get("storage_gateway", [])
+    
+    async def get_storage_gateway(self, gateway_id: str) -> Dict[str, Any]:
+        """
+        Get storage gateway details.
+        
+        Args:
+            gateway_id: The storage gateway ID
+            
+        Returns:
+            Storage gateway information
+        """
+        result = await self._make_request("GET", f"/storage-gateways/{gateway_id}")
+        return result.get("storage_gateway", {})
+    
+    async def create_storage_gateway(
+        self,
+        label: str,
+        gateway_type: str,
+        region: str,
+        export_config: Dict[str, Any],
+        network_config: Dict[str, Any],
+        tags: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new storage gateway.
+        
+        Args:
+            label: Label for the storage gateway
+            gateway_type: Type of storage gateway (e.g., "nfs4")
+            region: Region code
+            export_config: Export configuration
+            network_config: Network configuration
+            tags: Optional list of tags
+            
+        Returns:
+            Created storage gateway information
+        """
+        data = {
+            "label": label,
+            "type": gateway_type,
+            "region": region,
+            "export_config": export_config,
+            "network_config": network_config
+        }
+        if tags is not None:
+            data["tags"] = tags
+        
+        result = await self._make_request("POST", "/storage-gateways", data=data)
+        return result.get("storage_gateway", {})
+    
+    async def update_storage_gateway(
+        self,
+        gateway_id: str,
+        label: Optional[str] = None,
+        tags: Optional[List[str]] = None
+    ) -> None:
+        """
+        Update storage gateway configuration.
+        
+        Args:
+            gateway_id: The storage gateway ID
+            label: New label for the gateway
+            tags: New tags for the gateway
+        """
+        data = {}
+        if label is not None:
+            data["label"] = label
+        if tags is not None:
+            data["tags"] = tags
+        
+        if data:
+            await self._make_request("PUT", f"/storage-gateways/{gateway_id}", data=data)
+    
+    async def delete_storage_gateway(self, gateway_id: str) -> None:
+        """
+        Delete a storage gateway.
+        
+        Args:
+            gateway_id: The storage gateway ID to delete
+        """
+        await self._make_request("DELETE", f"/storage-gateways/{gateway_id}")
+    
+    async def add_storage_gateway_export(
+        self,
+        gateway_id: str,
+        export_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Add a new export to a storage gateway.
+        
+        Args:
+            gateway_id: The storage gateway ID
+            export_config: Export configuration
+            
+        Returns:
+            Created export information
+        """
+        # The API expects an array of exports
+        data = [export_config]
+        result = await self._make_request("POST", f"/storage-gateways/{gateway_id}/exports", data=data)
+        return result.get("vpc", {})  # Note: API response uses "vpc" key based on schema
+    
+    async def delete_storage_gateway_export(
+        self,
+        gateway_id: str,
+        export_id: int
+    ) -> None:
+        """
+        Delete an export from a storage gateway.
+        
+        Args:
+            gateway_id: The storage gateway ID
+            export_id: The export ID to delete
+        """
+        await self._make_request("DELETE", f"/storage-gateways/{gateway_id}/exports/{export_id}")
+
+    # Object Storage Methods
+    async def list_object_storage(self) -> List[Dict[str, Any]]:
+        """
+        List all Object Storage instances.
+        
+        Returns:
+            List of Object Storage instances
+        """
+        result = await self._make_request("GET", "/object-storage")
+        return result.get("object_storages", [])
+    
+    async def get_object_storage(self, object_storage_id: str) -> Dict[str, Any]:
+        """
+        Get Object Storage details.
+        
+        Args:
+            object_storage_id: The Object Storage ID
+            
+        Returns:
+            Object Storage information
+        """
+        result = await self._make_request("GET", f"/object-storage/{object_storage_id}")
+        return result.get("object_storage", {})
+    
+    async def create_object_storage(
+        self,
+        cluster_id: int,
+        label: str
+    ) -> Dict[str, Any]:
+        """
+        Create a new Object Storage instance.
+        
+        Args:
+            cluster_id: The cluster ID where the Object Storage will be created
+            label: Label for the Object Storage instance
+            
+        Returns:
+            Created Object Storage information
+        """
+        data = {
+            "cluster_id": cluster_id,
+            "label": label
+        }
+        result = await self._make_request("POST", "/object-storage", data=data)
+        return result.get("object_storage", {})
+    
+    async def update_object_storage(
+        self,
+        object_storage_id: str,
+        label: str
+    ) -> None:
+        """
+        Update Object Storage label.
+        
+        Args:
+            object_storage_id: The Object Storage ID
+            label: New label for the Object Storage
+        """
+        data = {"label": label}
+        await self._make_request("PUT", f"/object-storage/{object_storage_id}", data=data)
+    
+    async def delete_object_storage(self, object_storage_id: str) -> None:
+        """
+        Delete an Object Storage instance.
+        
+        Args:
+            object_storage_id: The Object Storage ID to delete
+        """
+        await self._make_request("DELETE", f"/object-storage/{object_storage_id}")
+    
+    async def regenerate_object_storage_keys(self, object_storage_id: str) -> Dict[str, Any]:
+        """
+        Regenerate the access keys for an Object Storage instance.
+        
+        Args:
+            object_storage_id: The Object Storage ID
+            
+        Returns:
+            Object Storage information with new keys
+        """
+        result = await self._make_request("POST", f"/object-storage/{object_storage_id}/regenerate-keys")
+        return result.get("object_storage", {})
+    
+    async def list_object_storage_clusters(self) -> List[Dict[str, Any]]:
+        """
+        List all Object Storage clusters.
+        
+        Returns:
+            List of Object Storage clusters
+        """
+        result = await self._make_request("GET", "/object-storage/clusters")
+        return result.get("object_storage_clusters", [])
+    
+    async def list_object_storage_cluster_tiers(self, cluster_id: int) -> List[Dict[str, Any]]:
+        """
+        List all available tiers for a specific Object Storage cluster.
+        
+        Args:
+            cluster_id: The cluster ID
+            
+        Returns:
+            List of available tiers for the cluster
+        """
+        result = await self._make_request("GET", f"/object-storage/clusters/{cluster_id}/tiers")
+        return result.get("tiers", [])
+    
+    # Serverless Inference methods
+    async def list_inference_subscriptions(self) -> List[Dict[str, Any]]:
+        """
+        List all Serverless Inference subscriptions in your account.
+        
+        Returns:
+            List of inference subscription objects
+        """
+        result = await self._make_request("GET", "/inference")
+        return result.get("subscriptions", [])
+    
+    async def get_inference_subscription(self, inference_id: str) -> Dict[str, Any]:
+        """
+        Get information about a Serverless Inference subscription.
+        
+        Args:
+            inference_id: The inference subscription ID
+            
+        Returns:
+            Inference subscription information
+        """
+        result = await self._make_request("GET", f"/inference/{inference_id}")
+        return result.get("subscription", {})
+    
+    async def create_inference_subscription(self, label: str) -> Dict[str, Any]:
+        """
+        Create a new Serverless Inference subscription.
+        
+        Args:
+            label: Label for the inference subscription
+            
+        Returns:
+            Created inference subscription information
+        """
+        data = {"label": label}
+        result = await self._make_request("POST", "/inference", data=data)
+        return result.get("subscription", {})
+    
+    async def update_inference_subscription(self, inference_id: str, label: str) -> Dict[str, Any]:
+        """
+        Update a Serverless Inference subscription.
+        
+        Args:
+            inference_id: The inference subscription ID
+            label: New label for the subscription
+            
+        Returns:
+            Updated inference subscription information
+        """
+        data = {"label": label}
+        result = await self._make_request("PATCH", f"/inference/{inference_id}", data=data)
+        return result.get("subscription", {})
+    
+    async def delete_inference_subscription(self, inference_id: str) -> None:
+        """
+        Delete a Serverless Inference subscription.
+        
+        Args:
+            inference_id: The inference subscription ID to delete
+        """
+        await self._make_request("DELETE", f"/inference/{inference_id}")
+    
+    async def get_inference_usage(self, inference_id: str) -> Dict[str, Any]:
+        """
+        Get usage information for a Serverless Inference subscription.
+        
+        Args:
+            inference_id: The inference subscription ID
+            
+        Returns:
+            Usage information including token counts and limits
+        """
+        result = await self._make_request("GET", f"/inference/{inference_id}/usage")
+        return result.get("usage", {})
+
+    # =============================================================================
+    # Subaccount Management Methods
+    # =============================================================================
+    
+    async def list_subaccounts(self) -> List[Dict[str, Any]]:
+        """
+        List all subaccounts.
+        
+        Returns:
+            List of subaccounts with their details
+        """
+        result = await self._make_request("GET", "/subaccounts")
+        return result.get("subaccounts", [])
+    
+    async def create_subaccount(
+        self,
+        email: str,
+        subaccount_name: Optional[str] = None,
+        subaccount_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new subaccount.
+        
+        Args:
+            email: Email address for the subaccount
+            subaccount_name: Display name for the subaccount
+            subaccount_id: Custom identifier for the subaccount
+            
+        Returns:
+            Created subaccount details
+        """
+        data = {"email": email}
+        if subaccount_name:
+            data["subaccount_name"] = subaccount_name
+        if subaccount_id:
+            data["subaccount_id"] = subaccount_id
+            
+        result = await self._make_request("POST", "/subaccounts", data=data)
+        return result.get("subaccount", {})
+
+    # =============================================================================
+    # User Management Methods
+    # =============================================================================
+    
+    async def list_users(self) -> List[Dict[str, Any]]:
+        """
+        List all users in your account.
+        
+        Returns:
+            List of user objects with details
+        """
+        result = await self._make_request("GET", "/users")
+        return result.get("users", [])
+    
+    async def get_user(self, user_id: str) -> Dict[str, Any]:
+        """
+        Get user information.
+        
+        Args:
+            user_id: The user ID
+            
+        Returns:
+            User information
+        """
+        result = await self._make_request("GET", f"/users/{user_id}")
+        return result.get("user", {})
+    
+    async def create_user(
+        self,
+        email: str,
+        first_name: str,
+        last_name: str,
+        password: str,
+        api_enabled: bool = True,
+        service_user: bool = False,
+        acls: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new user.
+        
+        Args:
+            email: User's email address
+            first_name: User's first name
+            last_name: User's last name
+            password: User's password
+            api_enabled: Enable API access
+            service_user: Create as service user (API-only)
+            acls: List of permissions
+            
+        Returns:
+            Created user information
+        """
+        data = {
+            "email": email,
+            "first_name": first_name,
+            "last_name": last_name,
+            "password": password,
+            "api_enabled": api_enabled,
+            "service_user": service_user
+        }
+        
+        if acls is not None:
+            data["acls"] = acls
+        
+        result = await self._make_request("POST", "/users", data=data)
+        return result.get("user", {})
+    
+    async def update_user(
+        self,
+        user_id: str,
+        api_enabled: Optional[bool] = None,
+        acls: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Update a user's settings.
+        
+        Args:
+            user_id: The user ID
+            api_enabled: Enable/disable API access
+            acls: List of permissions
+            
+        Returns:
+            Updated user information
+        """
+        data = {}
+        
+        if api_enabled is not None:
+            data["api_enabled"] = api_enabled
+        if acls is not None:
+            data["acls"] = acls
+        
+        result = await self._make_request("PATCH", f"/users/{user_id}", data=data)
+        return result.get("user", {})
+    
+    async def delete_user(self, user_id: str) -> None:
+        """
+        Delete a user.
+        
+        Args:
+            user_id: The user ID to delete
+        """
+        await self._make_request("DELETE", f"/users/{user_id}")
+    
+    # User IP Whitelist Management
+    async def get_user_ip_whitelist(self, user_id: str) -> List[Dict[str, Any]]:
+        """
+        Get IP whitelist for a user.
+        
+        Args:
+            user_id: The user ID
+            
+        Returns:
+            List of IP whitelist entries
+        """
+        result = await self._make_request("GET", f"/users/{user_id}/ip-whitelist")
+        return result.get("ip_whitelist", [])
+    
+    async def get_user_ip_whitelist_entry(
+        self,
+        user_id: str,
+        subnet: str,
+        subnet_size: int
+    ) -> Dict[str, Any]:
+        """
+        Get a specific IP whitelist entry for a user.
+        
+        Args:
+            user_id: The user ID
+            subnet: The IP address or subnet
+            subnet_size: The subnet size
+            
+        Returns:
+            IP whitelist entry details
+        """
+        params = {"subnet": subnet, "subnet_size": subnet_size}
+        result = await self._make_request("GET", f"/users/{user_id}/ip-whitelist/entry", params=params)
+        return result.get("ip_whitelist_entry", {})
+    
+    async def add_user_ip_whitelist_entry(
+        self,
+        user_id: str,
+        subnet: str,
+        subnet_size: int
+    ) -> None:
+        """
+        Add an IP address or subnet to a user's whitelist.
+        
+        Args:
+            user_id: The user ID
+            subnet: The IP address or subnet to add
+            subnet_size: The subnet size
+        """
+        data = {
+            "subnet": subnet,
+            "subnet_size": subnet_size
+        }
+        await self._make_request("POST", f"/users/{user_id}/ip-whitelist", data=data)
+    
+    async def remove_user_ip_whitelist_entry(
+        self,
+        user_id: str,
+        subnet: str,
+        subnet_size: int
+    ) -> None:
+        """
+        Remove an IP address or subnet from a user's whitelist.
+        
+        Args:
+            user_id: The user ID
+            subnet: The IP address or subnet to remove
+            subnet_size: The subnet size
+        """
+        data = {
+            "subnet": subnet,
+            "subnet_size": subnet_size
+        }
+        await self._make_request("DELETE", f"/users/{user_id}/ip-whitelist", data=data)
 
 
 def create_mcp_server(api_key: Optional[str] = None) -> Server:
