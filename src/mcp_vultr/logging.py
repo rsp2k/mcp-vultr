@@ -105,7 +105,6 @@ def log_api_request(
         **kwargs: Additional context
     """
     log_data: Dict[str, Any] = {
-        "event": "api_request",
         "method": method,
         "url": url,
         **kwargs
@@ -141,7 +140,6 @@ def log_mcp_tool_call(
         **kwargs: Additional context
     """
     log_data: Dict[str, Any] = {
-        "event": "mcp_tool_call",
         "tool_name": tool_name,
         "success": success,
         **kwargs

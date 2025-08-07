@@ -6,6 +6,7 @@ transient failures in API calls with exponential backoff.
 """
 
 import asyncio
+import logging
 import random
 from typing import Any, Callable
 
@@ -69,8 +70,8 @@ def create_retry_decorator(
         stop=stop_after_attempt(max_attempts),
         wait=wait_strategy,
         retry=retry_if_exception_type(exception_types),
-        before_sleep=before_sleep_log(logger, log_level="WARNING"),
-        after=after_log(logger, log_level="INFO")
+        before_sleep=before_sleep_log(logger, log_level=logging.WARNING),
+        after=after_log(logger, log_level=logging.INFO)
     )
 
 
