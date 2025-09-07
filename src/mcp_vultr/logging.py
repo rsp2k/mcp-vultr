@@ -7,24 +7,22 @@ observability and debugging capabilities.
 
 import logging
 import sys
-from typing import Any, Dict
+from typing import Any
 
 import structlog
 
 
 def configure_logging(
-    level: str = "INFO",
-    json_logs: bool = False,
-    service_name: str = "mcp-vultr"
+    level: str = "INFO", json_logs: bool = False, service_name: str = "mcp-vultr"
 ) -> structlog.BoundLogger:
     """
     Configure structured logging for the application.
-    
+
     Args:
         level: Logging level (DEBUG, INFO, WARNING, ERROR)
         json_logs: Whether to output JSON formatted logs
         service_name: Service name to include in logs
-        
+
     Returns:
         Configured structlog logger
     """
@@ -44,14 +42,11 @@ def configure_logging(
     ]
 
     if json_logs:
-        processors.extend([
-            structlog.processors.dict_tracebacks,
-            structlog.processors.JSONRenderer()
-        ])
+        processors.extend(
+            [structlog.processors.dict_tracebacks, structlog.processors.JSONRenderer()]
+        )
     else:
-        processors.extend([
-            structlog.dev.ConsoleRenderer(colors=True)
-        ])
+        processors.extend([structlog.dev.ConsoleRenderer(colors=True)])
 
     structlog.configure(
         processors=processors,
@@ -72,10 +67,10 @@ def configure_logging(
 def get_logger(name: str = None) -> structlog.BoundLogger:
     """
     Get a logger instance with optional name context.
-    
+
     Args:
         name: Logger name (typically __name__)
-        
+
     Returns:
         Configured logger instance
     """
@@ -91,11 +86,11 @@ def log_api_request(
     url: str,
     status_code: int = None,
     response_time: float = None,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> None:
     """
     Log API request details.
-    
+
     Args:
         logger: Logger instance
         method: HTTP method
@@ -104,11 +99,7 @@ def log_api_request(
         response_time: Request duration in seconds
         **kwargs: Additional context
     """
-    log_data: Dict[str, Any] = {
-        "method": method,
-        "url": url,
-        **kwargs
-    }
+    log_data: dict[str, Any] = {"method": method, "url": url, **kwargs}
 
     if status_code is not None:
         log_data["status_code"] = status_code
@@ -127,11 +118,11 @@ def log_mcp_tool_call(
     tool_name: str,
     success: bool = True,
     duration: float = None,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> None:
     """
     Log MCP tool execution.
-    
+
     Args:
         logger: Logger instance
         tool_name: Name of the MCP tool
@@ -139,11 +130,7 @@ def log_mcp_tool_call(
         duration: Execution time in seconds
         **kwargs: Additional context
     """
-    log_data: Dict[str, Any] = {
-        "tool_name": tool_name,
-        "success": success,
-        **kwargs
-    }
+    log_data: dict[str, Any] = {"tool_name": tool_name, "success": success, **kwargs}
 
     if duration is not None:
         log_data["duration"] = duration

@@ -1,12 +1,11 @@
 """
 Vultr DNS FastMCP Server Implementation.
 
-This module contains the FastMCP server implementation for managing DNS records 
+This module contains the FastMCP server implementation for managing DNS records
 through the Vultr API using the FastMCP framework.
 """
 
 import os
-from typing import Optional
 
 from fastmcp import FastMCP
 
@@ -40,13 +39,13 @@ from .users import create_users_mcp
 from .vpcs import create_vpcs_mcp
 
 
-def create_vultr_mcp_server(api_key: Optional[str] = None) -> FastMCP:
+def create_vultr_mcp_server(api_key: str | None = None) -> FastMCP:
     """
     Create a FastMCP server for Vultr DNS management.
-    
+
     Args:
         api_key: Vultr API key. If not provided, will read from VULTR_API_KEY env var.
-        
+
     Returns:
         Configured FastMCP server instance
     """
@@ -149,10 +148,10 @@ def create_vultr_mcp_server(api_key: Optional[str] = None) -> FastMCP:
     return mcp
 
 
-def run_server(api_key: Optional[str] = None) -> None:
+def run_server(api_key: str | None = None) -> None:
     """
     Create and run a Vultr DNS FastMCP server.
-    
+
     Args:
         api_key: Vultr API key. If not provided, will read from VULTR_API_KEY env var.
     """

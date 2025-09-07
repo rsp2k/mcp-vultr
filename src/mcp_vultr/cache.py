@@ -8,7 +8,7 @@ and improve performance for frequently accessed data.
 import hashlib
 import json
 from functools import wraps
-from typing import Any, Dict, Optional
+from typing import Any
 
 from cachetools import TTLCache
 
@@ -27,11 +27,11 @@ class CacheManager:
         max_size: int = 1000,
         default_ttl: int = 300,  # 5 minutes
         domain_ttl: int = 3600,  # 1 hour for domains
-        record_ttl: int = 300,   # 5 minutes for records
+        record_ttl: int = 300,  # 5 minutes for records
     ):
         """
         Initialize cache manager.
-        
+
         Args:
             max_size: Maximum number of items in cache
             default_ttl: Default TTL in seconds
@@ -49,30 +49,21 @@ class CacheManager:
         self.general_cache = TTLCache(maxsize=max_size // 4, ttl=default_ttl)
 
         # Track cache statistics
-        self.stats = {
-            'hits': 0,
-            'misses': 0,
-            'evictions': 0,
-            'sets': 0
-        }
+        self.stats = {"hits": 0, "misses": 0, "evictions": 0, "sets": 0}
 
-    def _generate_key(self, method: str, endpoint: str, params: Dict = None) -> str:
+    def _generate_key(self, method: str, endpoint: str, params: dict = None) -> str:
         """
         Generate a cache key from method, endpoint and parameters.
-        
+
         Args:
             method: HTTP method
             endpoint: API endpoint
             params: Query parameters
-            
+
         Returns:
             Hash-based cache key
         """
-        key_data = {
-            'method': method,
-            'endpoint': endpoint,
-            'params': params or {}
-        }
+        key_data = {"method": method, "endpoint": endpoint, "params": params or {}}
 
         # Create a stable hash of the key data
         key_string = json.dumps(key_data, sort_keys=True)
@@ -81,39 +72,34 @@ class CacheManager:
     def _get_cache(self, endpoint: str) -> TTLCache:
         """
         Get the appropriate cache for an endpoint.
-        
+
         Args:
             endpoint: API endpoint
-            
+
         Returns:
             Appropriate cache instance
         """
-        if '/domains' in endpoint and '/records' not in endpoint:
+        if "/domains" in endpoint and "/records" not in endpoint:
             return self.domain_cache
-        elif '/records' in endpoint:
+        elif "/records" in endpoint:
             return self.record_cache
         else:
             return self.general_cache
 
-    def get(
-        self,
-        method: str,
-        endpoint: str,
-        params: Dict = None
-    ) -> Optional[Any]:
+    def get(self, method: str, endpoint: str, params: dict = None) -> Any | None:
         """
         Get cached response.
-        
+
         Args:
             method: HTTP method
             endpoint: API endpoint
             params: Query parameters
-            
+
         Returns:
             Cached response or None if not found
         """
         # Only cache GET requests
-        if method.upper() != 'GET':
+        if method.upper() != "GET":
             return None
 
         key = self._generate_key(method, endpoint, params)
@@ -122,31 +108,27 @@ class CacheManager:
         try:
             result = cache.get(key)
             if result is not None:
-                self.stats['hits'] += 1
+                self.stats["hits"] += 1
                 logger.debug(
                     "Cache hit",
                     endpoint=endpoint,
                     key=key[:8],
-                    cache_type=type(cache).__name__
+                    cache_type=type(cache).__name__,
                 )
                 return result
             else:
-                self.stats['misses'] += 1
+                self.stats["misses"] += 1
                 return None
         except Exception as e:
             logger.warning("Cache get failed", key=key, error=str(e))
             return None
 
     def set(
-        self,
-        method: str,
-        endpoint: str,
-        params: Dict = None,
-        value: Any = None
+        self, method: str, endpoint: str, params: dict = None, value: Any = None
     ) -> None:
         """
         Cache a response.
-        
+
         Args:
             method: HTTP method
             endpoint: API endpoint
@@ -154,7 +136,7 @@ class CacheManager:
             value: Response to cache
         """
         # Only cache GET requests
-        if method.upper() != 'GET' or value is None:
+        if method.upper() != "GET" or value is None:
             return
 
         key = self._generate_key(method, endpoint, params)
@@ -162,12 +144,12 @@ class CacheManager:
 
         try:
             cache[key] = value
-            self.stats['sets'] += 1
+            self.stats["sets"] += 1
             logger.debug(
                 "Cache set",
                 endpoint=endpoint,
                 key=key[:8],
-                cache_type=type(cache).__name__
+                cache_type=type(cache).__name__,
             )
         except Exception as e:
             logger.warning("Cache set failed", key=key, error=str(e))
@@ -175,7 +157,7 @@ class CacheManager:
     def invalidate(self, pattern: str = None) -> None:
         """
         Invalidate cache entries matching pattern.
-        
+
         Args:
             pattern: Pattern to match (endpoint substring)
         """
@@ -187,29 +169,30 @@ class CacheManager:
             logger.info("All caches cleared")
         else:
             # Clear specific entries (simplified - would need more sophisticated matching)
-            if 'domain' in pattern.lower():
+            if "domain" in pattern.lower():
                 self.domain_cache.clear()
                 logger.info("Domain cache cleared", pattern=pattern)
-            elif 'record' in pattern.lower():
+            elif "record" in pattern.lower():
                 self.record_cache.clear()
                 logger.info("Record cache cleared", pattern=pattern)
             else:
                 self.general_cache.clear()
                 logger.info("General cache cleared", pattern=pattern)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """
         Get cache statistics.
-        
+
         Returns:
             Dictionary with cache statistics
         """
         return {
             **self.stats,
-            'domain_cache_size': len(self.domain_cache),
-            'record_cache_size': len(self.record_cache),
-            'general_cache_size': len(self.general_cache),
-            'hit_rate': self.stats['hits'] / max(1, self.stats['hits'] + self.stats['misses'])
+            "domain_cache_size": len(self.domain_cache),
+            "record_cache_size": len(self.record_cache),
+            "general_cache_size": len(self.general_cache),
+            "hit_rate": self.stats["hits"]
+            / max(1, self.stats["hits"] + self.stats["misses"]),
         }
 
 
@@ -218,18 +201,16 @@ _cache_manager = CacheManager()
 
 
 def cached_request(
-    cache_manager: CacheManager = None,
-    ttl: int = None,
-    cache_key_func: callable = None
+    cache_manager: CacheManager = None, ttl: int = None, cache_key_func: callable = None
 ):
     """
     Decorator for caching API requests.
-    
+
     Args:
         cache_manager: Cache manager instance
         ttl: Custom TTL for this request
         cache_key_func: Custom function to generate cache key
-        
+
     Returns:
         Decorated function
     """
@@ -241,9 +222,9 @@ def cached_request(
         async def wrapper(*args, **kwargs):
             # Extract method and endpoint from args/kwargs
             # This assumes the decorated function has method and endpoint parameters
-            method = kwargs.get('method') or (args[1] if len(args) > 1 else 'GET')
-            endpoint = kwargs.get('endpoint') or (args[2] if len(args) > 2 else '')
-            params = kwargs.get('params')
+            method = kwargs.get("method") or (args[1] if len(args) > 1 else "GET")
+            endpoint = kwargs.get("endpoint") or (args[2] if len(args) > 2 else "")
+            params = kwargs.get("params")
 
             # Check cache first
             cached_result = cache_manager.get(method, endpoint, params)
@@ -259,6 +240,7 @@ def cached_request(
             return result
 
         return wrapper
+
     return decorator
 
 
@@ -272,6 +254,6 @@ def clear_cache(pattern: str = None) -> None:
     _cache_manager.invalidate(pattern)
 
 
-def get_cache_stats() -> Dict[str, Any]:
+def get_cache_stats() -> dict[str, Any]:
     """Get cache statistics."""
     return _cache_manager.get_stats()

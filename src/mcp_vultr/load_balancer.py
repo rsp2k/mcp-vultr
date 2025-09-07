@@ -4,7 +4,8 @@ Vultr Load Balancer FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr Load Balancers.
 """
 
-from typing import Any, Dict, List, Optional
+import builtins
+from typing import Any
 
 from fastmcp import FastMCP
 
@@ -12,10 +13,10 @@ from fastmcp import FastMCP
 def create_load_balancer_mcp(vultr_client) -> FastMCP:
     """
     Create a FastMCP instance for Vultr Load Balancer management.
-    
+
     Args:
         vultr_client: VultrDNSServer instance
-        
+
     Returns:
         Configured FastMCP instance with load balancer management tools
     """
@@ -24,21 +25,19 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
     # Helper function to check if a string looks like a UUID
     def is_uuid_format(s: str) -> bool:
         """Check if a string looks like a UUID."""
-        if len(s) == 36 and s.count('-') == 4:
-            return True
-        return False
+        return bool(len(s) == 36 and s.count("-") == 4)
 
     # Helper function to get load balancer ID from label or UUID
     async def get_load_balancer_id(identifier: str) -> str:
         """
         Get the load balancer ID from a label or UUID.
-        
+
         Args:
             identifier: Load balancer label or UUID
-            
+
         Returns:
             The load balancer ID (UUID)
-            
+
         Raises:
             ValueError: If the load balancer is not found
         """
@@ -56,14 +55,14 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
 
     # Load Balancer resources
     @mcp.resource("load_balancers://list")
-    async def list_load_balancers_resource() -> List[Dict[str, Any]]:
+    async def list_load_balancers_resource() -> list[dict[str, Any]]:
         """List all load balancers in your Vultr account."""
         return await vultr_client.list_load_balancers()
 
     @mcp.resource("load_balancers://{load_balancer_id}")
-    async def get_load_balancer_resource(load_balancer_id: str) -> Dict[str, Any]:
+    async def get_load_balancer_resource(load_balancer_id: str) -> dict[str, Any]:
         """Get information about a specific load balancer.
-        
+
         Args:
             load_balancer_id: The load balancer ID or label
         """
@@ -72,9 +71,9 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
 
     # Load Balancer tools
     @mcp.tool
-    async def list() -> List[Dict[str, Any]]:
+    async def list() -> list[dict[str, Any]]:
         """List all load balancers in your Vultr account.
-        
+
         Returns:
             List of load balancer objects with details including:
             - id: Load balancer ID
@@ -95,12 +94,12 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
         return await vultr_client.list_load_balancers()
 
     @mcp.tool
-    async def get(load_balancer_id: str) -> Dict[str, Any]:
+    async def get(load_balancer_id: str) -> dict[str, Any]:
         """Get detailed information about a specific load balancer.
-        
+
         Args:
             load_balancer_id: The load balancer ID or label (e.g., "web-lb", "api-load-balancer", or UUID)
-            
+
         Returns:
             Detailed load balancer information
         """
@@ -116,20 +115,20 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
         http3: bool = False,
         proxy_protocol: bool = False,
         timeout: int = 600,
-        label: Optional[str] = None,
+        label: str | None = None,
         nodes: int = 1,
-        health_check: Optional[Dict[str, Any]] = None,
-        forwarding_rules: Optional[List[Dict[str, Any]]] = None,
-        ssl: Optional[Dict[str, str]] = None,
-        firewall_rules: Optional[List[Dict[str, Any]]] = None,
-        auto_ssl: Optional[Dict[str, str]] = None,
-        global_regions: Optional[List[str]] = None,
-        vpc: Optional[str] = None,
-        private_network: Optional[str] = None,
-        sticky_session: Optional[Dict[str, str]] = None
-    ) -> Dict[str, Any]:
+        health_check: dict[str, Any] | None = None,
+        forwarding_rules: builtins.list[dict[str, Any]] | None = None,
+        ssl: dict[str, str] | None = None,
+        firewall_rules: builtins.list[dict[str, Any]] | None = None,
+        auto_ssl: dict[str, str] | None = None,
+        global_regions: builtins.list[str] | None = None,
+        vpc: str | None = None,
+        private_network: str | None = None,
+        sticky_session: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """Create a new load balancer.
-        
+
         Args:
             region: Region code (e.g., 'ewr', 'lax')
             balancing_algorithm: Algorithm to use ('roundrobin' or 'leastconn')
@@ -168,7 +167,7 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
             vpc: VPC ID to attach to
             private_network: Private network ID (legacy)
             sticky_session: Sticky session configuration with cookie_name
-            
+
         Returns:
             Created load balancer information
         """
@@ -190,27 +189,27 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
             global_regions=global_regions,
             vpc=vpc,
             private_network=private_network,
-            sticky_session=sticky_session
+            sticky_session=sticky_session,
         )
 
     @mcp.tool
     async def update(
         load_balancer_id: str,
-        ssl: Optional[Dict[str, str]] = None,
-        sticky_session: Optional[Dict[str, str]] = None,
-        forwarding_rules: Optional[List[Dict[str, Any]]] = None,
-        health_check: Optional[Dict[str, Any]] = None,
-        proxy_protocol: Optional[bool] = None,
-        timeout: Optional[int] = None,
-        ssl_redirect: Optional[bool] = None,
-        http2: Optional[bool] = None,
-        http3: Optional[bool] = None,
-        nodes: Optional[int] = None,
-        balancing_algorithm: Optional[str] = None,
-        instances: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+        ssl: dict[str, str] | None = None,
+        sticky_session: dict[str, str] | None = None,
+        forwarding_rules: builtins.list[dict[str, Any]] | None = None,
+        health_check: dict[str, Any] | None = None,
+        proxy_protocol: bool | None = None,
+        timeout: int | None = None,
+        ssl_redirect: bool | None = None,
+        http2: bool | None = None,
+        http3: bool | None = None,
+        nodes: int | None = None,
+        balancing_algorithm: str | None = None,
+        instances: builtins.list[str] | None = None,
+    ) -> dict[str, Any]:
         """Update an existing load balancer.
-        
+
         Args:
             load_balancer_id: The load balancer ID or label
             ssl: SSL configuration dict
@@ -225,7 +224,7 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
             nodes: Number of backend nodes
             balancing_algorithm: Balancing algorithm
             instances: List of instance IDs to attach
-            
+
         Returns:
             Updated load balancer information
         """
@@ -243,57 +242,68 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
             http3=http3,
             nodes=nodes,
             balancing_algorithm=balancing_algorithm,
-            instances=instances
+            instances=instances,
         )
 
     @mcp.tool
-    async def delete(load_balancer_id: str) -> Dict[str, str]:
+    async def delete(load_balancer_id: str) -> dict[str, str]:
         """Delete a load balancer.
-        
+
         Args:
             load_balancer_id: The load balancer ID or label (e.g., "web-lb", "api-load-balancer", or UUID)
-            
+
         Returns:
             Status message confirming deletion
         """
         actual_id = await get_load_balancer_id(load_balancer_id)
         await vultr_client.delete_load_balancer(actual_id)
-        return {"status": "success", "message": f"Load balancer {load_balancer_id} deleted successfully"}
+        return {
+            "status": "success",
+            "message": f"Load balancer {load_balancer_id} deleted successfully",
+        }
 
     # SSL Management
     @mcp.tool
-    async def delete_ssl(load_balancer_id: str) -> Dict[str, str]:
+    async def delete_ssl(load_balancer_id: str) -> dict[str, str]:
         """Delete SSL certificate from a load balancer.
-        
+
         Args:
             load_balancer_id: The load balancer ID or label (e.g., "web-lb", "api-load-balancer", or UUID)
-            
+
         Returns:
             Status message confirming SSL deletion
         """
         actual_id = await get_load_balancer_id(load_balancer_id)
         await vultr_client.delete_load_balancer_ssl(actual_id)
-        return {"status": "success", "message": f"SSL certificate deleted from load balancer {load_balancer_id}"}
+        return {
+            "status": "success",
+            "message": f"SSL certificate deleted from load balancer {load_balancer_id}",
+        }
 
     @mcp.tool
-    async def disable_auto_ssl(load_balancer_id: str) -> Dict[str, str]:
+    async def disable_auto_ssl(load_balancer_id: str) -> dict[str, str]:
         """Disable Auto SSL for a load balancer.
-        
+
         Args:
             load_balancer_id: The load balancer ID or label (e.g., "web-lb", "api-load-balancer", or UUID)
-            
+
         Returns:
             Status message confirming Auto SSL disabled
         """
         actual_id = await get_load_balancer_id(load_balancer_id)
         await vultr_client.disable_load_balancer_auto_ssl(actual_id)
-        return {"status": "success", "message": f"Auto SSL disabled for load balancer {load_balancer_id}"}
+        return {
+            "status": "success",
+            "message": f"Auto SSL disabled for load balancer {load_balancer_id}",
+        }
 
     # Forwarding Rules Management
     @mcp.resource("load_balancers://{load_balancer_id}/forwarding_rules")
-    async def list_forwarding_rules_resource(load_balancer_id: str) -> List[Dict[str, Any]]:
+    async def list_forwarding_rules_resource(
+        load_balancer_id: str,
+    ) -> builtins.list[dict[str, Any]]:
         """List forwarding rules for a load balancer.
-        
+
         Args:
             load_balancer_id: The load balancer ID or label
         """
@@ -301,12 +311,12 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
         return await vultr_client.list_load_balancer_forwarding_rules(actual_id)
 
     @mcp.tool
-    async def list_forwarding_rules(load_balancer_id: str) -> List[Dict[str, Any]]:
+    async def list_forwarding_rules(load_balancer_id: str) -> builtins.list[dict[str, Any]]:
         """List forwarding rules for a load balancer.
-        
+
         Args:
             load_balancer_id: The load balancer ID or label (e.g., "web-lb", "api-load-balancer", or UUID)
-            
+
         Returns:
             List of forwarding rules
         """
@@ -319,17 +329,17 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
         frontend_protocol: str,
         frontend_port: int,
         backend_protocol: str,
-        backend_port: int
-    ) -> Dict[str, Any]:
+        backend_port: int,
+    ) -> dict[str, Any]:
         """Create a forwarding rule for a load balancer.
-        
+
         Args:
             load_balancer_id: The load balancer ID or label (e.g., "web-lb", "api-load-balancer", or UUID)
             frontend_protocol: Frontend protocol ('http', 'https', 'tcp')
             frontend_port: Frontend port number
             backend_protocol: Backend protocol ('http', 'https', 'tcp')
             backend_port: Backend port number
-            
+
         Returns:
             Created forwarding rule information
         """
@@ -339,43 +349,56 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
             frontend_protocol=frontend_protocol,
             frontend_port=frontend_port,
             backend_protocol=backend_protocol,
-            backend_port=backend_port
+            backend_port=backend_port,
         )
 
     @mcp.tool
-    async def get_forwarding_rule(load_balancer_id: str, forwarding_rule_id: str) -> Dict[str, Any]:
+    async def get_forwarding_rule(
+        load_balancer_id: str, forwarding_rule_id: str
+    ) -> dict[str, Any]:
         """Get details of a specific forwarding rule.
-        
+
         Args:
             load_balancer_id: The load balancer ID or label (e.g., "web-lb", "api-load-balancer", or UUID)
             forwarding_rule_id: The forwarding rule ID
-            
+
         Returns:
             Forwarding rule details
         """
         actual_id = await get_load_balancer_id(load_balancer_id)
-        return await vultr_client.get_load_balancer_forwarding_rule(actual_id, forwarding_rule_id)
+        return await vultr_client.get_load_balancer_forwarding_rule(
+            actual_id, forwarding_rule_id
+        )
 
     @mcp.tool
-    async def delete_forwarding_rule(load_balancer_id: str, forwarding_rule_id: str) -> Dict[str, str]:
+    async def delete_forwarding_rule(
+        load_balancer_id: str, forwarding_rule_id: str
+    ) -> dict[str, str]:
         """Delete a forwarding rule from a load balancer.
-        
+
         Args:
             load_balancer_id: The load balancer ID or label (e.g., "web-lb", "api-load-balancer", or UUID)
             forwarding_rule_id: The forwarding rule ID
-            
+
         Returns:
             Status message confirming deletion
         """
         actual_id = await get_load_balancer_id(load_balancer_id)
-        await vultr_client.delete_load_balancer_forwarding_rule(actual_id, forwarding_rule_id)
-        return {"status": "success", "message": f"Forwarding rule {forwarding_rule_id} deleted successfully"}
+        await vultr_client.delete_load_balancer_forwarding_rule(
+            actual_id, forwarding_rule_id
+        )
+        return {
+            "status": "success",
+            "message": f"Forwarding rule {forwarding_rule_id} deleted successfully",
+        }
 
     # Firewall Rules Management
     @mcp.resource("load_balancers://{load_balancer_id}/firewall_rules")
-    async def list_firewall_rules_resource(load_balancer_id: str) -> List[Dict[str, Any]]:
+    async def list_firewall_rules_resource(
+        load_balancer_id: str,
+    ) -> builtins.list[dict[str, Any]]:
         """List firewall rules for a load balancer.
-        
+
         Args:
             load_balancer_id: The load balancer ID or label
         """
@@ -383,12 +406,12 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
         return await vultr_client.list_load_balancer_firewall_rules(actual_id)
 
     @mcp.tool
-    async def list_firewall_rules(load_balancer_id: str) -> List[Dict[str, Any]]:
+    async def list_firewall_rules(load_balancer_id: str) -> builtins.list[dict[str, Any]]:
         """List firewall rules for a load balancer.
-        
+
         Args:
             load_balancer_id: The load balancer ID or label (e.g., "web-lb", "api-load-balancer", or UUID)
-            
+
         Returns:
             List of firewall rules
         """
@@ -396,32 +419,36 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
         return await vultr_client.list_load_balancer_firewall_rules(actual_id)
 
     @mcp.tool
-    async def get_firewall_rule(load_balancer_id: str, firewall_rule_id: str) -> Dict[str, Any]:
+    async def get_firewall_rule(
+        load_balancer_id: str, firewall_rule_id: str
+    ) -> dict[str, Any]:
         """Get details of a specific firewall rule.
-        
+
         Args:
             load_balancer_id: The load balancer ID or label (e.g., "web-lb", "api-load-balancer", or UUID)
             firewall_rule_id: The firewall rule ID
-            
+
         Returns:
             Firewall rule details
         """
         actual_id = await get_load_balancer_id(load_balancer_id)
-        return await vultr_client.get_load_balancer_firewall_rule(actual_id, firewall_rule_id)
+        return await vultr_client.get_load_balancer_firewall_rule(
+            actual_id, firewall_rule_id
+        )
 
     # Helper tools for load balancer configuration
     @mcp.tool
     async def configure_basic_web_lb(
         region: str,
         label: str,
-        backend_instances: List[str],
+        backend_instances: builtins.list[str],
         enable_ssl: bool = True,
         ssl_redirect: bool = True,
-        domain_zone: Optional[str] = None,
-        domain_sub: Optional[str] = None
-    ) -> Dict[str, Any]:
+        domain_zone: str | None = None,
+        domain_sub: str | None = None,
+    ) -> dict[str, Any]:
         """Configure a basic web load balancer with standard HTTP/HTTPS rules.
-        
+
         Args:
             region: Region code (e.g., 'ewr', 'lax')
             label: Label for the load balancer
@@ -430,7 +457,7 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
             ssl_redirect: Redirect HTTP to HTTPS
             domain_zone: Domain zone for Auto SSL
             domain_sub: Subdomain for Auto SSL
-            
+
         Returns:
             Created and configured load balancer information
         """
@@ -440,17 +467,19 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
                 "frontend_protocol": "http",
                 "frontend_port": 80,
                 "backend_protocol": "http",
-                "backend_port": 80
+                "backend_port": 80,
             }
         ]
 
         if enable_ssl:
-            forwarding_rules.append({
-                "frontend_protocol": "https",
-                "frontend_port": 443,
-                "backend_protocol": "http",
-                "backend_port": 80
-            })
+            forwarding_rules.append(
+                {
+                    "frontend_protocol": "https",
+                    "frontend_port": 443,
+                    "backend_protocol": "http",
+                    "backend_port": 80,
+                }
+            )
 
         # Basic health check configuration
         health_check = {
@@ -460,32 +489,19 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
             "check_interval": 15,
             "response_timeout": 5,
             "unhealthy_threshold": 3,
-            "healthy_threshold": 2
+            "healthy_threshold": 2,
         }
 
         # Basic firewall rules (allow HTTP/HTTPS from anywhere)
-        firewall_rules = [
-            {
-                "port": 80,
-                "source": "0.0.0.0/0",
-                "ip_type": "v4"
-            }
-        ]
+        firewall_rules = [{"port": 80, "source": "0.0.0.0/0", "ip_type": "v4"}]
 
         if enable_ssl:
-            firewall_rules.append({
-                "port": 443,
-                "source": "0.0.0.0/0",
-                "ip_type": "v4"
-            })
+            firewall_rules.append({"port": 443, "source": "0.0.0.0/0", "ip_type": "v4"})
 
         # Auto SSL configuration if domain provided
         auto_ssl = None
         if enable_ssl and domain_zone:
-            auto_ssl = {
-                "domain_zone": domain_zone,
-                "domain_sub": domain_sub or "www"
-            }
+            auto_ssl = {"domain_zone": domain_zone, "domain_sub": domain_sub or "www"}
 
         # Create load balancer
         load_balancer = await vultr_client.create_load_balancer(
@@ -497,22 +513,22 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
             health_check=health_check,
             firewall_rules=firewall_rules,
             auto_ssl=auto_ssl,
-            instances=backend_instances
+            instances=backend_instances,
         )
 
         return {
             "load_balancer": load_balancer,
             "configuration": "basic_web",
-            "message": f"Basic web load balancer '{label}' configured successfully"
+            "message": f"Basic web load balancer '{label}' configured successfully",
         }
 
     @mcp.tool
-    async def get_health_status(load_balancer_id: str) -> Dict[str, Any]:
+    async def get_health_status(load_balancer_id: str) -> dict[str, Any]:
         """Get health status and monitoring information for a load balancer.
-        
+
         Args:
             load_balancer_id: The load balancer ID or label (e.g., "web-lb", "api-load-balancer", or UUID)
-            
+
         Returns:
             Health status and configuration information
         """
@@ -530,18 +546,18 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
             "has_ssl": lb_details.get("has_ssl", False),
             "ipv4": lb_details.get("ipv4"),
             "ipv6": lb_details.get("ipv6"),
-            "region": lb_details.get("region")
+            "region": lb_details.get("region"),
         }
 
         return health_info
 
     @mcp.tool
-    async def get_configuration_summary(load_balancer_id: str) -> Dict[str, Any]:
+    async def get_configuration_summary(load_balancer_id: str) -> dict[str, Any]:
         """Get a comprehensive configuration summary for a load balancer.
-        
+
         Args:
             load_balancer_id: The load balancer ID or label (e.g., "web-lb", "api-load-balancer", or UUID)
-            
+
         Returns:
             Detailed configuration summary
         """
@@ -556,31 +572,29 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
                 "label": lb_details.get("label"),
                 "status": lb_details.get("status"),
                 "region": lb_details.get("region"),
-                "date_created": lb_details.get("date_created")
+                "date_created": lb_details.get("date_created"),
             },
             "network": {
                 "ipv4": lb_details.get("ipv4"),
                 "ipv6": lb_details.get("ipv6"),
                 "vpc": generic_info.get("vpc"),
-                "private_network": generic_info.get("private_network")
+                "private_network": generic_info.get("private_network"),
             },
             "configuration": {
                 "balancing_algorithm": generic_info.get("balancing_algorithm"),
                 "ssl_redirect": generic_info.get("ssl_redirect"),
                 "proxy_protocol": generic_info.get("proxy_protocol"),
                 "timeout": generic_info.get("timeout"),
-                "sticky_sessions": generic_info.get("sticky_sessions")
+                "sticky_sessions": generic_info.get("sticky_sessions"),
             },
-            "ssl": {
-                "has_ssl": lb_details.get("has_ssl", False)
-            },
+            "ssl": {"has_ssl": lb_details.get("has_ssl", False)},
             "health_check": lb_details.get("health_check", {}),
             "forwarding_rules": lb_details.get("forward_rules", []),
             "firewall_rules": lb_details.get("firewall_rules", []),
             "backend": {
                 "nodes": lb_details.get("nodes"),
-                "instances": lb_details.get("instances", [])
-            }
+                "instances": lb_details.get("instances", []),
+            },
         }
 
         return summary

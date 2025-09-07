@@ -4,7 +4,7 @@ Vultr Snapshots FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr snapshots.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastmcp import FastMCP
 
@@ -12,10 +12,10 @@ from fastmcp import FastMCP
 def create_snapshots_mcp(vultr_client) -> FastMCP:
     """
     Create a FastMCP instance for Vultr snapshots management.
-    
+
     Args:
         vultr_client: VultrDNSServer instance
-        
+
     Returns:
         Configured FastMCP instance with snapshot management tools
     """
@@ -24,21 +24,19 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
     # Helper function to check if a string looks like a UUID
     def is_uuid_format(s: str) -> bool:
         """Check if a string looks like a UUID."""
-        if len(s) == 36 and s.count('-') == 4:
-            return True
-        return False
+        return bool(len(s) == 36 and s.count("-") == 4)
 
     # Helper function to get snapshot ID from description
     async def get_snapshot_id(identifier: str) -> str:
         """
         Get the snapshot ID from a description or UUID.
-        
+
         Args:
             identifier: Snapshot description or UUID
-            
+
         Returns:
             The snapshot ID (UUID)
-            
+
         Raises:
             ValueError: If the snapshot is not found
         """
@@ -56,14 +54,14 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
 
     # Snapshot resources
     @mcp.resource("snapshots://list")
-    async def list_snapshots_resource() -> List[Dict[str, Any]]:
+    async def list_snapshots_resource() -> list[dict[str, Any]]:
         """List all snapshots in your Vultr account."""
         return await vultr_client.list_snapshots()
 
     @mcp.resource("snapshots://{snapshot_id}")
-    async def get_snapshot_resource(snapshot_id: str) -> Dict[str, Any]:
+    async def get_snapshot_resource(snapshot_id: str) -> dict[str, Any]:
         """Get information about a specific snapshot.
-        
+
         Args:
             snapshot_id: The snapshot ID or description
         """
@@ -72,9 +70,9 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
 
     # Snapshot tools
     @mcp.tool
-    async def list() -> List[Dict[str, Any]]:
+    async def list() -> list[dict[str, Any]]:
         """List all snapshots in your Vultr account.
-        
+
         Returns:
             List of snapshot objects with details including:
             - id: Snapshot ID
@@ -89,12 +87,12 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
         return await vultr_client.list_snapshots()
 
     @mcp.tool
-    async def get(snapshot_id: str) -> Dict[str, Any]:
+    async def get(snapshot_id: str) -> dict[str, Any]:
         """Get information about a specific snapshot.
-        
+
         Args:
             snapshot_id: The snapshot ID or description (e.g., "backup-2024-01" or UUID)
-            
+
         Returns:
             Snapshot information including:
             - id: Snapshot ID
@@ -110,65 +108,75 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_snapshot(actual_id)
 
     @mcp.tool
-    async def create(instance_id: str, description: Optional[str] = None) -> Dict[str, Any]:
+    async def create(
+        instance_id: str, description: str | None = None
+    ) -> dict[str, Any]:
         """Create a snapshot from an instance.
-        
+
         Args:
             instance_id: The instance ID to snapshot
             description: Description for the snapshot (optional)
-            
+
         Returns:
             Created snapshot information
-            
+
         Note: Creating a snapshot may take several minutes depending on the instance size.
         The snapshot will appear with status 'pending' initially.
         """
         return await vultr_client.create_snapshot(instance_id, description)
 
     @mcp.tool
-    async def create_from_url(url: str, description: Optional[str] = None) -> Dict[str, Any]:
+    async def create_from_url(
+        url: str, description: str | None = None
+    ) -> dict[str, Any]:
         """Create a snapshot from a URL.
-        
+
         Args:
             url: The URL of the snapshot to create (must be a valid snapshot URL)
             description: Description for the snapshot (optional)
-            
+
         Returns:
             Created snapshot information
-            
+
         Note: The URL must point to a valid Vultr snapshot file.
         """
         return await vultr_client.create_snapshot_from_url(url, description)
 
     @mcp.tool
-    async def update(snapshot_id: str, description: str) -> Dict[str, str]:
+    async def update(snapshot_id: str, description: str) -> dict[str, str]:
         """Update a snapshot description.
-        
+
         Args:
             snapshot_id: The snapshot ID or description (e.g., "backup-2024-01" or UUID)
             description: New description for the snapshot
-            
+
         Returns:
             Status message confirming update
         """
         actual_id = await get_snapshot_id(snapshot_id)
         await vultr_client.update_snapshot(actual_id, description)
-        return {"status": "success", "message": f"Snapshot {snapshot_id} updated successfully"}
+        return {
+            "status": "success",
+            "message": f"Snapshot {snapshot_id} updated successfully",
+        }
 
     @mcp.tool
-    async def delete(snapshot_id: str) -> Dict[str, str]:
+    async def delete(snapshot_id: str) -> dict[str, str]:
         """Delete a snapshot.
-        
+
         Args:
             snapshot_id: The snapshot ID or description (e.g., "backup-2024-01" or UUID)
-            
+
         Returns:
             Status message confirming deletion
-            
+
         Warning: This action cannot be undone!
         """
         actual_id = await get_snapshot_id(snapshot_id)
         await vultr_client.delete_snapshot(actual_id)
-        return {"status": "success", "message": f"Snapshot {snapshot_id} deleted successfully"}
+        return {
+            "status": "success",
+            "message": f"Snapshot {snapshot_id} deleted successfully",
+        }
 
     return mcp

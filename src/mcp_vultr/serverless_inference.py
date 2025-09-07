@@ -5,7 +5,7 @@ This module contains FastMCP tools and resources for managing Vultr Serverless I
 subscriptions, including AI/ML model deployment, usage monitoring, and optimization.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 from fastmcp import FastMCP
 
@@ -13,10 +13,10 @@ from fastmcp import FastMCP
 def create_serverless_inference_mcp(vultr_client) -> FastMCP:
     """
     Create a FastMCP instance for Vultr Serverless Inference management.
-    
+
     Args:
         vultr_client: VultrDNSServer instance
-        
+
     Returns:
         Configured FastMCP instance with serverless inference management tools
     """
@@ -25,21 +25,19 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
     # Helper function to check if a string looks like a UUID
     def is_uuid_format(s: str) -> bool:
         """Check if a string looks like a UUID."""
-        if len(s) == 36 and s.count('-') == 4:
-            return True
-        return False
+        return bool(len(s) == 36 and s.count("-") == 4)
 
     # Helper function to get inference subscription ID from label or UUID
     async def get_inference_id(identifier: str) -> str:
         """
         Get the inference subscription ID from a label or UUID.
-        
+
         Args:
             identifier: Inference subscription label or UUID
-            
+
         Returns:
             The inference subscription ID (UUID)
-            
+
         Raises:
             ValueError: If the inference subscription is not found
         """
@@ -53,16 +51,18 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
             if subscription.get("label") == identifier:
                 return subscription["id"]
 
-        raise ValueError(f"Inference subscription '{identifier}' not found (searched by label)")
+        raise ValueError(
+            f"Inference subscription '{identifier}' not found (searched by label)"
+        )
 
     # Helper function to calculate usage efficiency
-    def calculate_usage_efficiency(usage_data: Dict[str, Any]) -> Dict[str, Any]:
+    def calculate_usage_efficiency(usage_data: dict[str, Any]) -> dict[str, Any]:
         """
         Calculate usage efficiency metrics for an inference subscription.
-        
+
         Args:
             usage_data: Raw usage data from the API
-            
+
         Returns:
             Calculated efficiency metrics and recommendations
         """
@@ -70,7 +70,7 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
             "efficiency_score": 0.0,
             "recommendations": [],
             "cost_optimization": [],
-            "usage_patterns": {}
+            "usage_patterns": {},
         }
 
         # Analyze chat/vector store usage
@@ -80,19 +80,31 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
             monthly_allotment = int(chat.get("monthly_allotment", "1"))
             overage = int(chat.get("overage", "0"))
 
-            utilization_rate = current_tokens / monthly_allotment if monthly_allotment > 0 else 0
+            utilization_rate = (
+                current_tokens / monthly_allotment if monthly_allotment > 0 else 0
+            )
             metrics["usage_patterns"]["chat_utilization"] = utilization_rate
 
             if utilization_rate < 0.3:
-                metrics["recommendations"].append("Consider downgrading plan - low token utilization")
-                metrics["cost_optimization"].append("Potential 30-50% cost savings with smaller plan")
+                metrics["recommendations"].append(
+                    "Consider downgrading plan - low token utilization"
+                )
+                metrics["cost_optimization"].append(
+                    "Potential 30-50% cost savings with smaller plan"
+                )
             elif utilization_rate > 0.9:
-                metrics["recommendations"].append("Consider upgrading plan - nearing token limit")
+                metrics["recommendations"].append(
+                    "Consider upgrading plan - nearing token limit"
+                )
 
             if overage > 0:
-                metrics["recommendations"].append(f"Overage detected: {overage} tokens - upgrade plan")
+                metrics["recommendations"].append(
+                    f"Overage detected: {overage} tokens - upgrade plan"
+                )
                 overage_rate = overage / current_tokens if current_tokens > 0 else 0
-                metrics["cost_optimization"].append(f"Overage costs: {overage_rate:.1%} of usage")
+                metrics["cost_optimization"].append(
+                    f"Overage costs: {overage_rate:.1%} of usage"
+                )
 
         # Analyze audio generation usage
         if "audio" in usage_data:
@@ -101,23 +113,29 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
 
             if tts_characters > 0:
                 metrics["usage_patterns"]["audio_usage"] = True
-                metrics["recommendations"].append("Monitor audio usage for cost optimization")
+                metrics["recommendations"].append(
+                    "Monitor audio usage for cost optimization"
+                )
 
         # Calculate overall efficiency score
-        chat_score = min(1.0, metrics["usage_patterns"].get("chat_utilization", 0) * 1.5)
+        chat_score = min(
+            1.0, metrics["usage_patterns"].get("chat_utilization", 0) * 1.5
+        )
         metrics["efficiency_score"] = chat_score
 
         return metrics
 
     # Helper function to suggest deployment optimizations
-    def suggest_deployment_optimizations(subscription: Dict[str, Any], usage_data: Dict[str, Any]) -> List[str]:
+    def suggest_deployment_optimizations(
+        subscription: dict[str, Any], usage_data: dict[str, Any]
+    ) -> list[str]:
         """
         Suggest deployment optimizations based on subscription and usage data.
-        
+
         Args:
             subscription: Inference subscription data
             usage_data: Usage statistics
-            
+
         Returns:
             List of optimization suggestions
         """
@@ -129,34 +147,42 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
         # Check usage patterns
         if "chat" in usage_data:
             chat = usage_data["chat"]
-            utilization = int(chat.get("current_tokens", "0")) / int(chat.get("monthly_allotment", "1"))
+            utilization = int(chat.get("current_tokens", "0")) / int(
+                chat.get("monthly_allotment", "1")
+            )
 
             if utilization < 0.1:
-                suggestions.append("Very low usage detected - consider pausing or downsizing")
+                suggestions.append(
+                    "Very low usage detected - consider pausing or downsizing"
+                )
             elif utilization > 0.95:
                 suggestions.append("Near capacity - plan upgrade recommended")
 
         # General best practices
-        suggestions.extend([
-            "Implement request caching to reduce API calls",
-            "Use batch processing for multiple inference requests",
-            "Monitor response times and adjust timeout settings",
-            "Implement error handling and retry logic",
-            "Set up usage alerts to prevent unexpected overage"
-        ])
+        suggestions.extend(
+            [
+                "Implement request caching to reduce API calls",
+                "Use batch processing for multiple inference requests",
+                "Monitor response times and adjust timeout settings",
+                "Implement error handling and retry logic",
+                "Set up usage alerts to prevent unexpected overage",
+            ]
+        )
 
         return suggestions
 
     # Serverless Inference resources
     @mcp.resource("inference://subscriptions")
-    async def list_inference_subscriptions_resource() -> List[Dict[str, Any]]:
+    async def list_inference_subscriptions_resource() -> list[dict[str, Any]]:
         """List all serverless inference subscriptions in your Vultr account."""
         return await vultr_client.list_inference_subscriptions()
 
     @mcp.resource("inference://subscription/{subscription_id}")
-    async def get_inference_subscription_resource(subscription_id: str) -> Dict[str, Any]:
+    async def get_inference_subscription_resource(
+        subscription_id: str,
+    ) -> dict[str, Any]:
         """Get information about a specific inference subscription.
-        
+
         Args:
             subscription_id: The inference subscription ID or label
         """
@@ -164,9 +190,9 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_inference_subscription(actual_id)
 
     @mcp.resource("inference://subscription/{subscription_id}/usage")
-    async def get_inference_usage_resource(subscription_id: str) -> Dict[str, Any]:
+    async def get_inference_usage_resource(subscription_id: str) -> dict[str, Any]:
         """Get usage information for a specific inference subscription.
-        
+
         Args:
             subscription_id: The inference subscription ID or label
         """
@@ -175,9 +201,9 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
 
     # Serverless Inference tools
     @mcp.tool
-    async def list_serverless_inference() -> List[Dict[str, Any]]:
+    async def list_serverless_inference() -> list[dict[str, Any]]:
         """List all serverless inference subscriptions in your Vultr account.
-        
+
         Returns:
             List of inference subscription objects with details including:
             - id: Subscription ID (UUID)
@@ -188,12 +214,12 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
         return await vultr_client.list_inference_subscriptions()
 
     @mcp.tool
-    async def get_serverless_inference(subscription_id: str) -> Dict[str, Any]:
+    async def get_serverless_inference(subscription_id: str) -> dict[str, Any]:
         """Get detailed information about a specific inference subscription.
-        
+
         Args:
             subscription_id: The inference subscription ID or label (e.g., "my-ai-model", or UUID)
-            
+
         Returns:
             Detailed inference subscription information including API key and metadata
         """
@@ -201,25 +227,27 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_inference_subscription(actual_id)
 
     @mcp.tool
-    async def create_serverless_inference(label: str) -> Dict[str, Any]:
+    async def create_serverless_inference(label: str) -> dict[str, Any]:
         """Create a new serverless inference subscription.
-        
+
         Args:
             label: A descriptive label for the inference subscription (e.g., "production-chatbot", "dev-testing")
-            
+
         Returns:
             Created inference subscription with ID, API key, and configuration details
         """
         return await vultr_client.create_inference_subscription(label)
 
     @mcp.tool
-    async def update_serverless_inference(subscription_id: str, label: str) -> Dict[str, Any]:
+    async def update_serverless_inference(
+        subscription_id: str, label: str
+    ) -> dict[str, Any]:
         """Update an existing serverless inference subscription.
-        
+
         Args:
             subscription_id: The inference subscription ID or current label
             label: New label for the subscription
-            
+
         Returns:
             Updated inference subscription information
         """
@@ -227,28 +255,30 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
         return await vultr_client.update_inference_subscription(actual_id, label)
 
     @mcp.tool
-    async def delete_serverless_inference(subscription_id: str) -> Dict[str, str]:
+    async def delete_serverless_inference(subscription_id: str) -> dict[str, str]:
         """Delete a serverless inference subscription.
-        
+
         Warning: This action is irreversible and will immediately terminate the subscription.
-        
+
         Args:
             subscription_id: The inference subscription ID or label to delete
-            
+
         Returns:
             Confirmation of deletion
         """
         actual_id = await get_inference_id(subscription_id)
         await vultr_client.delete_inference_subscription(actual_id)
-        return {"message": f"Inference subscription '{subscription_id}' has been deleted"}
+        return {
+            "message": f"Inference subscription '{subscription_id}' has been deleted"
+        }
 
     @mcp.tool
-    async def get_inference_usage(subscription_id: str) -> Dict[str, Any]:
+    async def get_inference_usage(subscription_id: str) -> dict[str, Any]:
         """Get usage statistics for a serverless inference subscription.
-        
+
         Args:
             subscription_id: The inference subscription ID or label
-            
+
         Returns:
             Detailed usage information including:
             - chat: Token usage for chat/completion models
@@ -260,12 +290,12 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_inference_usage(actual_id)
 
     @mcp.tool
-    async def analyze_inference_usage(subscription_id: str) -> Dict[str, Any]:
+    async def analyze_inference_usage(subscription_id: str) -> dict[str, Any]:
         """Analyze usage patterns and provide optimization recommendations.
-        
+
         Args:
             subscription_id: The inference subscription ID or label
-            
+
         Returns:
             Comprehensive analysis including:
             - efficiency_score: Overall utilization efficiency (0-1)
@@ -283,12 +313,12 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
         return analysis
 
     @mcp.tool
-    async def get_inference_deployment_guide(subscription_id: str) -> Dict[str, Any]:
+    async def get_inference_deployment_guide(subscription_id: str) -> dict[str, Any]:
         """Get deployment guidance and best practices for an inference subscription.
-        
+
         Args:
             subscription_id: The inference subscription ID or label
-            
+
         Returns:
             Deployment guide with:
             - api_endpoints: Available API endpoints and documentation
@@ -307,37 +337,39 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
             "subscription_info": {
                 "id": subscription["id"],
                 "label": subscription["label"],
-                "api_key": subscription["api_key"][:8] + "..." + subscription["api_key"][-4:],  # Masked for security
-                "created": subscription["date_created"]
+                "api_key": subscription["api_key"][:8]
+                + "..."
+                + subscription["api_key"][-4:],  # Masked for security
+                "created": subscription["date_created"],
             },
             "api_endpoints": {
                 "base_url": "https://api.vultrinference.com",
                 "chat_completions": "/v1/chat/completions",
                 "text_to_speech": "/v1/audio/speech",
-                "documentation": "https://docs.vultr.com/vultr-inference-api"
+                "documentation": "https://docs.vultr.com/vultr-inference-api",
             },
             "authentication": {
                 "header": "Authorization: Bearer YOUR_API_KEY",
                 "api_key": "Use the API key from your subscription",
-                "security_note": "Keep your API key secure and rotate regularly"
+                "security_note": "Keep your API key secure and rotate regularly",
             },
             "best_practices": optimizations,
             "examples": {
-                "curl_chat": f"curl -X POST https://api.vultrinference.com/v1/chat/completions -H 'Authorization: Bearer {subscription['api_key']}' -H 'Content-Type: application/json' -d '{{\"model\": \"llama2-7b-chat-Q5_K_M\", \"messages\": [{{\"role\": \"user\", \"content\": \"Hello!\"}}]}}'",
+                "curl_chat": f'curl -X POST https://api.vultrinference.com/v1/chat/completions -H \'Authorization: Bearer {subscription["api_key"]}\' -H \'Content-Type: application/json\' -d \'{{"model": "llama2-7b-chat-Q5_K_M", "messages": [{{"role": "user", "content": "Hello!"}}]}}\'',
                 "python_example": "# Python example available in Vultr documentation",
-                "rate_limits": "Monitor usage to stay within monthly allotments"
-            }
+                "rate_limits": "Monitor usage to stay within monthly allotments",
+            },
         }
 
         return guide
 
     @mcp.tool
-    async def monitor_inference_performance(subscription_id: str) -> Dict[str, Any]:
+    async def monitor_inference_performance(subscription_id: str) -> dict[str, Any]:
         """Monitor performance metrics and usage trends for an inference subscription.
-        
+
         Args:
             subscription_id: The inference subscription ID or label
-            
+
         Returns:
             Performance monitoring data including:
             - current_usage: Real-time usage statistics
@@ -360,14 +392,18 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
             monthly_allotment = int(chat.get("monthly_allotment", "1"))
             overage = int(chat.get("overage", "0"))
 
-            utilization = current_tokens / monthly_allotment if monthly_allotment > 0 else 0
+            utilization = (
+                current_tokens / monthly_allotment if monthly_allotment > 0 else 0
+            )
 
             if utilization > 0.9:
                 health_score -= 20
                 alerts.append("High token utilization - consider upgrading plan")
             if overage > 0:
                 health_score -= 30
-                alerts.append(f"Overage detected: {overage} tokens incurring additional costs")
+                alerts.append(
+                    f"Overage detected: {overage} tokens incurring additional costs"
+                )
 
         # Check subscription age (older subscriptions might need key rotation)
         if subscription.get("date_created"):
@@ -382,20 +418,20 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
             "trends": {
                 "usage_trajectory": "stable",  # Would be calculated from historical data
                 "projected_overage": overage > 0,
-                "recommendation": "Monitor usage patterns for optimization opportunities"
+                "recommendation": "Monitor usage patterns for optimization opportunities",
             },
-            "last_updated": "Real-time"
+            "last_updated": "Real-time",
         }
 
         return monitoring_data
 
     @mcp.tool
-    async def optimize_inference_costs(subscription_id: str) -> Dict[str, Any]:
+    async def optimize_inference_costs(subscription_id: str) -> dict[str, Any]:
         """Analyze costs and provide optimization recommendations for an inference subscription.
-        
+
         Args:
             subscription_id: The inference subscription ID or label
-            
+
         Returns:
             Cost optimization analysis including:
             - current_costs: Current usage-based costs
@@ -410,12 +446,12 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
         optimization = {
             "subscription_info": {
                 "id": actual_id,
-                "label": subscription.get("label", "Unknown")
+                "label": subscription.get("label", "Unknown"),
             },
             "current_costs": {},
             "optimization_opportunities": [],
             "plan_recommendations": [],
-            "savings_potential": "Analysis based on current usage patterns"
+            "savings_potential": "Analysis based on current usage patterns",
         }
 
         # Analyze chat costs
@@ -425,30 +461,46 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
             monthly_allotment = int(chat.get("monthly_allotment", "1"))
             overage = int(chat.get("overage", "0"))
 
-            utilization = current_tokens / monthly_allotment if monthly_allotment > 0 else 0
+            utilization = (
+                current_tokens / monthly_allotment if monthly_allotment > 0 else 0
+            )
 
-            optimization["current_costs"]["base_plan"] = f"Monthly allotment: {monthly_allotment:,} tokens"
+            optimization["current_costs"]["base_plan"] = (
+                f"Monthly allotment: {monthly_allotment:,} tokens"
+            )
             optimization["current_costs"]["utilization"] = f"{utilization:.1%}"
 
             if overage > 0:
                 optimization["current_costs"]["overage_tokens"] = f"{overage:,} tokens"
-                optimization["optimization_opportunities"].append("Eliminate overage by upgrading plan")
-                optimization["plan_recommendations"].append("Upgrade to higher tier to avoid overage costs")
+                optimization["optimization_opportunities"].append(
+                    "Eliminate overage by upgrading plan"
+                )
+                optimization["plan_recommendations"].append(
+                    "Upgrade to higher tier to avoid overage costs"
+                )
 
             if utilization < 0.3:
-                optimization["optimization_opportunities"].append("Downgrade plan - low utilization detected")
-                optimization["plan_recommendations"].append("Consider smaller plan to reduce monthly costs")
+                optimization["optimization_opportunities"].append(
+                    "Downgrade plan - low utilization detected"
+                )
+                optimization["plan_recommendations"].append(
+                    "Consider smaller plan to reduce monthly costs"
+                )
                 optimization["savings_potential"] = "Potential 30-50% monthly savings"
             elif utilization > 0.8:
-                optimization["plan_recommendations"].append("Upgrade plan to avoid approaching limits")
+                optimization["plan_recommendations"].append(
+                    "Upgrade plan to avoid approaching limits"
+                )
 
         # General optimization opportunities
-        optimization["optimization_opportunities"].extend([
-            "Implement request caching to reduce API calls",
-            "Batch multiple requests where possible",
-            "Monitor and optimize prompt length",
-            "Use appropriate model sizes for your use case"
-        ])
+        optimization["optimization_opportunities"].extend(
+            [
+                "Implement request caching to reduce API calls",
+                "Batch multiple requests where possible",
+                "Monitor and optimize prompt length",
+                "Use appropriate model sizes for your use case",
+            ]
+        )
 
         return optimization
 

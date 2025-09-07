@@ -6,9 +6,7 @@ performing DNS operations directly from the command line.
 """
 
 import asyncio
-import os
 import sys
-from typing import Optional
 
 import click
 from rich.console import Console
@@ -29,24 +27,26 @@ console = Console()
 @click.option(
     "--api-key",
     envvar="VULTR_API_KEY",
-    help="Vultr API key (or set VULTR_API_KEY environment variable)"
+    help="Vultr API key (or set VULTR_API_KEY environment variable)",
 )
 @click.pass_context
-def cli(ctx: click.Context, api_key: Optional[str]):
+def cli(ctx: click.Context, api_key: str | None):
     """Vultr DNS MCP - Manage Vultr DNS through Model Context Protocol."""
     ctx.ensure_object(dict)
-    ctx.obj['api_key'] = api_key
+    ctx.obj["api_key"] = api_key
 
 
 @cli.command()
 @click.pass_context
 def server(ctx: click.Context):
     """Start the Vultr DNS MCP server."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
 
     if not api_key:
         console.print("[red]Error: VULTR_API_KEY is required[/red]")
-        console.print("[yellow]Set it as an environment variable or use --api-key option[/yellow]")
+        console.print(
+            "[yellow]Set it as an environment variable or use --api-key option[/yellow]"
+        )
         sys.exit(1)
 
     # Create a beautiful startup panel
@@ -55,11 +55,13 @@ def server(ctx: click.Context):
     startup_text.append(f"🔑 API Key: {api_key[:8]}...\n", style="dim")
     startup_text.append("🔄 Press Ctrl+C to stop", style="cyan")
 
-    console.print(Panel(
-        startup_text,
-        title="[bold blue]Vultr MCP Server[/bold blue]",
-        border_style="green"
-    ))
+    console.print(
+        Panel(
+            startup_text,
+            title="[bold blue]Vultr MCP Server[/bold blue]",
+            border_style="green",
+        )
+    )
 
     try:
         run_server(api_key)
@@ -81,7 +83,7 @@ def domains(ctx: click.Context):
 @click.pass_context
 def list_domains(ctx: click.Context):
     """List all domains in your account."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         console.print("[red]Error: VULTR_API_KEY is required[/red]")
         sys.exit(1)
@@ -100,21 +102,21 @@ def list_domains(ctx: click.Context):
             table = Table(
                 title=f"[bold blue]Vultr DNS Domains ({len(domains_list)} found)[/bold blue]",
                 show_header=True,
-                header_style="bold magenta"
+                header_style="bold magenta",
             )
             table.add_column("Domain", style="cyan", no_wrap=True)
             table.add_column("Created", style="green")
             table.add_column("DNSSEC", style="yellow")
 
             for domain in domains_list:
-                domain_name = domain.get('domain', 'Unknown')
-                created = domain.get('date_created', 'Unknown')
-                dnssec = domain.get('dns_sec', 'disabled')
+                domain_name = domain.get("domain", "Unknown")
+                created = domain.get("date_created", "Unknown")
+                dnssec = domain.get("dns_sec", "disabled")
 
                 table.add_row(
                     domain_name,
                     created,
-                    "✅ enabled" if dnssec == "enabled" else "❌ disabled"
+                    "✅ enabled" if dnssec == "enabled" else "❌ disabled",
                 )
 
             console.print(table)
@@ -131,7 +133,7 @@ def list_domains(ctx: click.Context):
 @click.pass_context
 def domain_info(ctx: click.Context, domain: str):
     """Get detailed information about a domain."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -148,16 +150,22 @@ def domain_info(ctx: click.Context, domain: str):
             click.echo(f"Domain: {domain}")
             click.echo(f"Total Records: {summary['total_records']}")
 
-            if summary['record_types']:
+            if summary["record_types"]:
                 click.echo("Record Types:")
-                for record_type, count in summary['record_types'].items():
+                for record_type, count in summary["record_types"].items():
                     click.echo(f"  • {record_type}: {count}")
 
-            config = summary['configuration']
+            config = summary["configuration"]
             click.echo("Configuration:")
-            click.echo(f"  • Root domain record: {'✅' if config['has_root_record'] else '❌'}")
-            click.echo(f"  • WWW subdomain: {'✅' if config['has_www_subdomain'] else '❌'}")
-            click.echo(f"  • Email setup: {'✅' if config['has_email_setup'] else '❌'}")
+            click.echo(
+                f"  • Root domain record: {'✅' if config['has_root_record'] else '❌'}"
+            )
+            click.echo(
+                f"  • WWW subdomain: {'✅' if config['has_www_subdomain'] else '❌'}"
+            )
+            click.echo(
+                f"  • Email setup: {'✅' if config['has_email_setup'] else '❌'}"
+            )
 
         except Exception as e:
             click.echo(f"Error: {e}", err=True)
@@ -172,7 +180,7 @@ def domain_info(ctx: click.Context, domain: str):
 @click.pass_context
 def create_domain(ctx: click.Context, domain: str, ip: str):
     """Create a new domain with default A record."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -206,9 +214,9 @@ def records(ctx: click.Context):
 @click.argument("domain")
 @click.option("--type", "record_type", help="Filter by record type")
 @click.pass_context
-def list_records(ctx: click.Context, domain: str, record_type: Optional[str]):
+def list_records(ctx: click.Context, domain: str, record_type: str | None):
     """List DNS records for a domain."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -227,13 +235,15 @@ def list_records(ctx: click.Context, domain: str, record_type: Optional[str]):
 
             click.echo(f"DNS records for {domain}:")
             for record in records_list:
-                record_id = record.get('id', 'Unknown')
-                r_type = record.get('type', 'Unknown')
-                name = record.get('name', 'Unknown')
-                data = record.get('data', 'Unknown')
-                ttl = record.get('ttl', 'Unknown')
+                record_id = record.get("id", "Unknown")
+                r_type = record.get("type", "Unknown")
+                name = record.get("name", "Unknown")
+                data = record.get("data", "Unknown")
+                ttl = record.get("ttl", "Unknown")
 
-                click.echo(f"  • [{record_id}] {r_type:6} {name:20} ➜ {data} (TTL: {ttl})")
+                click.echo(
+                    f"  • [{record_id}] {r_type:6} {name:20} ➜ {data} (TTL: {ttl})"
+                )
 
         except Exception as e:
             click.echo(f"Error: {e}", err=True)
@@ -256,11 +266,11 @@ def add_record(
     record_type: str,
     name: str,
     value: str,
-    ttl: Optional[int],
-    priority: Optional[int]
+    ttl: int | None,
+    priority: int | None,
 ):
     """Add a new DNS record."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -268,14 +278,18 @@ def add_record(
     async def _add_record():
         client = VultrDNSClient(api_key)
         try:
-            result = await client.add_record(domain, record_type, name, value, ttl, priority)
+            result = await client.add_record(
+                domain, record_type, name, value, ttl, priority
+            )
 
             if "error" in result:
                 click.echo(f"Error creating record: {result['error']}", err=True)
                 sys.exit(1)
 
-            record_id = result.get('id', 'Unknown')
-            click.echo(f"✅ Created {record_type} record [{record_id}]: {name} ➜ {value}")
+            record_id = result.get("id", "Unknown")
+            click.echo(
+                f"✅ Created {record_type} record [{record_id}]: {name} ➜ {value}"
+            )
 
         except Exception as e:
             click.echo(f"Error: {e}", err=True)
@@ -291,7 +305,7 @@ def add_record(
 @click.pass_context
 def delete_record(ctx: click.Context, domain: str, record_id: str):
     """Delete a DNS record."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -324,13 +338,14 @@ def container_registry():
 @click.pass_context
 def cr_list(ctx: click.Context):
     """List all container registries."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _list_registries():
         from .server import VultrDNSServer
+
         client = VultrDNSServer(api_key)
         try:
             registries = await client.list_container_registries()
@@ -346,8 +361,12 @@ def cr_list(ctx: click.Context):
                 click.echo(f"Name: {registry.get('name', 'N/A')}")
                 click.echo(f"ID: {registry.get('id', 'N/A')}")
                 click.echo(f"URN: {registry.get('urn', 'N/A')}")
-                click.echo(f"Storage Used: {registry.get('storage', {}).get('used_mb', 0)} MB")
-                click.echo(f"Storage Limit: {registry.get('storage', {}).get('limit_mb', 0)} MB")
+                click.echo(
+                    f"Storage Used: {registry.get('storage', {}).get('used_mb', 0)} MB"
+                )
+                click.echo(
+                    f"Storage Limit: {registry.get('storage', {}).get('limit_mb', 0)} MB"
+                )
                 click.echo(f"Public: {registry.get('public', False)}")
                 click.echo(f"Created: {registry.get('date_created', 'N/A')}")
                 click.echo("-" * 60)
@@ -366,17 +385,20 @@ def cr_list(ctx: click.Context):
 @click.pass_context
 def cr_create(ctx: click.Context, name: str, plan: str, region: str):
     """Create a new container registry."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _create_registry():
         from .server import VultrDNSServer
+
         client = VultrDNSServer(api_key)
 
         try:
-            click.echo(f"Creating container registry '{name}' in {region} with {plan} plan...")
+            click.echo(
+                f"Creating container registry '{name}' in {region} with {plan} plan..."
+            )
             registry = await client.create_container_registry(name, plan, region)
 
             click.echo("✅ Container registry created successfully!")
@@ -396,9 +418,11 @@ def cr_create(ctx: click.Context, name: str, plan: str, region: str):
 @click.option("--expiry", type=int, help="Expiration time in seconds")
 @click.option("--read-only", is_flag=True, help="Generate read-only credentials")
 @click.pass_context
-def cr_docker_login(ctx: click.Context, registry_identifier: str, expiry: Optional[int], read_only: bool):
+def cr_docker_login(
+    ctx: click.Context, registry_identifier: str, expiry: int | None, read_only: bool
+):
     """Generate Docker login command for registry access."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -422,7 +446,7 @@ def cr_docker_login(ctx: click.Context, registry_identifier: str, expiry: Option
             click.echo(f"Registry URL: {result['registry_url']}")
             click.echo(f"Username: {result['username']}")
             click.echo(f"Access: {result['access_type']}")
-            if result.get('expires_in_seconds'):
+            if result.get("expires_in_seconds"):
                 click.echo(f"Expires in: {result['expires_in_seconds']} seconds")
             else:
                 click.echo("Expires: Never")
@@ -444,13 +468,14 @@ def block_storage():
 @click.pass_context
 def bs_list(ctx: click.Context):
     """List all block storage volumes."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _list_volumes():
         from .server import VultrDNSServer
+
         client = VultrDNSServer(api_key)
         try:
             volumes = await client.list_block_storage()
@@ -471,7 +496,9 @@ def bs_list(ctx: click.Context):
                 click.echo(f"   Size: {volume.get('size_gb', 0)} GB")
                 click.echo(f"   Region: {volume.get('region', 'N/A')}")
                 click.echo(f"   Status: {volume.get('status', 'N/A')}")
-                click.echo(f"   {attached_emoji} {'Attached to: ' + volume.get('attached_to_instance', '') if volume.get('attached_to_instance') else 'Not attached'}")
+                click.echo(
+                    f"   {attached_emoji} {'Attached to: ' + volume.get('attached_to_instance', '') if volume.get('attached_to_instance') else 'Not attached'}"
+                )
                 click.echo(f"   Cost: ${volume.get('cost_per_month', 0)}/month")
                 click.echo(f"   Created: {volume.get('date_created', 'N/A')}")
                 click.echo("-" * 70)
@@ -488,7 +515,7 @@ def bs_list(ctx: click.Context):
 @click.pass_context
 def bs_get(ctx: click.Context, volume_identifier: str):
     """Get block storage volume details (by label or ID)."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -512,7 +539,9 @@ def bs_get(ctx: click.Context, volume_identifier: str):
             click.echo(f"   ID: {volume.get('id', 'N/A')}")
             click.echo(f"   Size: {volume.get('size_gb', 0)} GB")
             click.echo(f"   Region: {volume.get('region', 'N/A')}")
-            click.echo(f"   {attached_emoji} {'Attached to: ' + volume.get('attached_to_instance', '') if volume.get('attached_to_instance') else 'Not attached'}")
+            click.echo(
+                f"   {attached_emoji} {'Attached to: ' + volume.get('attached_to_instance', '') if volume.get('attached_to_instance') else 'Not attached'}"
+            )
             click.echo(f"   Cost: ${volume.get('cost_per_month', 0)}/month")
             click.echo(f"   Created: {volume.get('date_created', 'N/A')}")
 
@@ -529,15 +558,22 @@ def bs_get(ctx: click.Context, volume_identifier: str):
 @click.option("--label", help="Label for the volume")
 @click.option("--block-type", help="Block storage type")
 @click.pass_context
-def bs_create(ctx: click.Context, region: str, size_gb: int, label: Optional[str], block_type: Optional[str]):
+def bs_create(
+    ctx: click.Context,
+    region: str,
+    size_gb: int,
+    label: str | None,
+    block_type: str | None,
+):
     """Create a new block storage volume."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _create_volume():
         from .server import VultrDNSServer
+
         client = VultrDNSServer(api_key)
 
         try:
@@ -547,7 +583,9 @@ def bs_create(ctx: click.Context, region: str, size_gb: int, label: Optional[str
             if block_type:
                 click.echo(f"Type: {block_type}")
 
-            volume = await client.create_block_storage(region, size_gb, label, block_type)
+            volume = await client.create_block_storage(
+                region, size_gb, label, block_type
+            )
 
             click.echo("✅ Block storage volume created successfully!")
             click.echo(f"ID: {volume.get('id', 'N/A')}")
@@ -567,9 +605,11 @@ def bs_create(ctx: click.Context, region: str, size_gb: int, label: Optional[str
 @click.argument("instance_identifier")
 @click.option("--no-live", is_flag=True, help="Require reboot to attach")
 @click.pass_context
-def bs_attach(ctx: click.Context, volume_identifier: str, instance_identifier: str, no_live: bool):
+def bs_attach(
+    ctx: click.Context, volume_identifier: str, instance_identifier: str, no_live: bool
+):
     """Attach block storage volume to an instance."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -600,7 +640,7 @@ def bs_attach(ctx: click.Context, volume_identifier: str, instance_identifier: s
 @click.pass_context
 def bs_detach(ctx: click.Context, volume_identifier: str, no_live: bool):
     """Detach block storage volume from its instance."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -630,7 +670,7 @@ def bs_detach(ctx: click.Context, volume_identifier: str, no_live: bool):
 @click.pass_context
 def bs_mount_help(ctx: click.Context, volume_identifier: str):
     """Get mounting instructions for a block storage volume."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -643,7 +683,9 @@ def bs_mount_help(ctx: click.Context, volume_identifier: str):
         mcp = create_block_storage_mcp(client)
 
         try:
-            instructions = await mcp._tool_handlers["get_mounting_instructions"]["func"](volume_identifier)
+            instructions = await mcp._tool_handlers["get_mounting_instructions"][
+                "func"
+            ](volume_identifier)
 
             volume_info = instructions["volume_info"]
             click.echo(f"\n💾 Mounting Instructions for '{volume_info['label']}'")
@@ -680,17 +722,23 @@ def vpcs():
 
 
 @vpcs.command("list")
-@click.option("--vpc-type", type=click.Choice(["vpc", "vpc2", "all"]), default="all", help="Type of VPCs to list")
+@click.option(
+    "--vpc-type",
+    type=click.Choice(["vpc", "vpc2", "all"]),
+    default="all",
+    help="Type of VPCs to list",
+)
 @click.pass_context
 def vpcs_list(ctx: click.Context, vpc_type: str):
     """List VPCs and/or VPC 2.0 networks."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _list_networks():
         from .server import VultrDNSServer
+
         client = VultrDNSServer(api_key)
         try:
             vpcs = []
@@ -712,7 +760,9 @@ def vpcs_list(ctx: click.Context, vpc_type: str):
                     click.echo(f"📡 {vpc.get('description', 'unlabeled')}")
                     click.echo(f"   ID: {vpc.get('id', 'N/A')}")
                     click.echo(f"   Region: {vpc.get('region', 'N/A')}")
-                    click.echo(f"   Subnet: {vpc.get('v4_subnet', 'N/A')}/{vpc.get('v4_subnet_mask', 'N/A')}")
+                    click.echo(
+                        f"   Subnet: {vpc.get('v4_subnet', 'N/A')}/{vpc.get('v4_subnet_mask', 'N/A')}"
+                    )
                     click.echo(f"   Created: {vpc.get('date_created', 'N/A')}")
                     click.echo("-" * 70)
 
@@ -723,7 +773,9 @@ def vpcs_list(ctx: click.Context, vpc_type: str):
                     click.echo(f"🚀 {vpc2.get('description', 'unlabeled')}")
                     click.echo(f"   ID: {vpc2.get('id', 'N/A')}")
                     click.echo(f"   Region: {vpc2.get('region', 'N/A')}")
-                    click.echo(f"   IP Block: {vpc2.get('ip_block', 'N/A')}/{vpc2.get('prefix_length', 'N/A')}")
+                    click.echo(
+                        f"   IP Block: {vpc2.get('ip_block', 'N/A')}/{vpc2.get('prefix_length', 'N/A')}"
+                    )
                     click.echo(f"   Created: {vpc2.get('date_created', 'N/A')}")
                     click.echo("-" * 70)
 
@@ -737,23 +789,36 @@ def vpcs_list(ctx: click.Context, vpc_type: str):
 @vpcs.command("create")
 @click.argument("region")
 @click.argument("description")
-@click.option("--vpc-type", type=click.Choice(["vpc", "vpc2"]), default="vpc", help="Type of VPC to create")
+@click.option(
+    "--vpc-type",
+    type=click.Choice(["vpc", "vpc2"]),
+    default="vpc",
+    help="Type of VPC to create",
+)
 @click.option("--subnet", help="IPv4 subnet for VPC (e.g., 10.0.0.0)")
 @click.option("--subnet-mask", type=int, help="Subnet mask for VPC (e.g., 24)")
 @click.option("--ip-block", help="IP block for VPC 2.0 (e.g., 10.0.0.0)")
 @click.option("--prefix-length", type=int, help="Prefix length for VPC 2.0 (e.g., 24)")
 @click.pass_context
-def vpcs_create(ctx: click.Context, region: str, description: str, vpc_type: str,
-                subnet: Optional[str], subnet_mask: Optional[int],
-                ip_block: Optional[str], prefix_length: Optional[int]):
+def vpcs_create(
+    ctx: click.Context,
+    region: str,
+    description: str,
+    vpc_type: str,
+    subnet: str | None,
+    subnet_mask: int | None,
+    ip_block: str | None,
+    prefix_length: int | None,
+):
     """Create a new VPC or VPC 2.0 network."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _create_network():
         from .server import VultrDNSServer
+
         client = VultrDNSServer(api_key)
 
         try:
@@ -761,18 +826,26 @@ def vpcs_create(ctx: click.Context, region: str, description: str, vpc_type: str
                 click.echo(f"Creating VPC 2.0 '{description}' in {region}...")
                 if ip_block:
                     click.echo(f"IP Block: {ip_block}/{prefix_length or 24}")
-                network = await client.create_vpc2(region, description, "v4", ip_block, prefix_length)
+                network = await client.create_vpc2(
+                    region, description, "v4", ip_block, prefix_length
+                )
                 click.echo("✅ VPC 2.0 created successfully!")
                 click.echo(f"ID: {network.get('id', 'N/A')}")
-                click.echo(f"IP Block: {network.get('ip_block', 'N/A')}/{network.get('prefix_length', 'N/A')}")
+                click.echo(
+                    f"IP Block: {network.get('ip_block', 'N/A')}/{network.get('prefix_length', 'N/A')}"
+                )
             else:
                 click.echo(f"Creating VPC '{description}' in {region}...")
                 if subnet:
                     click.echo(f"Subnet: {subnet}/{subnet_mask or 24}")
-                network = await client.create_vpc(region, description, subnet, subnet_mask)
+                network = await client.create_vpc(
+                    region, description, subnet, subnet_mask
+                )
                 click.echo("✅ VPC created successfully!")
                 click.echo(f"ID: {network.get('id', 'N/A')}")
-                click.echo(f"Subnet: {network.get('v4_subnet', 'N/A')}/{network.get('v4_subnet_mask', 'N/A')}")
+                click.echo(
+                    f"Subnet: {network.get('v4_subnet', 'N/A')}/{network.get('v4_subnet_mask', 'N/A')}"
+                )
 
         except Exception as e:
             click.echo(f"Error: {e}", err=True)
@@ -784,11 +857,15 @@ def vpcs_create(ctx: click.Context, region: str, description: str, vpc_type: str
 @vpcs.command("attach")
 @click.argument("vpc_identifier")
 @click.argument("instance_identifier")
-@click.option("--vpc-type", type=click.Choice(["vpc", "vpc2"]), default="vpc", help="Type of VPC")
+@click.option(
+    "--vpc-type", type=click.Choice(["vpc", "vpc2"]), default="vpc", help="Type of VPC"
+)
 @click.pass_context
-def vpcs_attach(ctx: click.Context, vpc_identifier: str, instance_identifier: str, vpc_type: str):
+def vpcs_attach(
+    ctx: click.Context, vpc_identifier: str, instance_identifier: str, vpc_type: str
+):
     """Attach VPC/VPC 2.0 to an instance."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -816,11 +893,15 @@ def vpcs_attach(ctx: click.Context, vpc_identifier: str, instance_identifier: st
 @vpcs.command("detach")
 @click.argument("vpc_identifier")
 @click.argument("instance_identifier")
-@click.option("--vpc-type", type=click.Choice(["vpc", "vpc2"]), default="vpc", help="Type of VPC")
+@click.option(
+    "--vpc-type", type=click.Choice(["vpc", "vpc2"]), default="vpc", help="Type of VPC"
+)
 @click.pass_context
-def vpcs_detach(ctx: click.Context, vpc_identifier: str, instance_identifier: str, vpc_type: str):
+def vpcs_detach(
+    ctx: click.Context, vpc_identifier: str, instance_identifier: str, vpc_type: str
+):
     """Detach VPC/VPC 2.0 from an instance."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -850,7 +931,7 @@ def vpcs_detach(ctx: click.Context, vpc_identifier: str, instance_identifier: st
 @click.pass_context
 def vpcs_list_instance(ctx: click.Context, instance_identifier: str):
     """List VPCs attached to an instance."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -863,7 +944,9 @@ def vpcs_list_instance(ctx: click.Context, instance_identifier: str):
         mcp = create_vpcs_mcp(client)
 
         try:
-            result = await mcp._tool_handlers["list_instance_networks"]["func"](instance_identifier)
+            result = await mcp._tool_handlers["list_instance_networks"]["func"](
+                instance_identifier
+            )
 
             vpcs = result["vpcs"]
             vpc2s = result["vpc2s"]
@@ -874,12 +957,16 @@ def vpcs_list_instance(ctx: click.Context, instance_identifier: str):
             if vpcs:
                 click.echo(f"\n📡 VPCs ({len(vpcs)}):")
                 for vpc in vpcs:
-                    click.echo(f"   • {vpc.get('description', 'unlabeled')} ({vpc.get('id', 'N/A')})")
+                    click.echo(
+                        f"   • {vpc.get('description', 'unlabeled')} ({vpc.get('id', 'N/A')})"
+                    )
 
             if vpc2s:
                 click.echo(f"\n🚀 VPC 2.0 Networks ({len(vpc2s)}):")
                 for vpc2 in vpc2s:
-                    click.echo(f"   • {vpc2.get('description', 'unlabeled')} ({vpc2.get('id', 'N/A')})")
+                    click.echo(
+                        f"   • {vpc2.get('description', 'unlabeled')} ({vpc2.get('id', 'N/A')})"
+                    )
 
             if not vpcs and not vpc2s:
                 click.echo("No VPC networks attached to this instance.")
@@ -895,11 +982,16 @@ def vpcs_list_instance(ctx: click.Context, instance_identifier: str):
 
 @vpcs.command("info")
 @click.argument("vpc_identifier")
-@click.option("--vpc-type", type=click.Choice(["vpc", "vpc2", "auto"]), default="auto", help="Type of VPC")
+@click.option(
+    "--vpc-type",
+    type=click.Choice(["vpc", "vpc2", "auto"]),
+    default="auto",
+    help="Type of VPC",
+)
 @click.pass_context
 def vpcs_info(ctx: click.Context, vpc_identifier: str, vpc_type: str):
     """Get comprehensive VPC information."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -912,7 +1004,9 @@ def vpcs_info(ctx: click.Context, vpc_identifier: str, vpc_type: str):
         mcp = create_vpcs_mcp(client)
 
         try:
-            info = await mcp._tool_handlers["get_network_info"]["func"](vpc_identifier, vpc_type)
+            info = await mcp._tool_handlers["get_network_info"]["func"](
+                vpc_identifier, vpc_type
+            )
 
             network_type = info["network_type"]
             capabilities = info["capabilities"]
@@ -923,9 +1017,13 @@ def vpcs_info(ctx: click.Context, vpc_identifier: str, vpc_type: str):
             click.echo(f"Region: {info.get('region', 'N/A')}")
 
             if network_type == "VPC":
-                click.echo(f"Subnet: {info.get('v4_subnet', 'N/A')}/{info.get('v4_subnet_mask', 'N/A')}")
+                click.echo(
+                    f"Subnet: {info.get('v4_subnet', 'N/A')}/{info.get('v4_subnet_mask', 'N/A')}"
+                )
             else:
-                click.echo(f"IP Block: {info.get('ip_block', 'N/A')}/{info.get('prefix_length', 'N/A')}")
+                click.echo(
+                    f"IP Block: {info.get('ip_block', 'N/A')}/{info.get('prefix_length', 'N/A')}"
+                )
 
             click.echo(f"Created: {info.get('date_created', 'N/A')}")
 
@@ -952,9 +1050,11 @@ def vpcs_info(ctx: click.Context, vpc_identifier: str, vpc_type: str):
 @click.option("--include-www/--no-www", default=True, help="Include www subdomain")
 @click.option("--ttl", type=int, help="TTL for records")
 @click.pass_context
-def setup_website(ctx: click.Context, domain: str, ip: str, include_www: bool, ttl: Optional[int]):
+def setup_website(
+    ctx: click.Context, domain: str, ip: str, include_www: bool, ttl: int | None
+):
     """Set up basic DNS records for a website."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -966,15 +1066,15 @@ def setup_website(ctx: click.Context, domain: str, ip: str, include_www: bool, t
 
             click.echo(f"Setting up website for {domain}:")
 
-            for record in result['created_records']:
+            for record in result["created_records"]:
                 click.echo(f"  ✅ {record}")
 
-            for error in result['errors']:
+            for error in result["errors"]:
                 click.echo(f"  ❌ {error}")
 
-            if result['created_records'] and not result['errors']:
+            if result["created_records"] and not result["errors"]:
                 click.echo(f"🎉 Website setup complete for {domain}")
-            elif result['errors']:
+            elif result["errors"]:
                 click.echo("⚠️  Setup completed with some errors")
 
         except Exception as e:
@@ -990,9 +1090,11 @@ def setup_website(ctx: click.Context, domain: str, ip: str, include_www: bool, t
 @click.option("--priority", default=10, help="MX record priority")
 @click.option("--ttl", type=int, help="TTL for records")
 @click.pass_context
-def setup_email(ctx: click.Context, domain: str, mail_server: str, priority: int, ttl: Optional[int]):
+def setup_email(
+    ctx: click.Context, domain: str, mail_server: str, priority: int, ttl: int | None
+):
     """Set up basic email DNS records."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -1004,15 +1106,15 @@ def setup_email(ctx: click.Context, domain: str, mail_server: str, priority: int
 
             click.echo(f"Setting up email for {domain}:")
 
-            for record in result['created_records']:
+            for record in result["created_records"]:
                 click.echo(f"  ✅ {record}")
 
-            for error in result['errors']:
+            for error in result["errors"]:
                 click.echo(f"  ❌ {error}")
 
-            if result['created_records'] and not result['errors']:
+            if result["created_records"] and not result["errors"]:
                 click.echo(f"📧 Email setup complete for {domain}")
-            elif result['errors']:
+            elif result["errors"]:
                 click.echo("⚠️  Setup completed with some errors")
 
         except Exception as e:
@@ -1026,6 +1128,7 @@ def setup_email(ctx: click.Context, domain: str, mail_server: str, priority: int
 # ISO Management Commands
 # =============================================================================
 
+
 @cli.group()
 @click.pass_context
 def iso(ctx: click.Context):
@@ -1034,17 +1137,23 @@ def iso(ctx: click.Context):
 
 
 @iso.command("list")
-@click.option("--filter", type=click.Choice(["all", "public", "custom"]), default="all", help="Filter ISOs")
+@click.option(
+    "--filter",
+    type=click.Choice(["all", "public", "custom"]),
+    default="all",
+    help="Filter ISOs",
+)
 @click.pass_context
 def iso_list(ctx: click.Context, filter):
     """List ISO images."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _list_isos():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             if filter == "all":
@@ -1079,13 +1188,14 @@ def iso_list(ctx: click.Context, filter):
 @click.pass_context
 def iso_create(ctx: click.Context, url):
     """Create ISO from URL."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _create_iso():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             iso = await server.create_iso(url)
@@ -1101,32 +1211,48 @@ def iso_create(ctx: click.Context, url):
 # Operating System Commands
 # =============================================================================
 
+
 @cli.group()
 @click.pass_context
-def os(ctx: click.Context):
+def operating_systems(ctx: click.Context):
     """Manage operating systems."""
     pass
 
 
-@os.command("list")
-@click.option("--filter", type=click.Choice(["all", "linux", "windows", "apps"]), default="all", help="Filter OS types")
+@operating_systems.command("list")
+@click.option(
+    "--filter",
+    type=click.Choice(["all", "linux", "windows", "apps"]),
+    default="all",
+    help="Filter OS types",
+)
 @click.pass_context
 def os_list(ctx: click.Context, filter):
     """List operating systems."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _list_os():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             if filter == "all":
                 operating_systems = await server.list_operating_systems()
             elif filter == "linux":
                 all_os = await server.list_operating_systems()
-                linux_keywords = ['ubuntu', 'debian', 'centos', 'fedora', 'arch', 'rocky', 'alma', 'opensuse']
+                linux_keywords = [
+                    "ubuntu",
+                    "debian",
+                    "centos",
+                    "fedora",
+                    "arch",
+                    "rocky",
+                    "alma",
+                    "opensuse",
+                ]
                 operating_systems = []
                 for os_item in all_os:
                     name = os_item.get("name", "").lower()
@@ -1134,12 +1260,18 @@ def os_list(ctx: click.Context, filter):
                         operating_systems.append(os_item)
             elif filter == "windows":
                 all_os = await server.list_operating_systems()
-                operating_systems = [os_item for os_item in all_os
-                                   if 'windows' in os_item.get("name", "").lower()]
+                operating_systems = [
+                    os_item
+                    for os_item in all_os
+                    if "windows" in os_item.get("name", "").lower()
+                ]
             else:  # apps
                 all_os = await server.list_operating_systems()
-                operating_systems = [os_item for os_item in all_os
-                                   if os_item.get("family", "").lower() == "application"]
+                operating_systems = [
+                    os_item
+                    for os_item in all_os
+                    if os_item.get("family", "").lower() == "application"
+                ]
 
             if not operating_systems:
                 click.echo(f"No {filter} operating systems found")
@@ -1163,6 +1295,7 @@ def os_list(ctx: click.Context, filter):
 # Plans Commands
 # =============================================================================
 
+
 @cli.group()
 @click.pass_context
 def plans(ctx: click.Context):
@@ -1171,20 +1304,26 @@ def plans(ctx: click.Context):
 
 
 @plans.command("list")
-@click.option("--type", type=click.Choice(["all", "vc2", "vhf", "voc"]), default="all", help="Plan type filter")
+@click.option(
+    "--type",
+    type=click.Choice(["all", "vc2", "vhf", "voc"]),
+    default="all",
+    help="Plan type filter",
+)
 @click.option("--min-vcpus", type=int, help="Minimum vCPUs")
 @click.option("--min-ram", type=int, help="Minimum RAM (MB)")
 @click.option("--max-cost", type=float, help="Maximum monthly cost")
 @click.pass_context
 def plans_list(ctx: click.Context, type, min_vcpus, min_ram, max_cost):
     """List hosting plans."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _list_plans():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             plan_type = None if type == "all" else type
@@ -1198,7 +1337,7 @@ def plans_list(ctx: click.Context, type, min_vcpus, min_ram, max_cost):
                         continue
                     if min_ram and plan.get("ram", 0) < min_ram:
                         continue
-                    if max_cost and plan.get("monthly_cost", float('inf')) > max_cost:
+                    if max_cost and plan.get("monthly_cost", float("inf")) > max_cost:
                         continue
                     filtered_plans.append(plan)
                 plans = filtered_plans
@@ -1214,7 +1353,9 @@ def plans_list(ctx: click.Context, type, min_vcpus, min_ram, max_cost):
                 ram = plan.get("ram", "N/A")
                 disk = plan.get("disk", "N/A")
                 cost = plan.get("monthly_cost", "N/A")
-                click.echo(f"  • {name}: {vcpus} vCPU, {ram}MB RAM, {disk}GB disk - ${cost}/month")
+                click.echo(
+                    f"  • {name}: {vcpus} vCPU, {ram}MB RAM, {disk}GB disk - ${cost}/month"
+                )
 
         except Exception as e:
             click.echo(f"Error: {e}", err=True)
@@ -1227,6 +1368,7 @@ def plans_list(ctx: click.Context, type, min_vcpus, min_ram, max_cost):
 # Startup Scripts Commands
 # =============================================================================
 
+
 @cli.group()
 @click.pass_context
 def startup_scripts(ctx: click.Context):
@@ -1235,24 +1377,33 @@ def startup_scripts(ctx: click.Context):
 
 
 @startup_scripts.command("list")
-@click.option("--type", type=click.Choice(["all", "boot", "pxe"]), default="all", help="Script type filter")
+@click.option(
+    "--type",
+    type=click.Choice(["all", "boot", "pxe"]),
+    default="all",
+    help="Script type filter",
+)
 @click.pass_context
 def startup_scripts_list(ctx: click.Context, type):
     """List startup scripts."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _list_scripts():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             all_scripts = await server.list_startup_scripts()
 
             if type != "all":
-                scripts = [script for script in all_scripts
-                          if script.get("type", "").lower() == type]
+                scripts = [
+                    script
+                    for script in all_scripts
+                    if script.get("type", "").lower() == type
+                ]
             else:
                 scripts = all_scripts
 
@@ -1277,21 +1428,26 @@ def startup_scripts_list(ctx: click.Context, type):
 @startup_scripts.command("create")
 @click.argument("name")
 @click.argument("script_content")
-@click.option("--type", type=click.Choice(["boot", "pxe"]), default="boot", help="Script type")
+@click.option(
+    "--type", type=click.Choice(["boot", "pxe"]), default="boot", help="Script type"
+)
 @click.pass_context
 def startup_scripts_create(ctx: click.Context, name, script_content, type):
     """Create a startup script."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _create_script():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             script = await server.create_startup_script(name, script_content, type)
-            click.echo(f"✅ Startup script created: {script.get('name')} (ID: {script.get('id')})")
+            click.echo(
+                f"✅ Startup script created: {script.get('name')} (ID: {script.get('id')})"
+            )
         except Exception as e:
             click.echo(f"Error: {e}", err=True)
             sys.exit(1)
@@ -1304,13 +1460,14 @@ def startup_scripts_create(ctx: click.Context, name, script_content, type):
 @click.pass_context
 def startup_scripts_delete(ctx: click.Context, script_name):
     """Delete a startup script by name."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _delete_script():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             # Find script by name
@@ -1338,6 +1495,7 @@ def startup_scripts_delete(ctx: click.Context, script_name):
 # Billing Commands
 # =============================================================================
 
+
 @cli.group()
 @click.pass_context
 def billing(ctx: click.Context):
@@ -1349,13 +1507,14 @@ def billing(ctx: click.Context):
 @click.pass_context
 def billing_account(ctx: click.Context):
     """Show account information and current balance."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _show_account():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             account = await server.get_account_info()
@@ -1367,8 +1526,10 @@ def billing_account(ctx: click.Context):
             click.echo(f"  Current Balance: ${balance.get('balance', 0):.2f}")
             click.echo(f"  Pending Charges: ${balance.get('pending_charges', 0):.2f}")
 
-            if balance.get('last_payment_date'):
-                click.echo(f"  Last Payment: ${balance.get('last_payment_amount', 0):.2f} on {balance.get('last_payment_date')}")
+            if balance.get("last_payment_date"):
+                click.echo(
+                    f"  Last Payment: ${balance.get('last_payment_amount', 0):.2f} on {balance.get('last_payment_date')}"
+                )
 
         except Exception as e:
             click.echo(f"Error: {e}", err=True)
@@ -1383,13 +1544,14 @@ def billing_account(ctx: click.Context):
 @click.pass_context
 def billing_history(ctx: click.Context, days, limit):
     """Show billing history."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _show_history():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             history = await server.list_billing_history(date_range=days, per_page=limit)
@@ -1424,13 +1586,14 @@ def billing_history(ctx: click.Context, days, limit):
 @click.pass_context
 def billing_invoices(ctx: click.Context, limit):
     """List invoices."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _list_invoices():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             invoices_data = await server.list_invoices(per_page=limit)
@@ -1462,7 +1625,7 @@ def billing_invoices(ctx: click.Context, limit):
 @click.pass_context
 def billing_monthly(ctx: click.Context, year, month):
     """Show monthly usage summary."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -1470,12 +1633,14 @@ def billing_monthly(ctx: click.Context, year, month):
     # Default to current month if not specified
     if not year or not month:
         from datetime import datetime
+
         now = datetime.now()
         year = year or now.year
         month = month or now.month
 
     async def _show_monthly():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             summary = await server.get_monthly_usage_summary(year, month)
@@ -1483,9 +1648,11 @@ def billing_monthly(ctx: click.Context, year, month):
             click.echo(f"Monthly Summary for {month}/{year}:")
             click.echo(f"  Total Cost: ${summary.get('total_cost', 0):.2f}")
             click.echo(f"  Transactions: {summary.get('transaction_count', 0)}")
-            click.echo(f"  Average Daily Cost: ${summary.get('average_daily_cost', 0):.2f}")
+            click.echo(
+                f"  Average Daily Cost: ${summary.get('average_daily_cost', 0):.2f}"
+            )
 
-            services = summary.get('service_breakdown', {})
+            services = summary.get("service_breakdown", {})
             if services:
                 click.echo("\n  Service Breakdown:")
                 for service, cost in services.items():
@@ -1503,7 +1670,7 @@ def billing_monthly(ctx: click.Context, year, month):
 @click.pass_context
 def billing_trends(ctx: click.Context, months):
     """Analyze spending trends."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
@@ -1511,19 +1678,24 @@ def billing_trends(ctx: click.Context, months):
     async def _analyze_trends():
         from .billing import create_billing_mcp
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
-        billing_mcp = create_billing_mcp(server)
+        create_billing_mcp(server)
 
         try:
             # Access the analyze_spending_trends tool directly
-            analysis = await server.get_monthly_usage_summary(2024, 1)  # Placeholder - we'd need to implement this properly
+            await server.get_monthly_usage_summary(
+                2024, 1
+            )  # Placeholder - we'd need to implement this properly
 
             # For now, show a simple version
             current_summary = await server.get_monthly_usage_summary(2024, 1)
 
             click.echo(f"Spending Trends Analysis ({months} months):")
             click.echo("  Feature coming soon - advanced trend analysis")
-            click.echo(f"  Current month estimate: ${current_summary.get('total_cost', 0):.2f}")
+            click.echo(
+                f"  Current month estimate: ${current_summary.get('total_cost', 0):.2f}"
+            )
 
         except Exception as e:
             click.echo(f"Error: {e}", err=True)
@@ -1535,6 +1707,7 @@ def billing_trends(ctx: click.Context, months):
 # =============================================================================
 # Bare Metal Commands
 # =============================================================================
+
 
 @cli.group()
 @click.pass_context
@@ -1549,20 +1722,23 @@ def bare_metal(ctx: click.Context):
 @click.pass_context
 def bare_metal_list(ctx: click.Context, status, region):
     """List bare metal servers."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _list_servers():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             servers = await server.list_bare_metal_servers()
 
             # Apply filters
             if status:
-                servers = [s for s in servers if s.get("status", "").lower() == status.lower()]
+                servers = [
+                    s for s in servers if s.get("status", "").lower() == status.lower()
+                ]
             if region:
                 servers = [s for s in servers if s.get("region") == region]
 
@@ -1577,7 +1753,9 @@ def bare_metal_list(ctx: click.Context, status, region):
                 plan = srv.get("plan", "N/A")
                 region_val = srv.get("region", "N/A")
                 ip = srv.get("main_ip", "N/A")
-                click.echo(f"  • {label} ({status_val}) - {plan} in {region_val} - IP: {ip}")
+                click.echo(
+                    f"  • {label} ({status_val}) - {plan} in {region_val} - IP: {ip}"
+                )
 
         except Exception as e:
             click.echo(f"Error: {e}", err=True)
@@ -1591,13 +1769,14 @@ def bare_metal_list(ctx: click.Context, status, region):
 @click.pass_context
 def bare_metal_get(ctx: click.Context, server_name):
     """Get bare metal server details by name or ID."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _get_server():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             # Find server by name/label first
@@ -1605,9 +1784,11 @@ def bare_metal_get(ctx: click.Context, server_name):
             server_id = None
 
             for srv in servers:
-                if (srv.get("label") == server_name or
-                    srv.get("hostname") == server_name or
-                    srv.get("id") == server_name):
+                if (
+                    srv.get("label") == server_name
+                    or srv.get("hostname") == server_name
+                    or srv.get("id") == server_name
+                ):
                     server_id = srv["id"]
                     break
 
@@ -1647,15 +1828,27 @@ def bare_metal_get(ctx: click.Context, server_name):
 @click.option("--enable-ipv6", is_flag=True, help="Enable IPv6")
 @click.option("--enable-ddos", is_flag=True, help="Enable DDoS protection")
 @click.pass_context
-def bare_metal_create(ctx: click.Context, region, plan, os_id, iso_id, label, hostname, ssh_keys, enable_ipv6, enable_ddos):
+def bare_metal_create(
+    ctx: click.Context,
+    region,
+    plan,
+    os_id,
+    iso_id,
+    label,
+    hostname,
+    ssh_keys,
+    enable_ipv6,
+    enable_ddos,
+):
     """Create a new bare metal server."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _create_server():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             ssh_key_list = ssh_keys.split(",") if ssh_keys else None
@@ -1669,7 +1862,7 @@ def bare_metal_create(ctx: click.Context, region, plan, os_id, iso_id, label, ho
                 hostname=hostname,
                 ssh_key_ids=ssh_key_list,
                 enable_ipv6=enable_ipv6,
-                enable_ddos_protection=enable_ddos
+                enable_ddos_protection=enable_ddos,
             )
 
             click.echo("✅ Bare metal server created:")
@@ -1689,13 +1882,14 @@ def bare_metal_create(ctx: click.Context, region, plan, os_id, iso_id, label, ho
 @click.pass_context
 def bare_metal_start(ctx: click.Context, server_name):
     """Start a bare metal server."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _start_server():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             # Find server by name/label first
@@ -1703,9 +1897,11 @@ def bare_metal_start(ctx: click.Context, server_name):
             server_id = None
 
             for srv in servers:
-                if (srv.get("label") == server_name or
-                    srv.get("hostname") == server_name or
-                    srv.get("id") == server_name):
+                if (
+                    srv.get("label") == server_name
+                    or srv.get("hostname") == server_name
+                    or srv.get("id") == server_name
+                ):
                     server_id = srv["id"]
                     break
 
@@ -1728,13 +1924,14 @@ def bare_metal_start(ctx: click.Context, server_name):
 @click.pass_context
 def bare_metal_stop(ctx: click.Context, server_name):
     """Stop a bare metal server."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _stop_server():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             # Find server by name/label first
@@ -1742,9 +1939,11 @@ def bare_metal_stop(ctx: click.Context, server_name):
             server_id = None
 
             for srv in servers:
-                if (srv.get("label") == server_name or
-                    srv.get("hostname") == server_name or
-                    srv.get("id") == server_name):
+                if (
+                    srv.get("label") == server_name
+                    or srv.get("hostname") == server_name
+                    or srv.get("id") == server_name
+                ):
                     server_id = srv["id"]
                     break
 
@@ -1767,13 +1966,14 @@ def bare_metal_stop(ctx: click.Context, server_name):
 @click.pass_context
 def bare_metal_reboot(ctx: click.Context, server_name):
     """Reboot a bare metal server."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _reboot_server():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             # Find server by name/label first
@@ -1781,9 +1981,11 @@ def bare_metal_reboot(ctx: click.Context, server_name):
             server_id = None
 
             for srv in servers:
-                if (srv.get("label") == server_name or
-                    srv.get("hostname") == server_name or
-                    srv.get("id") == server_name):
+                if (
+                    srv.get("label") == server_name
+                    or srv.get("hostname") == server_name
+                    or srv.get("id") == server_name
+                ):
                     server_id = srv["id"]
                     break
 
@@ -1809,13 +2011,14 @@ def bare_metal_reboot(ctx: click.Context, server_name):
 @click.pass_context
 def bare_metal_plans(ctx: click.Context, type, min_vcpus, min_ram, max_cost):
     """List bare metal plans."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _list_plans():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             plans = await server.list_bare_metal_plans(type)
@@ -1826,9 +2029,11 @@ def bare_metal_plans(ctx: click.Context, type, min_vcpus, min_ram, max_cost):
                 for plan in plans:
                     if min_vcpus and plan.get("vcpu_count", 0) < min_vcpus:
                         continue
-                    if min_ram and plan.get("ram", 0) < min_ram * 1024:  # Convert GB to MB
+                    if (
+                        min_ram and plan.get("ram", 0) < min_ram * 1024
+                    ):  # Convert GB to MB
                         continue
-                    if max_cost and plan.get("monthly_cost", float('inf')) > max_cost:
+                    if max_cost and plan.get("monthly_cost", float("inf")) > max_cost:
                         continue
                     filtered_plans.append(plan)
                 plans = filtered_plans
@@ -1844,7 +2049,9 @@ def bare_metal_plans(ctx: click.Context, type, min_vcpus, min_ram, max_cost):
                 ram_gb = plan.get("ram", 0) // 1024 if plan.get("ram") else "N/A"
                 disk = plan.get("disk", "N/A")
                 cost = plan.get("monthly_cost", "N/A")
-                click.echo(f"  • {plan_id}: {vcpus} vCPU, {ram_gb}GB RAM, {disk}GB disk - ${cost}/month")
+                click.echo(
+                    f"  • {plan_id}: {vcpus} vCPU, {ram_gb}GB RAM, {disk}GB disk - ${cost}/month"
+                )
 
         except Exception as e:
             click.echo(f"Error: {e}", err=True)
@@ -1857,6 +2064,7 @@ def bare_metal_plans(ctx: click.Context, type, min_vcpus, min_ram, max_cost):
 # CDN Commands
 # =============================================================================
 
+
 @cli.group()
 @click.pass_context
 def cdn(ctx: click.Context):
@@ -1868,13 +2076,14 @@ def cdn(ctx: click.Context):
 @click.pass_context
 def cdn_list(ctx: click.Context):
     """List CDN zones."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _list_zones():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             zones = await server.list_cdn_zones()
@@ -1889,7 +2098,9 @@ def cdn_list(ctx: click.Context):
                 cdn_domain = zone.get("cdn_domain", "N/A")
                 status = zone.get("status", "Unknown")
                 regions = len(zone.get("regions", []))
-                click.echo(f"  • {origin} -> {cdn_domain} ({status}) - {regions} regions")
+                click.echo(
+                    f"  • {origin} -> {cdn_domain} ({status}) - {regions} regions"
+                )
 
         except Exception as e:
             click.echo(f"Error: {e}", err=True)
@@ -1903,13 +2114,14 @@ def cdn_list(ctx: click.Context):
 @click.pass_context
 def cdn_get(ctx: click.Context, domain):
     """Get CDN zone details by origin domain or CDN domain."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _get_zone():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             # Find zone by domain
@@ -1917,9 +2129,11 @@ def cdn_get(ctx: click.Context, domain):
             zone_id = None
 
             for zone in zones:
-                if (zone.get("origin_domain") == domain or
-                    zone.get("cdn_domain") == domain or
-                    zone.get("id") == domain):
+                if (
+                    zone.get("origin_domain") == domain
+                    or zone.get("cdn_domain") == domain
+                    or zone.get("id") == domain
+                ):
                     zone_id = zone["id"]
                     break
 
@@ -1934,7 +2148,9 @@ def cdn_get(ctx: click.Context, domain):
             click.echo(f"  CDN Domain: {zone_info.get('cdn_domain', 'N/A')}")
             click.echo(f"  Status: {zone_info.get('status', 'Unknown')}")
             click.echo(f"  Origin Scheme: {zone_info.get('origin_scheme', 'N/A')}")
-            click.echo(f"  Gzip Compression: {zone_info.get('gzip_compression', False)}")
+            click.echo(
+                f"  Gzip Compression: {zone_info.get('gzip_compression', False)}"
+            )
             click.echo(f"  Block Bad Bots: {zone_info.get('block_bad_bots', False)}")
             click.echo(f"  Block AI Bots: {zone_info.get('block_ai_bots', False)}")
             click.echo(f"  Regions: {', '.join(zone_info.get('regions', []))}")
@@ -1948,20 +2164,26 @@ def cdn_get(ctx: click.Context, domain):
 
 @cdn.command("create")
 @click.argument("origin_domain")
-@click.option("--scheme", type=click.Choice(["http", "https"]), default="https", help="Origin scheme")
+@click.option(
+    "--scheme",
+    type=click.Choice(["http", "https"]),
+    default="https",
+    help="Origin scheme",
+)
 @click.option("--gzip", is_flag=True, help="Enable gzip compression")
 @click.option("--block-bots", is_flag=True, help="Enable bot blocking")
 @click.option("--regions", help="Comma-separated list of regions")
 @click.pass_context
 def cdn_create(ctx: click.Context, origin_domain, scheme, gzip, block_bots, regions):
     """Create a new CDN zone."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _create_zone():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             region_list = regions.split(",") if regions else None
@@ -1972,7 +2194,7 @@ def cdn_create(ctx: click.Context, origin_domain, scheme, gzip, block_bots, regi
                 gzip_compression=gzip,
                 block_ai_bots=block_bots,
                 block_bad_bots=block_bots,
-                regions=region_list
+                regions=region_list,
             )
 
             click.echo("✅ CDN zone created:")
@@ -1993,13 +2215,14 @@ def cdn_create(ctx: click.Context, origin_domain, scheme, gzip, block_bots, regi
 @click.pass_context
 def cdn_purge(ctx: click.Context, domain):
     """Purge CDN zone cache."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _purge_zone():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             # Find zone by domain
@@ -2007,9 +2230,11 @@ def cdn_purge(ctx: click.Context, domain):
             zone_id = None
 
             for zone in zones:
-                if (zone.get("origin_domain") == domain or
-                    zone.get("cdn_domain") == domain or
-                    zone.get("id") == domain):
+                if (
+                    zone.get("origin_domain") == domain
+                    or zone.get("cdn_domain") == domain
+                    or zone.get("id") == domain
+                ):
                     zone_id = zone["id"]
                     break
 
@@ -2032,13 +2257,14 @@ def cdn_purge(ctx: click.Context, domain):
 @click.pass_context
 def cdn_stats(ctx: click.Context, domain):
     """Show CDN zone statistics."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _show_stats():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             # Find zone by domain
@@ -2046,9 +2272,11 @@ def cdn_stats(ctx: click.Context, domain):
             zone_id = None
 
             for zone in zones:
-                if (zone.get("origin_domain") == domain or
-                    zone.get("cdn_domain") == domain or
-                    zone.get("id") == domain):
+                if (
+                    zone.get("origin_domain") == domain
+                    or zone.get("cdn_domain") == domain
+                    or zone.get("id") == domain
+                ):
                     zone_id = zone["id"]
                     break
 
@@ -2064,8 +2292,8 @@ def cdn_stats(ctx: click.Context, domain):
             click.echo(f"  Bandwidth Used: {stats.get('bandwidth_bytes', 'N/A')} bytes")
 
             # Calculate cache hit ratio
-            total_requests = stats.get('total_requests', 0)
-            cache_hits = stats.get('cache_hits', 0)
+            total_requests = stats.get("total_requests", 0)
+            cache_hits = stats.get("cache_hits", 0)
             if total_requests > 0:
                 hit_ratio = (cache_hits / total_requests) * 100
                 click.echo(f"  Cache Hit Ratio: {hit_ratio:.1f}%")
@@ -2081,13 +2309,14 @@ def cdn_stats(ctx: click.Context, domain):
 @click.pass_context
 def cdn_regions(ctx: click.Context):
     """List available CDN regions."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _list_regions():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             regions = await server.get_cdn_available_regions()
@@ -2114,6 +2343,7 @@ def cdn_regions(ctx: click.Context):
 # Kubernetes Commands
 # =============================================================================
 
+
 @cli.group()
 @click.pass_context
 def kubernetes(ctx: click.Context):
@@ -2125,13 +2355,14 @@ def kubernetes(ctx: click.Context):
 @click.pass_context
 def kubernetes_list(ctx: click.Context):
     """List Kubernetes clusters."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _list_clusters():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             clusters = await server.list_kubernetes_clusters()
@@ -2149,7 +2380,9 @@ def kubernetes_list(ctx: click.Context):
                 version = cluster.get("version", "N/A")
                 node_pools = cluster.get("node_pools", 0)
                 click.echo(f"  • {label} ({cluster_id[:8]}...)")
-                click.echo(f"    Status: {status} | Region: {region} | Version: {version}")
+                click.echo(
+                    f"    Status: {status} | Region: {region} | Version: {version}"
+                )
                 click.echo(f"    Node Pools: {node_pools}")
 
         except Exception as e:
@@ -2164,21 +2397,21 @@ def kubernetes_list(ctx: click.Context):
 @click.pass_context
 def kubernetes_get(ctx: click.Context, cluster_name):
     """Get Kubernetes cluster details."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _get_cluster():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             clusters = await server.list_kubernetes_clusters()
             cluster = None
 
             for c in clusters:
-                if (c.get("label") == cluster_name or
-                    c.get("id") == cluster_name):
+                if c.get("label") == cluster_name or c.get("id") == cluster_name:
                     cluster = c
                     break
 
@@ -2206,6 +2439,7 @@ def kubernetes_get(ctx: click.Context, cluster_name):
 # Load Balancer Commands
 # =============================================================================
 
+
 @cli.group()
 @click.pass_context
 def load_balancer(ctx: click.Context):
@@ -2217,13 +2451,14 @@ def load_balancer(ctx: click.Context):
 @click.pass_context
 def load_balancer_list(ctx: click.Context):
     """List load balancers."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _list_load_balancers():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             load_balancers = await server.list_load_balancers()
@@ -2253,6 +2488,7 @@ def load_balancer_list(ctx: click.Context):
 # Database Commands
 # =============================================================================
 
+
 @cli.group()
 @click.pass_context
 def databases(ctx: click.Context):
@@ -2265,19 +2501,22 @@ def databases(ctx: click.Context):
 @click.pass_context
 def databases_list(ctx: click.Context, engine):
     """List managed databases."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _list_databases():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             databases = await server.list_managed_databases()
 
             if engine:
-                databases = [db for db in databases if db.get("database_engine") == engine]
+                databases = [
+                    db for db in databases if db.get("database_engine") == engine
+                ]
 
             if not databases:
                 engine_text = f" ({engine})" if engine else ""
@@ -2293,7 +2532,9 @@ def databases_list(ctx: click.Context, engine):
                 region = db.get("region", "N/A")
                 plan = db.get("plan", "N/A")
                 click.echo(f"  • {label} ({db_id[:8]}...)")
-                click.echo(f"    Engine: {engine_type} | Status: {status} | Region: {region}")
+                click.echo(
+                    f"    Engine: {engine_type} | Status: {status} | Region: {region}"
+                )
                 click.echo(f"    Plan: {plan}")
 
         except Exception as e:
@@ -2307,6 +2548,7 @@ def databases_list(ctx: click.Context, engine):
 # Object Storage Commands
 # =============================================================================
 
+
 @cli.group()
 @click.pass_context
 def object_storage(ctx: click.Context):
@@ -2318,13 +2560,14 @@ def object_storage(ctx: click.Context):
 @click.pass_context
 def object_storage_list(ctx: click.Context):
     """List object storage instances."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _list_storage():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             storage = await server.list_object_storage()
@@ -2355,6 +2598,7 @@ def object_storage_list(ctx: click.Context):
 # Users Commands
 # =============================================================================
 
+
 @cli.group()
 @click.pass_context
 def users(ctx: click.Context):
@@ -2366,13 +2610,14 @@ def users(ctx: click.Context):
 @click.pass_context
 def users_list(ctx: click.Context):
     """List users."""
-    api_key = ctx.obj.get('api_key')
+    api_key = ctx.obj.get("api_key")
     if not api_key:
         click.echo("Error: VULTR_API_KEY is required", err=True)
         sys.exit(1)
 
     async def _list_users():
         from .server import VultrDNSServer
+
         server = VultrDNSServer(api_key)
         try:
             users = await server.list_users()
@@ -2405,7 +2650,7 @@ def main():
 
 def server_command():
     """Entry point for the server command."""
-    cli(['server'])
+    cli(["server"])
 
 
 if __name__ == "__main__":

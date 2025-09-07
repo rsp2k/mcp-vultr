@@ -8,7 +8,8 @@ transient failures in API calls with exponential backoff.
 import asyncio
 import logging
 import random
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from tenacity import (
     after_log,
@@ -30,11 +31,11 @@ def create_retry_decorator(
     max_wait: float = 60.0,
     multiplier: float = 2.0,
     jitter: bool = True,
-    exception_types: tuple = None
+    exception_types: tuple = None,
 ):
     """
     Create a retry decorator with exponential backoff.
-    
+
     Args:
         max_attempts: Maximum number of retry attempts
         min_wait: Minimum wait time between retries (seconds)
@@ -42,18 +43,14 @@ def create_retry_decorator(
         multiplier: Multiplier for exponential backoff
         jitter: Whether to add random jitter to wait times
         exception_types: Tuple of exception types to retry on
-        
+
     Returns:
         Configured retry decorator
     """
     if exception_types is None:
         exception_types = (Exception,)
 
-    wait_strategy = wait_exponential(
-        multiplier=multiplier,
-        min=min_wait,
-        max=max_wait
-    )
+    wait_strategy = wait_exponential(multiplier=multiplier, min=min_wait, max=max_wait)
 
     if jitter:
         # Add random jitter to reduce thundering herd
@@ -71,7 +68,7 @@ def create_retry_decorator(
         wait=wait_strategy,
         retry=retry_if_exception_type(exception_types),
         before_sleep=before_sleep_log(logger, log_level=logging.WARNING),
-        after=after_log(logger, log_level=logging.INFO)
+        after=after_log(logger, log_level=logging.INFO),
     )
 
 
@@ -79,29 +76,17 @@ def create_retry_decorator(
 
 # API calls (retry on rate limits, timeouts, 5xx errors)
 retry_api_call = create_retry_decorator(
-    max_attempts=3,
-    min_wait=1.0,
-    max_wait=30.0,
-    multiplier=2.0,
-    jitter=True
+    max_attempts=3, min_wait=1.0, max_wait=30.0, multiplier=2.0, jitter=True
 )
 
 # Rate limit retries (more aggressive, longer waits)
 retry_rate_limit = create_retry_decorator(
-    max_attempts=5,
-    min_wait=5.0,
-    max_wait=120.0,
-    multiplier=2.0,
-    jitter=True
+    max_attempts=5, min_wait=5.0, max_wait=120.0, multiplier=2.0, jitter=True
 )
 
 # Network retries (quick retries for network issues)
 retry_network = create_retry_decorator(
-    max_attempts=3,
-    min_wait=0.5,
-    max_wait=10.0,
-    multiplier=1.5,
-    jitter=True
+    max_attempts=3, min_wait=0.5, max_wait=10.0, multiplier=1.5, jitter=True
 )
 
 
@@ -113,11 +98,11 @@ async def retry_async(
     max_delay: float = 60.0,
     backoff_factor: float = 2.0,
     jitter: bool = True,
-    **kwargs
+    **kwargs,
 ) -> Any:
     """
     Retry an async function with exponential backoff.
-    
+
     Args:
         func: Async function to retry
         *args: Positional arguments for the function
@@ -127,10 +112,10 @@ async def retry_async(
         backoff_factor: Multiplier for exponential backoff
         jitter: Whether to add random jitter
         **kwargs: Keyword arguments for the function
-        
+
     Returns:
         Result of the function call
-        
+
     Raises:
         Last exception if all attempts fail
     """
@@ -144,7 +129,7 @@ async def retry_async(
                     "Function succeeded after retry",
                     function=func.__name__,
                     attempt=attempt,
-                    max_attempts=max_attempts
+                    max_attempts=max_attempts,
                 )
             return result
 
@@ -157,7 +142,7 @@ async def retry_async(
                     function=func.__name__,
                     attempt=attempt,
                     max_attempts=max_attempts,
-                    error=str(e)
+                    error=str(e),
                 )
                 break
 
@@ -175,7 +160,7 @@ async def retry_async(
                 attempt=attempt,
                 max_attempts=max_attempts,
                 delay=delay,
-                error=str(e)
+                error=str(e),
             )
 
             await asyncio.sleep(delay)
@@ -185,14 +170,17 @@ async def retry_async(
 
 class RetryableError(Exception):
     """Base class for retryable errors."""
+
     pass
 
 
 class RateLimitError(RetryableError):
     """Error for rate limit exceeded scenarios."""
+
     pass
 
 
 class NetworkError(RetryableError):
     """Error for network-related issues."""
+
     pass
