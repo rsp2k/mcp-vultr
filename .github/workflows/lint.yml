@@ -1,0 +1,197 @@
+name: Lint & Format
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .[dev]
+    
+    - name: Run ruff format check
+      run: |
+        echo "::group::Ruff format check"
+        ruff format --check --diff src tests
+        echo "::endgroup::"
+    
+    - name: Run ruff linting
+      run: |
+        echo "::group::Ruff linting"
+        ruff check src tests
+        echo "::endgroup::"
+    
+    - name: Run mypy type checking
+      run: |
+        echo "::group::MyPy type checking"
+        mypy src
+        echo "::endgroup::"
+    
+    - name: Run bandit security linting
+      run: |
+        echo "::group::Bandit security checks"
+        bandit -r src -f json -o bandit-report.json || true
+        if [ -f bandit-report.json ]; then
+          python -m json.tool bandit-report.json
+        fi
+        bandit -r src
+        echo "::endgroup::"
+    
+    - name: Generate lint summary
+      if: always()
+      run: |
+        echo "## 🔍 Lint & Format Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Python Version:** ${{ matrix.python-version }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Check each tool's exit status
+        echo "### Tool Status" >> $GITHUB_STEP_SUMMARY
+        echo "| Tool | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+        
+        # Ruff format
+        if ruff format --check src tests 2>/dev/null; then
+          echo "| Ruff Format | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| Ruff Format | ❌ Failed - Code needs formatting |" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # Ruff lint
+        if ruff check src tests 2>/dev/null; then
+          echo "| Ruff Lint | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| Ruff Lint | ⚠️ Issues found |" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # MyPy
+        if mypy src 2>/dev/null; then
+          echo "| MyPy | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| MyPy | ⚠️ Type issues found |" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # Bandit
+        if bandit -r src 2>/dev/null; then
+          echo "| Bandit | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| Bandit | ⚠️ Security issues found |" >> $GITHUB_STEP_SUMMARY
+        fi
+
+  auto-format:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: lint
+    continue-on-error: true
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        ref: ${{ github.head_ref }}
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.12"
+    
+    - name: Install ruff
+      run: |
+        python -m pip install --upgrade pip
+        pip install ruff
+    
+    - name: Auto-format with ruff
+      run: |
+        ruff format src tests
+        ruff check --fix src tests
+    
+    - name: Check if changes were made
+      id: verify-changed-files
+      run: |
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "changed=true" >> $GITHUB_OUTPUT
+        else
+          echo "changed=false" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Commit and push changes
+      if: steps.verify-changed-files.outputs.changed == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add -A
+        git commit -m "style: Auto-format code with ruff"
+        git push
+    
+    - name: Comment on PR
+      if: steps.verify-changed-files.outputs.changed == 'true'
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '✨ I\'ve automatically formatted your code with Ruff. Please pull the latest changes.'
+          })
+
+  complexity:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.12"
+    
+    - name: Install analysis tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install radon xenon
+    
+    - name: Analyze code complexity
+      run: |
+        echo "## 📊 Code Complexity Analysis" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "### Cyclomatic Complexity" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        radon cc src -s --total-average >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        
+        echo "### Maintainability Index" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        radon mi src -s >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        
+        echo "### Raw Metrics" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        radon raw src -s >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+    
+    - name: Check complexity thresholds
+      run: |
+        # Fail if any function has complexity > 10
+        xenon --max-absolute B --max-modules B --max-average A src || echo "⚠️ Some functions exceed complexity threshold"

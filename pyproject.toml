@@ -54,8 +54,6 @@ dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
-    "black>=23.0.0",
-    "isort>=5.12.0",
     "ruff>=0.1.14",
     "mypy>=1.0.0",
     "pre-commit>=3.0.0",
@@ -96,29 +94,6 @@ where = ["src"]
 [tool.setuptools.package-data]
 mcp_vultr = ["py.typed"]
 
-[tool.black]
-line-length = 88
-target-version = ["py310", "py311", "py312", "py313"]
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
-
-[tool.isort]
-profile = "black"
-multi_line_output = 3
-line_length = 88
-known_first_party = ["mcp_vultr"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -141,7 +116,7 @@ module = ["mcp.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
-target-version = "py38"
+target-version = "py310"
 line-length = 88
 exclude = [
     ".bzr",
@@ -167,6 +142,16 @@ exclude = [
     "venv",
 ]
 
+[tool.ruff.format]
+# Use double quotes for strings
+quote-style = "double"
+# Indent with spaces
+indent-style = "space"
+# Format docstrings
+docstring-code-format = true
+# Unix-style line endings
+line-ending = "auto"
+
 [tool.ruff.lint]
 select = [
     "E",   # pycodestyle errors
@@ -181,13 +166,16 @@ select = [
     "TCH", # flake8-type-checking
 ]
 ignore = [
-    "E501",  # line too long, handled by black
+    "E501",  # line too long, handled by formatter
     "B008",  # do not perform function calls in argument defaults
     "B904",  # Allow raise without from for now
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*" = ["ARG", "S101"]  # Allow unused args and assert in tests
+
+[tool.ruff.lint.isort]
+known-first-party = ["mcp_vultr"]
 
 [tool.bandit]
 exclude_dirs = ["tests", "build", "dist"]
@@ -253,9 +241,7 @@ dev-dependencies = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
-    "black>=23.0.0",
-    "isort>=5.12.0",
-    "flake8>=6.0.0",
+    "ruff>=0.1.14",
     "mypy>=1.0.0",
     "pre-commit>=3.0.0",
     "twine>=4.0.0"
