@@ -918,7 +918,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         region: str,
         plan: str,
         label: str,
-        root_password: str | None = None,
+        root_password: str | None = None,  # noqa: ARG001
         app_user: str = "appuser",
         app_password: str | None = None,
         app_database: str = "appdb",

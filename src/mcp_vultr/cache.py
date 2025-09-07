@@ -201,7 +201,7 @@ _cache_manager = CacheManager()
 
 
 def cached_request(
-    cache_manager: CacheManager = None, ttl: int = None, cache_key_func: callable = None
+    cache_manager: CacheManager = None, ttl: int = None, cache_key_func: callable = None  # noqa: ARG001
 ):
     """
     Decorator for caching API requests.

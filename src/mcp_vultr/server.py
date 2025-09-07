@@ -451,7 +451,7 @@ class VultrDNSServer:
         return results
 
     def _parse_zone_line(
-        self, line: str, default_ttl: int, origin: str
+        self, line: str, default_ttl: int, origin: str  # noqa: ARG002
     ) -> dict[str, Any] | None:
         """
         Parse a single zone file line into a DNS record.
