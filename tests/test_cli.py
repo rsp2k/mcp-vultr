@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from click.testing import CliRunner
 
-from mcp_vultr.cli import cli
+from mcp_vultr.cli_main import cli
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ class TestServerCommand:
             assert result.exit_code == 1
             assert "VULTR_API_KEY is required" in result.output
 
-    @patch("mcp_vultr.cli.run_server")
+    @patch("mcp_vultr.cli_main.run_server")
     def test_server_command_with_api_key(self, mock_run_server, cli_runner):
         """Test server command with API key."""
         with patch.dict("os.environ", {"VULTR_API_KEY": "test-key"}):
@@ -110,7 +110,7 @@ class TestServerCommand:
             assert "Starting Vultr DNS MCP Server" in result.output
             mock_run_server.assert_called_once_with("test-key")
 
-    @patch("mcp_vultr.cli.run_server")
+    @patch("mcp_vultr.cli_main.run_server")
     def test_server_command_with_error(self, mock_run_server, cli_runner):
         """Test server command with error."""
         with patch.dict("os.environ", {"VULTR_API_KEY": "test-key"}):
