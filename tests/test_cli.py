@@ -125,7 +125,7 @@ class TestServerCommand:
 class TestDomainsCommands:
     """Test domain management commands."""
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_list_domains(self, mock_client_class, cli_runner, mock_client_for_cli):
         """Test domains list command."""
         mock_client_class.return_value = mock_client_for_cli
@@ -138,7 +138,7 @@ class TestDomainsCommands:
             assert "test.com" in result.output
             mock_client_for_cli.domains.assert_called_once()
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_list_domains_empty(self, mock_client_class, cli_runner):
         """Test domains list command with no domains."""
         mock_client = AsyncMock()
@@ -151,7 +151,7 @@ class TestDomainsCommands:
             assert result.exit_code == 0
             assert "No domains found" in result.output
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_domain_info(self, mock_client_class, cli_runner, mock_client_for_cli):
         """Test domains info command."""
         mock_client_class.return_value = mock_client_for_cli
@@ -166,7 +166,7 @@ class TestDomainsCommands:
                 "example.com"
             )
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_domain_info_error(self, mock_client_class, cli_runner):
         """Test domains info command with error."""
         mock_client = AsyncMock()
@@ -179,7 +179,7 @@ class TestDomainsCommands:
             assert result.exit_code == 1
             assert "Domain not found" in result.output
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_create_domain(self, mock_client_class, cli_runner, mock_client_for_cli):
         """Test domains create command."""
         mock_client_class.return_value = mock_client_for_cli
@@ -195,7 +195,7 @@ class TestDomainsCommands:
                 "newdomain.com", "192.168.1.100"
             )
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_create_domain_error(self, mock_client_class, cli_runner):
         """Test domains create command with error."""
         mock_client = AsyncMock()
@@ -215,7 +215,7 @@ class TestDomainsCommands:
 class TestRecordsCommands:
     """Test DNS records commands."""
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_list_records(self, mock_client_class, cli_runner, mock_client_for_cli):
         """Test records list command."""
         mock_client_class.return_value = mock_client_for_cli
@@ -228,7 +228,7 @@ class TestRecordsCommands:
             assert "rec1" in result.output
             mock_client_for_cli.records.assert_called_once_with("example.com")
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_list_records_filtered(
         self, mock_client_class, cli_runner, mock_client_for_cli
     ):
@@ -245,7 +245,7 @@ class TestRecordsCommands:
                 "example.com", "A"
             )
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_list_records_empty(self, mock_client_class, cli_runner):
         """Test records list command with no records."""
         mock_client = AsyncMock()
@@ -258,7 +258,7 @@ class TestRecordsCommands:
             assert result.exit_code == 0
             assert "No records found" in result.output
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_add_record(self, mock_client_class, cli_runner, mock_client_for_cli):
         """Test records add command."""
         mock_client_class.return_value = mock_client_for_cli
@@ -274,7 +274,7 @@ class TestRecordsCommands:
                 "example.com", "A", "www", "192.168.1.100", None, None
             )
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_add_record_with_ttl_and_priority(
         self, mock_client_class, cli_runner, mock_client_for_cli
     ):
@@ -303,7 +303,7 @@ class TestRecordsCommands:
                 "example.com", "MX", "@", "mail.example.com", 600, 10
             )
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_add_record_error(self, mock_client_class, cli_runner):
         """Test records add command with error."""
         mock_client = AsyncMock()
@@ -318,7 +318,7 @@ class TestRecordsCommands:
             assert result.exit_code == 1
             assert "Invalid record" in result.output
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_delete_record(self, mock_client_class, cli_runner, mock_client_for_cli):
         """Test records delete command."""
         mock_client_class.return_value = mock_client_for_cli
@@ -334,7 +334,7 @@ class TestRecordsCommands:
                 "example.com", "record-123"
             )
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_delete_record_failure(self, mock_client_class, cli_runner):
         """Test records delete command failure."""
         mock_client = AsyncMock()
@@ -354,7 +354,7 @@ class TestRecordsCommands:
 class TestSetupCommands:
     """Test setup utility commands."""
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_setup_website(self, mock_client_class, cli_runner, mock_client_for_cli):
         """Test setup-website command."""
         mock_client_class.return_value = mock_client_for_cli
@@ -371,7 +371,7 @@ class TestSetupCommands:
                 "example.com", "192.168.1.100", True, None
             )
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_setup_website_no_www(
         self, mock_client_class, cli_runner, mock_client_for_cli
     ):
@@ -388,7 +388,7 @@ class TestSetupCommands:
                 "example.com", "192.168.1.100", False, None
             )
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_setup_website_with_ttl(
         self, mock_client_class, cli_runner, mock_client_for_cli
     ):
@@ -405,7 +405,7 @@ class TestSetupCommands:
                 "example.com", "192.168.1.100", True, 600
             )
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_setup_website_with_errors(self, mock_client_class, cli_runner):
         """Test setup-website command with errors."""
         mock_client = AsyncMock()
@@ -424,7 +424,7 @@ class TestSetupCommands:
             assert result.exit_code == 0
             assert "Setup completed with some errors" in result.output
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_setup_email(self, mock_client_class, cli_runner, mock_client_for_cli):
         """Test setup-email command."""
         mock_client_class.return_value = mock_client_for_cli
@@ -441,7 +441,7 @@ class TestSetupCommands:
                 "example.com", "mail.example.com", 10, None
             )
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_setup_email_custom_priority(
         self, mock_client_class, cli_runner, mock_client_for_cli
     ):
@@ -464,7 +464,7 @@ class TestSetupCommands:
 class TestCLIErrorHandling:
     """Test CLI error handling."""
 
-    @patch("mcp_vultr.cli.VultrDNSClient")
+    @patch("mcp_vultr.cli.dns.VultrDNSClient")
     def test_api_exception_handling(self, mock_client_class, cli_runner):
         """Test CLI handling of API exceptions."""
         mock_client = AsyncMock()
