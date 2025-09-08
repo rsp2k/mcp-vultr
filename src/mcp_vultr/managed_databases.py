@@ -670,7 +670,9 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
 
     # Maintenance and Migration
     @mcp.tool
-    async def list_available_versions(database_id: str) -> builtins.list[dict[str, Any]]:
+    async def list_available_versions(
+        database_id: str,
+    ) -> builtins.list[dict[str, Any]]:
         """List available versions for database engine upgrades.
 
         Args:
@@ -701,7 +703,9 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         }
 
     @mcp.tool
-    async def get_maintenance_updates(database_id: str) -> builtins.list[dict[str, Any]]:
+    async def get_maintenance_updates(
+        database_id: str,
+    ) -> builtins.list[dict[str, Any]]:
         """Get available maintenance updates for a database.
 
         Args:

@@ -127,7 +127,8 @@ def create_serverless_inference_mcp(vultr_client) -> FastMCP:
 
     # Helper function to suggest deployment optimizations
     def suggest_deployment_optimizations(
-        subscription: dict[str, Any], usage_data: dict[str, Any]  # noqa: ARG001
+        subscription: dict[str, Any],  # noqa: ARG001
+        usage_data: dict[str, Any],  # noqa: ARG001
     ) -> list[str]:
         """
         Suggest deployment optimizations based on subscription and usage data.

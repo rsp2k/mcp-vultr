@@ -311,7 +311,9 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
         return await vultr_client.list_load_balancer_forwarding_rules(actual_id)
 
     @mcp.tool
-    async def list_forwarding_rules(load_balancer_id: str) -> builtins.list[dict[str, Any]]:
+    async def list_forwarding_rules(
+        load_balancer_id: str,
+    ) -> builtins.list[dict[str, Any]]:
         """List forwarding rules for a load balancer.
 
         Args:
@@ -406,7 +408,9 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
         return await vultr_client.list_load_balancer_firewall_rules(actual_id)
 
     @mcp.tool
-    async def list_firewall_rules(load_balancer_id: str) -> builtins.list[dict[str, Any]]:
+    async def list_firewall_rules(
+        load_balancer_id: str,
+    ) -> builtins.list[dict[str, Any]]:
         """List firewall rules for a load balancer.
 
         Args:

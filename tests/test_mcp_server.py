@@ -409,9 +409,7 @@ class TestValidationLogic:
                 import json
 
                 parsed = json.loads(result[0].text.replace("'", '"'))
-                assert parsed["validation"]["valid"], (
-                    f"Failed to validate {ipv6_addr}"
-                )
+                assert parsed["validation"]["valid"], f"Failed to validate {ipv6_addr}"
 
             # Invalid IPv6 addresses
             invalid_ipv6_addresses = [
