@@ -28,7 +28,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -55,7 +55,7 @@ jobs:
       is_prerelease: ${{ steps.version.outputs.is_prerelease }}
     
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         fetch-depth: 0  # Fetch full history for proper version detection
     
@@ -151,7 +151,7 @@ jobs:
       contents: write  # Required for GitHub releases
     
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         fetch-depth: 0
     
