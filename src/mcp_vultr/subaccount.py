@@ -4,8 +4,8 @@ Vultr Subaccount FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr subaccounts.
 """
 
-import builtins
-from typing import Any
+from typing import Any, List
+from typing import Any, List
 
 from fastmcp import FastMCP
 
@@ -61,7 +61,7 @@ def create_subaccount_mcp(vultr_client) -> FastMCP:
 
     # Helper function for subaccount setup
     async def setup_subaccount_permissions(
-        subaccount_id: str, permissions: list[str]
+        subaccount_id: str, permissions: List[str]
     ) -> dict[str, Any]:
         """
         Helper function to configure subaccount permissions.
@@ -122,7 +122,7 @@ def create_subaccount_mcp(vultr_client) -> FastMCP:
 
     # Subaccount resources
     @mcp.resource("subaccounts://list")
-    async def list_subaccounts_resource() -> list[dict[str, Any]]:
+    async def list_subaccounts_resource() -> List[dict[str, Any]]:
         """List all subaccounts in your Vultr account."""
         return await vultr_client.list_subaccounts()
 
@@ -142,7 +142,7 @@ def create_subaccount_mcp(vultr_client) -> FastMCP:
 
     # Subaccount management tools
     @mcp.tool
-    async def list() -> list[dict[str, Any]]:
+    async def list() -> List[dict[str, Any]]:
         """List all subaccounts in your Vultr account.
 
         Returns:
@@ -195,7 +195,7 @@ def create_subaccount_mcp(vultr_client) -> FastMCP:
         )
 
     @mcp.tool
-    async def find_by_email(email: str) -> builtins.list[dict[str, Any]]:
+    async def find_by_email(email: str) -> List[dict[str, Any]]:
         """Find subaccounts by email address.
 
         Args:
@@ -211,7 +211,7 @@ def create_subaccount_mcp(vultr_client) -> FastMCP:
         return matches
 
     @mcp.tool
-    async def find_by_name(name: str) -> builtins.list[dict[str, Any]]:
+    async def find_by_name(name: str) -> List[dict[str, Any]]:
         """Find subaccounts by name (partial match).
 
         Args:
@@ -301,7 +301,7 @@ def create_subaccount_mcp(vultr_client) -> FastMCP:
 
     @mcp.tool
     async def setup_permissions(
-        subaccount_id: str, permissions: builtins.list[str]
+        subaccount_id: str, permissions: List[str]
     ) -> dict[str, Any]:
         """Configure permissions for a subaccount.
 
@@ -404,7 +404,7 @@ def create_subaccount_mcp(vultr_client) -> FastMCP:
         return overview
 
     @mcp.tool
-    async def monitor_usage() -> builtins.list[dict[str, Any]]:
+    async def monitor_usage() -> List[dict[str, Any]]:
         """Monitor usage across all subaccounts and identify potential issues.
 
         Returns:

@@ -1,0 +1,2200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="MCP-Vultr Testing Dashboard Demo">
+    <title>MCP-Vultr Testing Dashboard - Demo</title>
+    
+    <style>
+        
+/* CSS Reset and Base Styles */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+/* Gruvbox Dark Theme Variables */
+:root {
+    --gruvbox-dark0: #282828;
+    --gruvbox-dark1: #3c3836;
+    --gruvbox-dark2: #504945;
+    --gruvbox-dark3: #665c54;
+    --gruvbox-dark4: #7c6f64;
+    --gruvbox-light0: #ebdbb2;
+    --gruvbox-light1: #d5c4a1;
+    --gruvbox-light2: #bdae93;
+    --gruvbox-light3: #a89984;
+    --gruvbox-light4: #928374;
+    --gruvbox-red: #fb4934;
+    --gruvbox-green: #b8bb26;
+    --gruvbox-yellow: #fabd2f;
+    --gruvbox-blue: #83a598;
+    --gruvbox-purple: #d3869b;
+    --gruvbox-aqua: #8ec07c;
+    --gruvbox-orange: #fe8019;
+    
+    /* Status Colors */
+    --status-excellent: var(--gruvbox-green);
+    --status-good: var(--gruvbox-blue);
+    --status-warning: var(--gruvbox-yellow);
+    --status-critical: var(--gruvbox-red);
+    
+    /* Layout */
+    --header-height: 80px;
+    --nav-height: 60px;
+    --sidebar-width: 280px;
+    --border-radius: 8px;
+    --shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Base Typography */
+body {
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+    background: var(--gruvbox-dark0);
+    color: var(--gruvbox-light0);
+    line-height: 1.6;
+    font-size: 14px;
+    overflow-x: hidden;
+}
+
+/* Dashboard Layout */
+.dashboard-container {
+    min-height: 100vh;
+    display: grid;
+    grid-template-rows: var(--header-height) var(--nav-height) 1fr auto;
+    grid-template-columns: 1fr;
+}
+
+/* Header */
+.dashboard-header {
+    background: linear-gradient(135deg, var(--gruvbox-dark1), var(--gruvbox-dark2));
+    border-bottom: 2px solid var(--gruvbox-dark3);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 2rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: var(--shadow);
+}
+
+.dashboard-title {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.dashboard-title h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--gruvbox-light0);
+}
+
+.project-badge {
+    background: var(--gruvbox-blue);
+    color: var(--gruvbox-dark0);
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--border-radius);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.header-stats {
+    display: flex;
+    gap: 2rem;
+    align-items: center;
+}
+
+.header-stat {
+    text-align: center;
+}
+
+.header-stat-value {
+    display: block;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--gruvbox-light0);
+}
+
+.header-stat-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--gruvbox-light4);
+    text-transform: uppercase;
+}
+
+/* Navigation */
+.dashboard-nav {
+    background: var(--gruvbox-dark1);
+    border-bottom: 1px solid var(--gruvbox-dark3);
+    display: flex;
+    align-items: center;
+    padding: 0 2rem;
+    gap: 1rem;
+    position: sticky;
+    top: var(--header-height);
+    z-index: 90;
+}
+
+.nav-button {
+    background: none;
+    border: none;
+    color: var(--gruvbox-light4);
+    padding: 0.75rem 1.5rem;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: var(--transition);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.nav-button:hover {
+    background: var(--gruvbox-dark2);
+    color: var(--gruvbox-light0);
+}
+
+.nav-button.active {
+    background: var(--gruvbox-blue);
+    color: var(--gruvbox-dark0);
+}
+
+.nav-controls {
+    margin-left: auto;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.theme-selector {
+    background: var(--gruvbox-dark2);
+    border: 1px solid var(--gruvbox-dark3);
+    color: var(--gruvbox-light0);
+    padding: 0.5rem;
+    border-radius: var(--border-radius);
+    font-family: inherit;
+    font-size: 0.75rem;
+}
+
+/* Main Content */
+.dashboard-content {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+/* Tab System */
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Grid Layouts */
+.grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+}
+
+.grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
+}
+
+.grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+}
+
+/* Cards */
+.card {
+    background: var(--gruvbox-dark1);
+    border: 1px solid var(--gruvbox-dark3);
+    border-radius: var(--border-radius);
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+    transition: var(--transition);
+}
+
+.card:hover {
+    border-color: var(--gruvbox-dark4);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--gruvbox-light0);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.card-badge {
+    background: var(--gruvbox-dark2);
+    color: var(--gruvbox-light4);
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--border-radius);
+    font-size: 0.75rem;
+}
+
+/* Metric Cards */
+.metric-card {
+    text-align: center;
+    padding: 2rem;
+}
+
+.metric-value {
+    display: block;
+    font-size: 3rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--gruvbox-blue), var(--gruvbox-purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.metric-label {
+    display: block;
+    font-size: 0.875rem;
+    color: var(--gruvbox-light4);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.metric-change {
+    display: block;
+    font-size: 0.75rem;
+    margin-top: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--border-radius);
+}
+
+.metric-change.positive {
+    background: var(--gruvbox-green);
+    color: var(--gruvbox-dark0);
+}
+
+.metric-change.negative {
+    background: var(--gruvbox-red);
+    color: var(--gruvbox-dark0);
+}
+
+/* Progress Bars */
+.progress-bar {
+    background: var(--gruvbox-dark2);
+    border-radius: var(--border-radius);
+    height: 12px;
+    overflow: hidden;
+    margin: 0.5rem 0;
+}
+
+.progress-fill {
+    height: 100%;
+    border-radius: var(--border-radius);
+    transition: width 0.8s ease-out;
+    position: relative;
+}
+
+.progress-fill.excellent {
+    background: linear-gradient(90deg, var(--gruvbox-green), var(--gruvbox-aqua));
+}
+
+.progress-fill.good {
+    background: linear-gradient(90deg, var(--gruvbox-blue), var(--gruvbox-purple));
+}
+
+.progress-fill.warning {
+    background: linear-gradient(90deg, var(--gruvbox-yellow), var(--gruvbox-orange));
+}
+
+.progress-fill.critical {
+    background: linear-gradient(90deg, var(--gruvbox-red), var(--gruvbox-orange));
+}
+
+/* Tables */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+}
+
+.data-table th,
+.data-table td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--gruvbox-dark3);
+}
+
+.data-table th {
+    background: var(--gruvbox-dark2);
+    color: var(--gruvbox-light0);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+}
+
+.data-table tr:hover {
+    background: var(--gruvbox-dark2);
+}
+
+/* Status Indicators */
+.status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+}
+
+.status-indicator.excellent {
+    background: var(--status-excellent);
+}
+
+.status-indicator.good {
+    background: var(--status-good);
+}
+
+.status-indicator.warning {
+    background: var(--status-warning);
+}
+
+.status-indicator.critical {
+    background: var(--status-critical);
+}
+
+/* Charts Container */
+.chart-container {
+    height: 300px;
+    position: relative;
+    background: var(--gruvbox-dark2);
+    border-radius: var(--border-radius);
+    padding: 1rem;
+    margin-top: 1rem;
+}
+
+.chart-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gruvbox-light4);
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Coverage Heatmap */
+.coverage-heatmap {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.coverage-module {
+    background: var(--gruvbox-dark2);
+    border: 1px solid var(--gruvbox-dark3);
+    border-radius: var(--border-radius);
+    padding: 1rem;
+    transition: var(--transition);
+}
+
+.coverage-module:hover {
+    border-color: var(--gruvbox-blue);
+    transform: translateY(-2px);
+}
+
+.module-name {
+    font-size: 0.75rem;
+    color: var(--gruvbox-light4);
+    margin-bottom: 0.5rem;
+    word-break: break-all;
+}
+
+.module-coverage {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.module-statements {
+    font-size: 0.75rem;
+    color: var(--gruvbox-light4);
+}
+
+/* Terminal Output */
+.terminal-output {
+    background: var(--gruvbox-dark0);
+    border: 1px solid var(--gruvbox-dark3);
+    border-radius: var(--border-radius);
+    padding: 1rem;
+    font-family: inherit;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.terminal-prompt {
+    color: var(--gruvbox-orange);
+}
+
+.terminal-command {
+    color: var(--gruvbox-yellow);
+}
+
+.terminal-output-text {
+    color: var(--gruvbox-light0);
+}
+
+.terminal-error {
+    color: var(--gruvbox-red);
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .grid-4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .dashboard-content {
+        padding: 1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .grid-2,
+    .grid-3,
+    .grid-4 {
+        grid-template-columns: 1fr;
+    }
+    
+    .dashboard-header {
+        padding: 0 1rem;
+        flex-direction: column;
+        height: auto;
+        gap: 1rem;
+    }
+    
+    .header-stats {
+        gap: 1rem;
+    }
+    
+    .dashboard-nav {
+        padding: 0 1rem;
+        flex-wrap: wrap;
+    }
+    
+    body {
+        font-size: 12px;
+    }
+}
+
+/* Print Styles */
+@media print {
+    body {
+        background: white !important;
+        color: black !important;
+        font-size: 12pt;
+    }
+    
+    .dashboard-nav,
+    .nav-controls,
+    .interactive {
+        display: none !important;
+    }
+    
+    .card {
+        border: 1px solid #ccc !important;
+        box-shadow: none !important;
+        background: white !important;
+        color: black !important;
+        page-break-inside: avoid;
+    }
+    
+    .page-break {
+        page-break-before: always;
+    }
+}
+
+/* Animations */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.card {
+    animation: slideIn 0.5s ease-out;
+}
+
+/* Loading States */
+.loading {
+    position: relative;
+    overflow: hidden;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(235, 219, 178, 0.1),
+        transparent
+    );
+    animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--gruvbox-dark1);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--gruvbox-dark3);
+    border-radius: var(--border-radius);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--gruvbox-dark4);
+}
+
+        
+        /* Demo-specific enhancements */
+        .demo-badge {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background: linear-gradient(135deg, var(--gruvbox-purple), var(--gruvbox-blue));
+            color: var(--gruvbox-dark0);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            z-index: 1000;
+            box-shadow: 0 4px 15px rgba(211, 134, 155, 0.3);
+            animation: float 3s ease-in-out infinite;
+        }
+        
+        .demo-features {
+            background: linear-gradient(135deg, var(--gruvbox-dark1), var(--gruvbox-dark2));
+            border: 1px solid var(--gruvbox-purple);
+            border-radius: var(--border-radius);
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .feature-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--gruvbox-light0);
+            font-size: 0.875rem;
+        }
+        
+        .feature-check {
+            color: var(--gruvbox-green);
+            font-weight: bold;
+        }
+        
+        .enhanced-metric {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .enhanced-metric::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(131, 165, 152, 0.1),
+                transparent
+            );
+            animation: enhance-sweep 3s infinite;
+        }
+        
+        @keyframes enhance-sweep {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+        
+        .demo-chart {
+            background: var(--gruvbox-dark2);
+            border-radius: var(--border-radius);
+            padding: 1rem;
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .demo-chart::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                linear-gradient(45deg, transparent 40%, rgba(131, 165, 152, 0.1) 50%, transparent 60%),
+                linear-gradient(-45deg, transparent 40%, rgba(211, 134, 155, 0.1) 50%, transparent 60%);
+            animation: chart-pattern 4s infinite;
+        }
+        
+        @keyframes chart-pattern {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.6; }
+        }
+        
+        .interactive-demo {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .interactive-demo:hover {
+            transform: scale(1.02);
+            box-shadow: 0 8px 25px rgba(131, 165, 152, 0.2);
+        }
+        
+    </style>
+</head>
+<body class="theme-gruvbox-dark">
+    <div class="dashboard-container">
+        
+        <div class="demo-badge">
+            🎨 DEMO
+        </div>
+        
+        <header class="dashboard-header">
+            <div class="dashboard-title">
+                <h1>MCP-Vultr Testing Dashboard</h1>
+                <span class="project-badge">Demo Mode</span>
+            </div>
+            <div class="header-stats">
+                <div class="header-stat enhanced-metric">
+                    <span class="header-stat-value" id="total-tests">187</span>
+                    <span class="header-stat-label">Total Tests</span>
+                </div>
+                <div class="header-stat enhanced-metric">
+                    <span class="header-stat-value" id="success-rate">88.2%</span>
+                    <span class="header-stat-label">Success Rate</span>
+                </div>
+                <div class="header-stat enhanced-metric">
+                    <span class="header-stat-value" id="coverage-percent">78.3%</span>
+                    <span class="header-stat-label">Coverage</span>
+                </div>
+                <div class="header-stat enhanced-metric">
+                    <span class="header-stat-value" id="duration">89.4s</span>
+                    <span class="header-stat-label">Duration</span>
+                </div>
+            </div>
+        </header>
+        
+        
+        <nav class="dashboard-nav">
+            <button class="nav-button active" data-tab="overview">Overview</button>
+            <button class="nav-button" data-tab="coverage">Coverage</button>
+            <button class="nav-button" data-tab="tests">Test Results</button>
+            <button class="nav-button" data-tab="performance">Performance</button>
+            <button class="nav-button" data-tab="trends">Trends</button>
+            <button class="nav-button" data-tab="modules">Modules</button>
+            
+            <div class="nav-controls">
+                <select class="theme-selector" id="theme-selector">
+                    <option value="gruvbox-dark">Gruvbox Dark</option>
+                    <option value="gruvbox-light">Gruvbox Light</option>
+                    <option value="solarized-dark">Solarized Dark</option>
+                    <option value="dracula">Dracula</option>
+                </select>
+                <button class="nav-button" onclick="window.print()">Print</button>
+                <button class="nav-button" onclick="exportData()">Export</button>
+            </div>
+        </nav>
+        
+        
+        <main class="dashboard-content">
+            <!-- Demo Features Overview -->
+            <div class="demo-features">
+                <h3 style="color: var(--gruvbox-purple); margin-bottom: 0.5rem;">🎨 Dashboard Features Showcase</h3>
+                <div class="feature-list">
+                    <div class="feature-item">
+                        <span class="feature-check">✓</span>
+                        <span>Gruvbox Terminal Theme</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-check">✓</span>
+                        <span>Real-time Monitoring</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-check">✓</span>
+                        <span>Interactive Components</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-check">✓</span>
+                        <span>Historical Trends</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-check">✓</span>
+                        <span>Mobile Responsive</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-check">✓</span>
+                        <span>Zero Dependencies</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Overview Tab -->
+            <div class="tab-content active" id="overview">
+                <div class="grid-4">
+                    <div class="card metric-card interactive-demo">
+                        <span class="metric-value" id="overview-total">187</span>
+                        <span class="metric-label">Total Tests</span>
+                        <span class="metric-change positive">+25 from last run</span>
+                    </div>
+                    <div class="card metric-card interactive-demo">
+                        <span class="metric-value" id="overview-passed">165</span>
+                        <span class="metric-label">Passed</span>
+                        <span class="metric-change positive">+18 from last run</span>
+                    </div>
+                    <div class="card metric-card interactive-demo">
+                        <span class="metric-value" id="overview-failed">12</span>
+                        <span class="metric-label">Failed</span>
+                        <span class="metric-change negative">+3 from last run</span>
+                    </div>
+                    <div class="card metric-card interactive-demo">
+                        <span class="metric-value" id="overview-coverage">78.3%</span>
+                        <span class="metric-label">Coverage</span>
+                        <span class="metric-change positive">+3.1% from last run</span>
+                    </div>
+                </div>
+                
+                <div class="grid-2" style="margin-top: 2rem;">
+                    <div class="card interactive-demo">
+                        <div class="card-header">
+                            <h2 class="card-title">Test Categories Distribution</h2>
+                            <span class="card-badge">4 categories</span>
+                        </div>
+                        <div class="demo-chart">
+                            <div style="text-align: center; color: var(--gruvbox-light4);">
+                                <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
+                                <div>Interactive Chart Placeholder</div>
+                                <div style="font-size: 0.75rem; margin-top: 0.5rem;">Unit: 95 | Integration: 52 | MCP: 28 | TUI: 12</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card interactive-demo">
+                        <div class="card-header">
+                            <h2 class="card-title">Success Rate Trend</h2>
+                            <span class="card-badge">30 days</span>
+                        </div>
+                        <div class="demo-chart">
+                            <div style="text-align: center; color: var(--gruvbox-light4);">
+                                <div style="font-size: 2rem; margin-bottom: 0.5rem;">📈</div>
+                                <div>Trending Upward</div>
+                                <div style="font-size: 0.75rem; margin-top: 0.5rem;">88.2% success rate (+5.4% this month)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card interactive-demo" style="margin-top: 2rem;">
+                    <div class="card-header">
+                        <h2 class="card-title">Recent Test Failures</h2>
+                        <span class="card-badge">12 failures</span>
+                    </div>
+                    <table class="data-table table-modern">
+                        <thead>
+                            <tr>
+                                <th>Test Name</th>
+                                <th>File</th>
+                                <th>Error Type</th>
+                                <th>Duration</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-failures">
+                            <tr class="row-critical">
+                                <td>test_vultr_auth_timeout</td>
+                                <td>test_client.py:145</td>
+                                <td>TimeoutError</td>
+                                <td>30.1s</td>
+                                <td><span class="status-indicator critical"></span>Failed</td>
+                            </tr>
+                            <tr class="row-critical">
+                                <td>test_dns_record_validation</td>
+                                <td>test_server.py:89</td>
+                                <td>ValidationError</td>
+                                <td>2.3s</td>
+                                <td><span class="status-indicator critical"></span>Failed</td>
+                            </tr>
+                            <tr class="row-warning">
+                                <td>test_mcp_server_connection</td>
+                                <td>test_mcp_server.py:203</td>
+                                <td>ConnectionError</td>
+                                <td>15.7s</td>
+                                <td><span class="status-indicator warning"></span>Flaky</td>
+                            </tr>
+                            <tr class="row-critical">
+                                <td>test_tui_navigation_keys</td>
+                                <td>test_tui_app.py:67</td>
+                                <td>KeyError</td>
+                                <td>1.2s</td>
+                                <td><span class="status-indicator critical"></span>Failed</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Additional tabs would be populated here -->
+            {self.get_dashboard_content()}
+        </main>
+        
+        
+        <footer class="dashboard-footer" style="background: var(--gruvbox-dark1); padding: 1rem 2rem; border-top: 1px solid var(--gruvbox-dark3); text-align: center; color: var(--gruvbox-light4); font-size: 0.75rem;">
+            <p>Generated by MCP-Vultr Testing Dashboard • Last updated: <span id="last-updated"></span> • <a href="https://git.supported.systems/MCP/mcp-vultr" style="color: var(--gruvbox-blue);">View Source</a></p>
+        </footer>
+        
+    </div>
+    
+    <!-- Embedded Demo Data -->
+    <script type="application/json" id="dashboard-data">
+    {
+  "coverage": {
+    "overall_percentage": 78.3,
+    "total_statements": 5306,
+    "missing_statements": 1151,
+    "covered_statements": 4155,
+    "modules": [
+      {
+        "name": "src/mcp_vultr/__init__.py",
+        "statements": 8,
+        "missing": 0,
+        "coverage": 100,
+        "status": "excellent"
+      },
+      {
+        "name": "src/mcp_vultr/_version.py",
+        "statements": 2,
+        "missing": 0,
+        "coverage": 100,
+        "status": "excellent"
+      },
+      {
+        "name": "src/mcp_vultr/cache.py",
+        "statements": 94,
+        "missing": 2,
+        "coverage": 98,
+        "status": "excellent"
+      },
+      {
+        "name": "src/mcp_vultr/retry.py",
+        "statements": 49,
+        "missing": 5,
+        "coverage": 90,
+        "status": "excellent"
+      },
+      {
+        "name": "src/mcp_vultr/metrics.py",
+        "statements": 124,
+        "missing": 15,
+        "coverage": 88,
+        "status": "good"
+      },
+      {
+        "name": "src/mcp_vultr/client.py",
+        "statements": 86,
+        "missing": 12,
+        "coverage": 86,
+        "status": "good"
+      },
+      {
+        "name": "src/mcp_vultr/logging.py",
+        "statements": 35,
+        "missing": 5,
+        "coverage": 86,
+        "status": "good"
+      },
+      {
+        "name": "src/mcp_vultr/fastmcp_server.py",
+        "statements": 95,
+        "missing": 20,
+        "coverage": 79,
+        "status": "warning"
+      },
+      {
+        "name": "src/mcp_vultr/server.py",
+        "statements": 1520,
+        "missing": 340,
+        "coverage": 78,
+        "status": "warning"
+      },
+      {
+        "name": "src/mcp_vultr/dns.py",
+        "statements": 71,
+        "missing": 18,
+        "coverage": 75,
+        "status": "warning"
+      },
+      {
+        "name": "src/mcp_vultr/cli_main.py",
+        "statements": 74,
+        "missing": 25,
+        "coverage": 66,
+        "status": "critical"
+      },
+      {
+        "name": "src/mcp_vultr/tui_app.py",
+        "statements": 245,
+        "missing": 85,
+        "coverage": 65,
+        "status": "critical"
+      }
+    ],
+    "trends": {
+      "last_week": 75.2,
+      "last_month": 72.8,
+      "change": "+5.5%"
+    }
+  },
+  "tests": {
+    "total": 187,
+    "passed": 165,
+    "failed": 12,
+    "skipped": 10,
+    "duration": 89.4,
+    "success_rate": 88.2,
+    "categories": {
+      "unit": {
+        "total": 95,
+        "passed": 88,
+        "failed": 4,
+        "skipped": 3,
+        "duration": 23.1
+      },
+      "integration": {
+        "total": 52,
+        "passed": 45,
+        "failed": 5,
+        "skipped": 2,
+        "duration": 45.2
+      },
+      "mcp": {
+        "total": 28,
+        "passed": 22,
+        "failed": 2,
+        "skipped": 4,
+        "duration": 18.7
+      },
+      "tui": {
+        "total": 12,
+        "passed": 10,
+        "failed": 1,
+        "skipped": 1,
+        "duration": 2.4
+      }
+    },
+    "recent_failures": [
+      {
+        "test": "test_vultr_auth_timeout",
+        "file": "test_client.py",
+        "error": "TimeoutError",
+        "duration": 30.1,
+        "line": 145
+      },
+      {
+        "test": "test_dns_record_validation",
+        "file": "test_server.py",
+        "error": "ValidationError",
+        "duration": 2.3,
+        "line": 89
+      },
+      {
+        "test": "test_mcp_server_connection",
+        "file": "test_mcp_server.py",
+        "error": "ConnectionError",
+        "duration": 15.7,
+        "line": 203
+      },
+      {
+        "test": "test_tui_navigation_keys",
+        "file": "test_tui_app.py",
+        "error": "KeyError",
+        "duration": 1.2,
+        "line": 67
+      }
+    ],
+    "flaky_tests": [
+      {
+        "test": "test_api_rate_limiting",
+        "flake_rate": 0.15
+      },
+      {
+        "test": "test_concurrent_requests",
+        "flake_rate": 0.08
+      },
+      {
+        "test": "test_network_timeout",
+        "flake_rate": 0.12
+      }
+    ]
+  },
+  "performance": {
+    "slowest_tests": [
+      {
+        "name": "test_comprehensive_error_handling",
+        "duration": 15.2,
+        "category": "integration"
+      },
+      {
+        "name": "test_all_vultr_tools_integration",
+        "duration": 12.8,
+        "category": "mcp"
+      },
+      {
+        "name": "test_tui_full_workflow",
+        "duration": 8.9,
+        "category": "tui"
+      },
+      {
+        "name": "test_concurrent_api_calls",
+        "duration": 7.4,
+        "category": "integration"
+      },
+      {
+        "name": "test_large_dns_zone_import",
+        "duration": 6.1,
+        "category": "unit"
+      },
+      {
+        "name": "test_stress_cache_operations",
+        "duration": 4.7,
+        "category": "unit"
+      },
+      {
+        "name": "test_memory_leak_detection",
+        "duration": 4.2,
+        "category": "integration"
+      },
+      {
+        "name": "test_startup_time_optimization",
+        "duration": 3.8,
+        "category": "unit"
+      }
+    ],
+    "memory_usage": {
+      "peak_mb": 387,
+      "average_mb": 245,
+      "baseline_mb": 156,
+      "gc_collections": 67,
+      "memory_growth": "+12%"
+    },
+    "parallel_efficiency": {
+      "workers": 8,
+      "speedup_factor": 6.2,
+      "load_balance": 0.78,
+      "cpu_utilization": 85
+    },
+    "test_timing_distribution": {
+      "fast": {
+        "count": 145,
+        "avg_duration": 0.8,
+        "percentage": 77.5
+      },
+      "medium": {
+        "count": 32,
+        "avg_duration": 4.2,
+        "percentage": 17.1
+      },
+      "slow": {
+        "count": 10,
+        "avg_duration": 12.1,
+        "percentage": 5.4
+      }
+    }
+  },
+  "historical": [
+    {
+      "timestamp": "2025-08-15T04:24:40.601388",
+      "date": "2025-08-15",
+      "total": 189,
+      "passed": 160,
+      "failed": 28,
+      "coverage": 74.2,
+      "duration": 94.9,
+      "success_rate": 84.9
+    },
+    {
+      "timestamp": "2025-08-16T04:24:40.601388",
+      "date": "2025-08-16",
+      "total": 177,
+      "passed": 139,
+      "failed": 37,
+      "coverage": 81.7,
+      "duration": 84.8,
+      "success_rate": 79.1
+    },
+    {
+      "timestamp": "2025-08-17T04:24:40.601388",
+      "date": "2025-08-17",
+      "total": 175,
+      "passed": 167,
+      "failed": 7,
+      "coverage": 84.5,
+      "duration": 75.1,
+      "success_rate": 95.6
+    },
+    {
+      "timestamp": "2025-08-18T04:24:40.601388",
+      "date": "2025-08-18",
+      "total": 178,
+      "passed": 167,
+      "failed": 10,
+      "coverage": 85.0,
+      "duration": 81.4,
+      "success_rate": 94.2
+    },
+    {
+      "timestamp": "2025-08-19T04:24:40.601388",
+      "date": "2025-08-19",
+      "total": 184,
+      "passed": 160,
+      "failed": 23,
+      "coverage": 73.5,
+      "duration": 70.5,
+      "success_rate": 87.4
+    },
+    {
+      "timestamp": "2025-08-20T04:24:40.601388",
+      "date": "2025-08-20",
+      "total": 184,
+      "passed": 140,
+      "failed": 43,
+      "coverage": 85.4,
+      "duration": 103.4,
+      "success_rate": 76.6
+    },
+    {
+      "timestamp": "2025-08-21T04:24:40.601388",
+      "date": "2025-08-21",
+      "total": 179,
+      "passed": 172,
+      "failed": 6,
+      "coverage": 78.6,
+      "duration": 80.2,
+      "success_rate": 96.4
+    },
+    {
+      "timestamp": "2025-08-22T04:24:40.601388",
+      "date": "2025-08-22",
+      "total": 184,
+      "passed": 176,
+      "failed": 7,
+      "coverage": 74.3,
+      "duration": 73.1,
+      "success_rate": 96.1
+    },
+    {
+      "timestamp": "2025-08-23T04:24:40.601388",
+      "date": "2025-08-23",
+      "total": 182,
+      "passed": 167,
+      "failed": 14,
+      "coverage": 74.9,
+      "duration": 64.2,
+      "success_rate": 91.8
+    },
+    {
+      "timestamp": "2025-08-24T04:24:40.601388",
+      "date": "2025-08-24",
+      "total": 188,
+      "passed": 149,
+      "failed": 38,
+      "coverage": 74.9,
+      "duration": 80.4,
+      "success_rate": 79.5
+    },
+    {
+      "timestamp": "2025-08-25T04:24:40.601388",
+      "date": "2025-08-25",
+      "total": 177,
+      "passed": 135,
+      "failed": 41,
+      "coverage": 78.8,
+      "duration": 65.3,
+      "success_rate": 76.8
+    },
+    {
+      "timestamp": "2025-08-26T04:24:40.601388",
+      "date": "2025-08-26",
+      "total": 190,
+      "passed": 171,
+      "failed": 18,
+      "coverage": 72.8,
+      "duration": 62.7,
+      "success_rate": 90.3
+    },
+    {
+      "timestamp": "2025-08-27T04:24:40.601388",
+      "date": "2025-08-27",
+      "total": 180,
+      "passed": 138,
+      "failed": 41,
+      "coverage": 78.5,
+      "duration": 96.9,
+      "success_rate": 77.0
+    },
+    {
+      "timestamp": "2025-08-28T04:24:40.601388",
+      "date": "2025-08-28",
+      "total": 175,
+      "passed": 164,
+      "failed": 10,
+      "coverage": 75.0,
+      "duration": 63.0,
+      "success_rate": 94.1
+    },
+    {
+      "timestamp": "2025-08-29T04:24:40.601388",
+      "date": "2025-08-29",
+      "total": 175,
+      "passed": 133,
+      "failed": 41,
+      "coverage": 79.8,
+      "duration": 81.0,
+      "success_rate": 76.5
+    },
+    {
+      "timestamp": "2025-08-30T04:24:40.601388",
+      "date": "2025-08-30",
+      "total": 182,
+      "passed": 159,
+      "failed": 22,
+      "coverage": 82.9,
+      "duration": 63.8,
+      "success_rate": 87.9
+    },
+    {
+      "timestamp": "2025-08-31T04:24:40.601388",
+      "date": "2025-08-31",
+      "total": 183,
+      "passed": 147,
+      "failed": 35,
+      "coverage": 81.5,
+      "duration": 91.2,
+      "success_rate": 80.5
+    },
+    {
+      "timestamp": "2025-09-01T04:24:40.601388",
+      "date": "2025-09-01",
+      "total": 188,
+      "passed": 172,
+      "failed": 15,
+      "coverage": 75.7,
+      "duration": 101.7,
+      "success_rate": 91.6
+    },
+    {
+      "timestamp": "2025-09-02T04:24:40.601388",
+      "date": "2025-09-02",
+      "total": 190,
+      "passed": 181,
+      "failed": 8,
+      "coverage": 81.1,
+      "duration": 84.8,
+      "success_rate": 95.6
+    },
+    {
+      "timestamp": "2025-09-03T04:24:40.601388",
+      "date": "2025-09-03",
+      "total": 190,
+      "passed": 155,
+      "failed": 34,
+      "coverage": 75.9,
+      "duration": 86.7,
+      "success_rate": 81.9
+    },
+    {
+      "timestamp": "2025-09-04T04:24:40.601388",
+      "date": "2025-09-04",
+      "total": 177,
+      "passed": 133,
+      "failed": 43,
+      "coverage": 79.8,
+      "duration": 94.6,
+      "success_rate": 75.3
+    },
+    {
+      "timestamp": "2025-09-05T04:24:40.601388",
+      "date": "2025-09-05",
+      "total": 177,
+      "passed": 169,
+      "failed": 7,
+      "coverage": 72.9,
+      "duration": 61.1,
+      "success_rate": 95.8
+    },
+    {
+      "timestamp": "2025-09-06T04:24:40.601388",
+      "date": "2025-09-06",
+      "total": 190,
+      "passed": 169,
+      "failed": 20,
+      "coverage": 77.3,
+      "duration": 105.4,
+      "success_rate": 89.2
+    },
+    {
+      "timestamp": "2025-09-07T04:24:40.601388",
+      "date": "2025-09-07",
+      "total": 176,
+      "passed": 144,
+      "failed": 31,
+      "coverage": 72.9,
+      "duration": 71.2,
+      "success_rate": 81.9
+    },
+    {
+      "timestamp": "2025-09-08T04:24:40.601388",
+      "date": "2025-09-08",
+      "total": 185,
+      "passed": 143,
+      "failed": 41,
+      "coverage": 81.9,
+      "duration": 82.9,
+      "success_rate": 77.3
+    },
+    {
+      "timestamp": "2025-09-09T04:24:40.601388",
+      "date": "2025-09-09",
+      "total": 188,
+      "passed": 178,
+      "failed": 9,
+      "coverage": 79.5,
+      "duration": 104.4,
+      "success_rate": 95.2
+    },
+    {
+      "timestamp": "2025-09-10T04:24:40.601388",
+      "date": "2025-09-10",
+      "total": 176,
+      "passed": 166,
+      "failed": 9,
+      "coverage": 78.4,
+      "duration": 72.3,
+      "success_rate": 94.6
+    },
+    {
+      "timestamp": "2025-09-11T04:24:40.601388",
+      "date": "2025-09-11",
+      "total": 178,
+      "passed": 144,
+      "failed": 33,
+      "coverage": 70.9,
+      "duration": 106.9,
+      "success_rate": 81.3
+    },
+    {
+      "timestamp": "2025-09-12T04:24:40.601388",
+      "date": "2025-09-12",
+      "total": 182,
+      "passed": 138,
+      "failed": 43,
+      "coverage": 78.2,
+      "duration": 87.3,
+      "success_rate": 76.4
+    },
+    {
+      "timestamp": "2025-09-13T04:24:40.601388",
+      "date": "2025-09-13",
+      "total": 176,
+      "passed": 132,
+      "failed": 43,
+      "coverage": 79.6,
+      "duration": 73.3,
+      "success_rate": 75.1
+    }
+  ],
+  "quality": {
+    "ruff": {
+      "issues": 8,
+      "errors": 2,
+      "warnings": 6,
+      "categories": {
+        "style": 3,
+        "complexity": 2,
+        "imports": 2,
+        "security": 1
+      }
+    },
+    "mypy": {
+      "issues": 12,
+      "errors": 4,
+      "warnings": 8,
+      "coverage": 89.2
+    },
+    "complexity": {
+      "average": 3.4,
+      "max": 12,
+      "functions_over_10": 5
+    },
+    "maintainability": {
+      "score": 7.8,
+      "grade": "B+",
+      "debt_ratio": 0.08
+    }
+  },
+  "modules": [
+    {
+      "name": "Core API Client",
+      "path": "src/mcp_vultr/server.py",
+      "coverage": 78,
+      "complexity": 8.2,
+      "issues": 5,
+      "status": "warning"
+    },
+    {
+      "name": "FastMCP Server",
+      "path": "src/mcp_vultr/fastmcp_server.py",
+      "coverage": 79,
+      "complexity": 6.1,
+      "issues": 3,
+      "status": "warning"
+    },
+    {
+      "name": "CLI Interface",
+      "path": "src/mcp_vultr/cli_main.py",
+      "coverage": 66,
+      "complexity": 5.4,
+      "issues": 8,
+      "status": "critical"
+    },
+    {
+      "name": "TUI Application",
+      "path": "src/mcp_vultr/tui_app.py",
+      "coverage": 65,
+      "complexity": 9.8,
+      "issues": 12,
+      "status": "critical"
+    },
+    {
+      "name": "DNS Management",
+      "path": "src/mcp_vultr/dns.py",
+      "coverage": 75,
+      "complexity": 4.2,
+      "issues": 2,
+      "status": "warning"
+    },
+    {
+      "name": "Cache System",
+      "path": "src/mcp_vultr/cache.py",
+      "coverage": 98,
+      "complexity": 3.1,
+      "issues": 0,
+      "status": "excellent"
+    },
+    {
+      "name": "Retry Logic",
+      "path": "src/mcp_vultr/retry.py",
+      "coverage": 90,
+      "complexity": 2.8,
+      "issues": 1,
+      "status": "excellent"
+    },
+    {
+      "name": "Metrics",
+      "path": "src/mcp_vultr/metrics.py",
+      "coverage": 88,
+      "complexity": 4.7,
+      "issues": 2,
+      "status": "good"
+    },
+    {
+      "name": "Client Library",
+      "path": "src/mcp_vultr/client.py",
+      "coverage": 86,
+      "complexity": 5.2,
+      "issues": 3,
+      "status": "good"
+    },
+    {
+      "name": "Logging",
+      "path": "src/mcp_vultr/logging.py",
+      "coverage": 86,
+      "complexity": 2.1,
+      "issues": 1,
+      "status": "good"
+    }
+  ],
+  "generated_at": "2025-09-13T04:24:40.601518",
+  "project": "MCP-Vultr Testing Dashboard Demo"
+}
+    </script>
+    
+    <script>
+        
+// Dashboard JavaScript - Progressive Enhancement
+(function() {
+    'use strict';
+    
+    // Data Management
+    let dashboardData = {};
+    
+    // Initialize Dashboard
+    function initializeDashboard() {
+        loadEmbeddedData();
+        setupNavigation();
+        setupThemeSelector();
+        populateData();
+        setupInteractivity();
+        setupAutoRefresh();
+        updateLastUpdated();
+    }
+    
+    function loadEmbeddedData() {
+        const dataElement = document.getElementById('dashboard-data');
+        if (dataElement) {
+            try {
+                dashboardData = JSON.parse(dataElement.textContent);
+                console.log('Dashboard data loaded:', dashboardData);
+            } catch (e) {
+                console.error('Failed to parse dashboard data:', e);
+                dashboardData = getDefaultData();
+            }
+        } else {
+            dashboardData = getDefaultData();
+        }
+    }
+    
+    function getDefaultData() {
+        return {
+            coverage: {
+                overall_percentage: 9,
+                total_statements: 5306,
+                missing_statements: 4814,
+                modules: []
+            },
+            tests: {
+                total: 156,
+                passed: 140,
+                failed: 8,
+                skipped: 8,
+                duration: 45.2,
+                success_rate: 89.7
+            },
+            performance: {
+                slowest_tests: [],
+                memory_usage: { peak_mb: 245, average_mb: 189 }
+            },
+            historical: []
+        };
+    }
+    
+    // Navigation System
+    function setupNavigation() {
+        const navButtons = document.querySelectorAll('.nav-button[data-tab]');
+        const tabContents = document.querySelectorAll('.tab-content');
+        
+        navButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const targetTab = button.dataset.tab;
+                
+                // Update active button
+                navButtons.forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+                
+                // Update active tab content
+                tabContents.forEach(content => content.classList.remove('active'));
+                const targetContent = document.getElementById(targetTab);
+                if (targetContent) {
+                    targetContent.classList.add('active');
+                    
+                    // Load tab-specific content
+                    loadTabContent(targetTab);
+                }
+            });
+        });
+    }
+    
+    function loadTabContent(tabName) {
+        switch (tabName) {
+            case 'overview':
+                populateOverviewTab();
+                break;
+            case 'coverage':
+                populateCoverageTab();
+                break;
+            case 'tests':
+                populateTestsTab();
+                break;
+            case 'performance':
+                populatePerformanceTab();
+                break;
+            case 'trends':
+                populateTrendsTab();
+                break;
+            case 'modules':
+                populateModulesTab();
+                break;
+        }
+    }
+    
+    // Theme Management
+    function setupThemeSelector() {
+        const themeSelector = document.getElementById('theme-selector');
+        if (themeSelector) {
+            // Load saved theme
+            const savedTheme = localStorage.getItem('dashboard-theme') || 'gruvbox-dark';
+            themeSelector.value = savedTheme;
+            applyTheme(savedTheme);
+            
+            themeSelector.addEventListener('change', (e) => {
+                const theme = e.target.value;
+                applyTheme(theme);
+                localStorage.setItem('dashboard-theme', theme);
+            });
+        }
+    }
+    
+    function applyTheme(themeName) {
+        document.body.className = `theme-${themeName}`;
+        
+        // Update CSS custom properties for different themes
+        const root = document.documentElement;
+        
+        switch (themeName) {
+            case 'gruvbox-light':
+                root.style.setProperty('--gruvbox-dark0', '#fbf1c7');
+                root.style.setProperty('--gruvbox-dark1', '#ebdbb2');
+                root.style.setProperty('--gruvbox-light0', '#3c3836');
+                break;
+            case 'solarized-dark':
+                root.style.setProperty('--gruvbox-dark0', '#002b36');
+                root.style.setProperty('--gruvbox-dark1', '#073642');
+                root.style.setProperty('--gruvbox-light0', '#839496');
+                break;
+            case 'dracula':
+                root.style.setProperty('--gruvbox-dark0', '#282a36');
+                root.style.setProperty('--gruvbox-dark1', '#44475a');
+                root.style.setProperty('--gruvbox-light0', '#f8f8f2');
+                break;
+            default: // gruvbox-dark
+                root.style.setProperty('--gruvbox-dark0', '#282828');
+                root.style.setProperty('--gruvbox-dark1', '#3c3836');
+                root.style.setProperty('--gruvbox-light0', '#ebdbb2');
+        }
+    }
+    
+    // Data Population
+    function populateData() {
+        updateHeaderStats();
+        populateOverviewTab();
+    }
+    
+    function updateHeaderStats() {
+        const tests = dashboardData.tests || {};
+        const coverage = dashboardData.coverage || {};
+        
+        updateElement('total-tests', tests.total || 0);
+        updateElement('success-rate', `${tests.success_rate || 0}%`);
+        updateElement('coverage-percent', `${coverage.overall_percentage || 0}%`);
+        updateElement('duration', `${tests.duration || 0}s`);
+    }
+    
+    function updateElement(id, value) {
+        const element = document.getElementById(id);
+        if (element) {
+            element.textContent = value;
+        }
+    }
+    
+    function populateOverviewTab() {
+        const tests = dashboardData.tests || {};
+        
+        updateElement('overview-total', tests.total || 0);
+        updateElement('overview-passed', tests.passed || 0);
+        updateElement('overview-failed', tests.failed || 0);
+        updateElement('overview-coverage', `${dashboardData.coverage?.overall_percentage || 0}%`);
+        
+        populateRecentFailures();
+    }
+    
+    function populateRecentFailures() {
+        const tbody = document.getElementById('recent-failures');
+        if (!tbody) return;
+        
+        const failures = dashboardData.tests?.recent_failures || [
+            {test: 'test_vultr_auth_error', file: 'test_client.py', error: 'AuthenticationError'},
+            {test: 'test_timeout_handling', file: 'test_server.py', error: 'TimeoutError'}
+        ];
+        
+        tbody.innerHTML = failures.map(failure => `
+            <tr>
+                <td>${failure.test}</td>
+                <td>${failure.file}</td>
+                <td>${failure.error}</td>
+                <td>2.1s</td>
+                <td><span class="status-indicator critical"></span>Failed</td>
+            </tr>
+        `).join('');
+    }
+    
+    function populateCoverageTab() {
+        populateCoverageHeatmap();
+        populateCoverageDetails();
+    }
+    
+    function populateCoverageHeatmap() {
+        const container = document.getElementById('coverage-heatmap');
+        if (!container) return;
+        
+        const modules = dashboardData.coverage?.modules || getDefaultModules();
+        
+        container.innerHTML = modules.map(module => `
+            <div class="coverage-module">
+                <div class="module-name">${module.name}</div>
+                <div class="module-coverage" style="color: var(--status-${module.status})">${module.coverage}%</div>
+                <div class="module-statements">${module.statements} statements, ${module.missing} missing</div>
+                <div class="progress-bar" style="margin-top: 0.5rem;">
+                    <div class="progress-fill ${module.status}" style="width: ${module.coverage}%"></div>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    function populateCoverageDetails() {
+        const tbody = document.getElementById('coverage-details');
+        if (!tbody) return;
+        
+        const modules = dashboardData.coverage?.modules || getDefaultModules();
+        
+        tbody.innerHTML = modules.map(module => `
+            <tr>
+                <td>${module.name}</td>
+                <td>${module.statements}</td>
+                <td>${module.missing}</td>
+                <td>${module.coverage}%</td>
+                <td><span class="status-indicator ${module.status}"></span>${module.status}</td>
+            </tr>
+        `).join('');
+    }
+    
+    function getDefaultModules() {
+        return [
+            {name: "src/mcp_vultr/__init__.py", statements: 8, missing: 0, coverage: 100, status: "excellent"},
+            {name: "src/mcp_vultr/cache.py", statements: 94, missing: 2, coverage: 98, status: "excellent"},
+            {name: "src/mcp_vultr/retry.py", statements: 49, missing: 22, coverage: 55, status: "warning"},
+            {name: "src/mcp_vultr/metrics.py", statements: 124, missing: 66, coverage: 47, status: "warning"},
+            {name: "src/mcp_vultr/logging.py", statements: 35, missing: 23, coverage: 34, status: "critical"},
+            {name: "src/mcp_vultr/client.py", statements: 86, missing: 63, coverage: 27, status: "critical"},
+            {name: "src/mcp_vultr/server.py", statements: 1520, missing: 1250, coverage: 18, status: "critical"},
+            {name: "src/mcp_vultr/fastmcp_server.py", statements: 95, missing: 95, coverage: 0, status: "critical"}
+        ];
+    }
+    
+    function populateTestsTab() {
+        // Populate test category charts and details
+        console.log('Loading tests tab...');
+    }
+    
+    function populatePerformanceTab() {
+        // Populate performance metrics and charts
+        console.log('Loading performance tab...');
+    }
+    
+    function populateTrendsTab() {
+        // Populate historical trend charts
+        console.log('Loading trends tab...');
+    }
+    
+    function populateModulesTab() {
+        const container = document.getElementById('module-grid');
+        if (!container) return;
+        
+        populateCoverageHeatmap();
+    }
+    
+    // Interactivity
+    function setupInteractivity() {
+        // Add click handlers for cards
+        document.querySelectorAll('.coverage-module').forEach(module => {
+            module.addEventListener('click', () => {
+                const moduleName = module.querySelector('.module-name').textContent;
+                showModuleDetails(moduleName);
+            });
+        });
+        
+        // Add keyboard shortcuts
+        document.addEventListener('keydown', handleKeyboardShortcuts);
+    }
+    
+    function showModuleDetails(moduleName) {
+        // Create modal with module details
+        const modal = createModal('Module Details', `
+            <h3>${moduleName}</h3>
+            <p>Detailed coverage information would be shown here.</p>
+            <div class="terminal-output">
+                <span class="terminal-prompt">❯</span> 
+                <span class="terminal-command">coverage report --show-missing ${moduleName}</span>
+                <div class="terminal-output-text">
+Lines not covered: 45-67, 89-95, 123-145
+Missing branches: 12, 34, 56
+                </div>
+            </div>
+        `);
+        
+        document.body.appendChild(modal);
+    }
+    
+    function createModal(title, content) {
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8); z-index: 1000;
+            display: flex; align-items: center; justify-content: center;
+        `;
+        
+        modal.innerHTML = `
+            <div style="
+                background: var(--gruvbox-dark1);
+                border: 1px solid var(--gruvbox-dark3);
+                border-radius: var(--border-radius);
+                padding: 2rem; max-width: 600px; width: 90%;
+                max-height: 80vh; overflow-y: auto;
+            ">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h2 style="color: var(--gruvbox-light0);">${title}</h2>
+                    <button onclick="this.closest('.modal').remove()" style="
+                        background: none; border: none; color: var(--gruvbox-light4);
+                        font-size: 1.5rem; cursor: pointer;
+                    ">×</button>
+                </div>
+                <div>${content}</div>
+            </div>
+        `;
+        
+        modal.className = 'modal';
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.remove();
+        });
+        
+        return modal;
+    }
+    
+    function handleKeyboardShortcuts(e) {
+        if (e.ctrlKey || e.metaKey) {
+            switch (e.key) {
+                case '1':
+                    e.preventDefault();
+                    document.querySelector('[data-tab="overview"]').click();
+                    break;
+                case '2':
+                    e.preventDefault();
+                    document.querySelector('[data-tab="coverage"]').click();
+                    break;
+                case '3':
+                    e.preventDefault();
+                    document.querySelector('[data-tab="tests"]').click();
+                    break;
+                case 'r':
+                    e.preventDefault();
+                    refreshDashboard();
+                    break;
+            }
+        }
+    }
+    
+    // Auto-refresh functionality
+    function setupAutoRefresh() {
+        // Check for updates every 30 seconds
+        setInterval(checkForUpdates, 30000);
+    }
+    
+    function checkForUpdates() {
+        // In a real implementation, this would check for new test results
+        // For now, just update the timestamp
+        updateLastUpdated();
+    }
+    
+    function refreshDashboard() {
+        // Show loading state
+        document.body.classList.add('loading');
+        
+        // Simulate refresh delay
+        setTimeout(() => {
+            loadEmbeddedData();
+            populateData();
+            updateLastUpdated();
+            document.body.classList.remove('loading');
+            
+            // Show success notification
+            showNotification('Dashboard refreshed successfully', 'success');
+        }, 1000);
+    }
+    
+    function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed; top: 1rem; right: 1rem; z-index: 1001;
+            background: var(--gruvbox-${type === 'success' ? 'green' : 'blue'});
+            color: var(--gruvbox-dark0); padding: 1rem; border-radius: var(--border-radius);
+            box-shadow: var(--shadow); transform: translateX(100%);
+            transition: transform 0.3s ease-out;
+        `;
+        notification.textContent = message;
+        
+        document.body.appendChild(notification);
+        
+        // Animate in
+        setTimeout(() => {
+            notification.style.transform = 'translateX(0)';
+        }, 100);
+        
+        // Remove after 3 seconds
+        setTimeout(() => {
+            notification.style.transform = 'translateX(100%)';
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+    }
+    
+    function updateLastUpdated() {
+        const element = document.getElementById('last-updated');
+        if (element) {
+            element.textContent = new Date().toLocaleString();
+        }
+    }
+    
+    // Export functionality
+    window.exportData = function() {
+        const dataStr = JSON.stringify(dashboardData, null, 2);
+        const dataBlob = new Blob([dataStr], {type: 'application/json'});
+        const url = URL.createObjectURL(dataBlob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `mcp-vultr-test-report-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showNotification('Test report exported successfully', 'success');
+    };
+    
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeDashboard);
+    } else {
+        initializeDashboard();
+    }
+    
+})();
+
+        
+        // Demo-specific enhancements
+        function initializeDemoFeatures() {
+            addDemoInteractivity();
+            startDemoAnimations();
+            populateDemoData();
+        }
+        
+        function addDemoInteractivity() {
+            // Add click handlers for demo elements
+            document.querySelectorAll('.interactive-demo').forEach(element => {
+                element.addEventListener('click', function() {
+                    // Add ripple effect
+                    const ripple = document.createElement('div');
+                    ripple.style.cssText = `
+                        position: absolute;
+                        background: rgba(131, 165, 152, 0.3);
+                        transform: scale(0);
+                        animation: ripple 0.6s linear;
+                        border-radius: 50%;
+                        width: 100px;
+                        height: 100px;
+                        left: 50%;
+                        top: 50%;
+                        margin-left: -50px;
+                        margin-top: -50px;
+                        pointer-events: none;
+                    `;
+                    
+                    this.style.position = 'relative';
+                    this.style.overflow = 'hidden';
+                    this.appendChild(ripple);
+                    
+                    setTimeout(() => ripple.remove(), 600);
+                    
+                    // Show demo info
+                    showDemoNotification('This is a demo feature! In a real dashboard, this would show detailed information.', 'info');
+                });
+            });
+        }
+        
+        function startDemoAnimations() {
+            // Stagger card animations
+            document.querySelectorAll('.card').forEach((card, index) => {
+                card.style.animationDelay = `${index * 0.1}s`;
+                card.classList.add('animate-slide-in');
+            });
+        }
+        
+        function populateDemoData() {
+            // Populate demo-specific data
+            if (dashboardData && dashboardData.coverage) {
+                const coverage = dashboardData.coverage;
+                updateElement('coverage-percent', `${coverage.overall_percentage}%`);
+                
+                // Populate coverage heatmap with demo data
+                populateDemoCoverageHeatmap();
+            }
+        }
+        
+        function populateDemoCoverageHeatmap() {
+            const container = document.getElementById('coverage-heatmap');
+            if (!container || !dashboardData.coverage) return;
+            
+            const modules = dashboardData.coverage.modules;
+            
+            container.innerHTML = modules.map((module, index) => `
+                <div class="coverage-module interactive-demo stagger-${Math.min(index + 1, 5)}" 
+                     data-tooltip="Click for detailed coverage report">
+                    <div class="module-name">${module.name}</div>
+                    <div class="module-coverage" style="color: var(--status-${module.status})">${module.coverage}%</div>
+                    <div class="module-statements">${module.statements} statements, ${module.missing} missing</div>
+                    <div class="progress-bar" style="margin-top: 0.5rem;">
+                        <div class="progress-fill ${module.status}" style="width: ${module.coverage}%"></div>
+                    </div>
+                    <div class="status-badge ${module.status}" style="margin-top: 0.5rem; font-size: 0.6rem;">
+                        ${module.status.toUpperCase()}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function showDemoNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 5rem;
+                right: 1rem;
+                z-index: 1002;
+                background: var(--gruvbox-${type === 'success' ? 'green' : type === 'warning' ? 'yellow' : 'blue'});
+                color: var(--gruvbox-dark0);
+                padding: 1rem 1.5rem;
+                border-radius: var(--border-radius);
+                box-shadow: var(--shadow);
+                transform: translateX(100%);
+                transition: transform 0.3s ease-out;
+                max-width: 300px;
+                font-size: 0.875rem;
+                line-height: 1.4;
+            `;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            // Animate in
+            setTimeout(() => {
+                notification.style.transform = 'translateX(0)';
+            }, 100);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                notification.style.transform = 'translateX(100%)';
+                setTimeout(() => notification.remove(), 300);
+            }, 5000);
+        }
+        
+        // Add ripple animation CSS
+        const demoStyles = document.createElement('style');
+        demoStyles.textContent = `
+            @keyframes ripple {
+                to {
+                    transform: scale(4);
+                    opacity: 0;
+                }
+            }
+        `;
+        document.head.appendChild(demoStyles);
+        
+        // Initialize demo features when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeDemoFeatures();
+            
+            // Show welcome message
+            setTimeout(() => {
+                showDemoNotification('Welcome to the MCP-Vultr Testing Dashboard Demo! Click on cards to see interactive features.', 'success');
+            }, 1000);
+        });
+        
+    </script>
+</body>
+</html>

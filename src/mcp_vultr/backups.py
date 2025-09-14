@@ -4,7 +4,7 @@ Vultr Backups FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr backups.
 """
 
-from typing import Any
+from typing import Any, List
 
 from fastmcp import FastMCP
 
@@ -23,7 +23,7 @@ def create_backups_mcp(vultr_client) -> FastMCP:
 
     # Backup resources
     @mcp.resource("backups://list")
-    async def list_backups_resource() -> list[dict[str, Any]]:
+    async def list_backups_resource() -> List[dict[str, Any]]:
         """List all backups in your Vultr account."""
         return await vultr_client.list_backups()
 
@@ -38,7 +38,7 @@ def create_backups_mcp(vultr_client) -> FastMCP:
 
     # Backup tools
     @mcp.tool
-    async def list() -> list[dict[str, Any]]:
+    async def list() -> List[dict[str, Any]]:
         """List all backups in your Vultr account.
 
         Returns:

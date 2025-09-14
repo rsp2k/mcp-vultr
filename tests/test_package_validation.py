@@ -22,13 +22,13 @@ def test_package_imports():
 
     # Test individual module imports
     from mcp_vultr._version import __version__
-    from mcp_vultr.cli import main
+    from mcp_vultr.cli_main import cli
     from mcp_vultr.client import VultrDNSClient as ClientClass
     from mcp_vultr.server import VultrDNSServer as ServerClass
 
     assert ServerClass is not None
     assert ClientClass is not None
-    assert main is not None
+    assert cli is not None
     assert __version__ is not None
 
 
@@ -69,17 +69,17 @@ def test_mcp_server_creation():
     server = create_mcp_server("test-api-key-for-testing")
     assert server is not None
 
-    # Check that server has expected attributes
-    assert hasattr(server, "_tools")
-    assert hasattr(server, "_resources")
+    # Check that server has expected attributes (for low-level MCP server)
+    assert hasattr(server, "list_tools") or hasattr(server, "_tools")
+    assert hasattr(server, "list_resources") or hasattr(server, "_resources")
 
 
 def test_cli_entry_points():
     """Test that CLI entry points are properly configured."""
-    from mcp_vultr.cli import main, server_command
+    from mcp_vultr.cli_main import cli, server
 
-    assert callable(main)
-    assert callable(server_command)
+    assert callable(cli)
+    assert callable(server)
 
 
 def test_test_markers():
@@ -152,13 +152,29 @@ def test_package_structure():
         "_version.py",
         "server.py",
         "client.py",
-        "cli.py",
+        "cli_main.py",
         "py.typed",
+    ]
+    
+    # Check that CLI directory exists
+    cli_dir = package_root / "cli"
+    assert cli_dir.exists(), "CLI directory should exist"
+    
+    expected_cli_files = [
+        "__init__.py",
+        "dns.py",
+        "billing.py",
+        "compute.py",
+        "utils.py",
     ]
 
     for file_name in expected_files:
         file_path = package_root / file_name
         assert file_path.exists(), f"Expected file {file_name} not found"
+    
+    for file_name in expected_cli_files:
+        file_path = cli_dir / file_name
+        assert file_path.exists(), f"Expected CLI file {file_name} not found"
 
 
 if __name__ == "__main__":

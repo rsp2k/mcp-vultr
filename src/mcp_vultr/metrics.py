@@ -14,7 +14,7 @@ from typing import Any
 
 import psutil
 
-from .logging import get_logger
+from .vultr_logging import get_logger
 
 logger = get_logger(__name__)
 

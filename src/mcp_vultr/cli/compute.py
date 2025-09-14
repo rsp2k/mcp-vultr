@@ -27,7 +27,7 @@ def operating_systems(ctx: click.Context):
     help="Filter OS types",
 )
 @click.pass_context
-def os_list(ctx: click.Context, filter):
+def os_list(ctx: click.Context, filter: str):
     """List operating systems."""
     api_key = handle_api_key_error(ctx.obj.get("api_key"))
 
@@ -96,9 +96,16 @@ def plans(ctx: click.Context):
 @plans.command("list")
 @click.option("--type", "plan_type", help="Filter by plan type (e.g., vc2, vhf)")
 @click.pass_context
-def plans_list(ctx: click.Context, plan_type):
+def plans_list(ctx: click.Context, plan_type: str | None):
     """List hosting plans."""
     api_key = handle_api_key_error(ctx.obj.get("api_key"))
+    
+    # Show helpful suggestions when no type is specified
+    if not plan_type:
+        from .utils import show_helpful_suggestions
+        console.print("[yellow]💡 No plan type specified. Here are the available options:[/yellow]\n")
+        show_helpful_suggestions("plans_list_no_type")
+        console.print("\n[dim]Proceeding to list all plans...[/dim]\n")
 
     async def _list_plans():
         from ..server import VultrDNSServer
@@ -167,7 +174,7 @@ def scripts_list(ctx: click.Context):
 @click.argument("script", type=click.File("r"))
 @click.option("--type", "script_type", default="boot", help="Script type (boot/pxe)")
 @click.pass_context
-def scripts_create(ctx: click.Context, name, script, script_type):
+def scripts_create(ctx: click.Context, name: str, script: click.File, script_type: str):
     """Create a new startup script."""
     api_key = handle_api_key_error(ctx.obj.get("api_key"))
 
@@ -193,7 +200,7 @@ def scripts_create(ctx: click.Context, name, script, script_type):
 @click.argument("script_id")
 @click.confirmation_option(prompt="Are you sure you want to delete this script?")
 @click.pass_context
-def scripts_delete(ctx: click.Context, script_id):
+def scripts_delete(ctx: click.Context, script_id: str):
     """Delete a startup script."""
     api_key = handle_api_key_error(ctx.obj.get("api_key"))
 
@@ -223,7 +230,7 @@ def bare_metal(ctx: click.Context):
 @click.option("--status", help="Filter by status")
 @click.option("--region", help="Filter by region")
 @click.pass_context
-def bare_metal_list(ctx: click.Context, status, region):
+def bare_metal_list(ctx: click.Context, status: str | None, region: str | None):
     """List bare metal servers."""
     api_key = handle_api_key_error(ctx.obj.get("api_key"))
 
@@ -235,11 +242,11 @@ def bare_metal_list(ctx: click.Context, status, region):
         servers = await server.list_bare_metal_servers()
 
         # Apply filters if specified
-        if status:
+        if status:  # noqa: F823
             servers = [
                 s for s in servers if s.get("status", "").lower() == status.lower()
             ]
-        if region:
+        if region:  # noqa: F823
             servers = [
                 s for s in servers if s.get("region", "").lower() == region.lower()
             ]
@@ -271,7 +278,7 @@ def bare_metal_list(ctx: click.Context, status, region):
 @bare_metal.command("get")
 @click.argument("server_id")
 @click.pass_context
-def bare_metal_get(ctx: click.Context, server_id):
+def bare_metal_get(ctx: click.Context, server_id: str):
     """Get detailed bare metal server information."""
     api_key = handle_api_key_error(ctx.obj.get("api_key"))
 

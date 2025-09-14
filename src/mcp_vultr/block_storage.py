@@ -4,8 +4,8 @@ Vultr Block Storage FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr block storage volumes.
 """
 
-import builtins
-from typing import Any
+from typing import Any, List
+from typing import Any, List
 
 from fastmcp import FastMCP
 
@@ -58,7 +58,7 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
 
     # Block Storage resources
     @mcp.resource("block-storage://list")
-    async def list_volumes_resource() -> list[dict[str, Any]]:
+    async def list_volumes_resource() -> List[dict[str, Any]]:
         """List all block storage volumes."""
         return await vultr_client.list_block_storage()
 
@@ -74,7 +74,7 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
 
     # Block Storage tools
     @mcp.tool
-    async def list() -> list[dict[str, Any]]:
+    async def list() -> List[dict[str, Any]]:
         """List all block storage volumes in your account.
 
         Returns:
@@ -244,7 +244,7 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
         }
 
     @mcp.tool
-    async def list_by_region(region: str) -> builtins.list[dict[str, Any]]:
+    async def list_by_region(region: str) -> List[dict[str, Any]]:
         """List block storage volumes in a specific region.
 
         Args:
@@ -257,7 +257,7 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
         return [volume for volume in volumes if volume.get("region") == region]
 
     @mcp.tool
-    async def list_unattached() -> builtins.list[dict[str, Any]]:
+    async def list_unattached() -> List[dict[str, Any]]:
         """List all unattached block storage volumes.
 
         Returns:
@@ -269,7 +269,7 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
         ]
 
     @mcp.tool
-    async def list_attached() -> builtins.list[dict[str, Any]]:
+    async def list_attached() -> List[dict[str, Any]]:
         """List all attached block storage volumes with instance information.
 
         Returns:

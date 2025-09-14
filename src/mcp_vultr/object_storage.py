@@ -5,8 +5,8 @@ This module contains FastMCP tools and resources for managing Vultr Object Stora
 (S3-compatible) instances, including storage management, access keys, and cluster information.
 """
 
-import builtins
-from typing import Any
+from typing import Any, List
+from typing import Any, List
 
 from fastmcp import FastMCP
 
@@ -59,7 +59,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
 
     # Object Storage resources
     @mcp.resource("object-storage://list")
-    async def list_object_storage_resource() -> list[dict[str, Any]]:
+    async def list_object_storage_resource() -> List[dict[str, Any]]:
         """List all Object Storage instances in your Vultr account."""
         return await vultr_client.list_object_storage()
 
@@ -74,12 +74,12 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_object_storage(actual_id)
 
     @mcp.resource("object-storage://clusters")
-    async def list_clusters_resource() -> list[dict[str, Any]]:
+    async def list_clusters_resource() -> List[dict[str, Any]]:
         """List all Object Storage clusters."""
         return await vultr_client.list_object_storage_clusters()
 
     @mcp.resource("object-storage://clusters/{cluster_id}/tiers")
-    async def list_cluster_tiers_resource(cluster_id: str) -> list[dict[str, Any]]:
+    async def list_cluster_tiers_resource(cluster_id: str) -> List[dict[str, Any]]:
         """List available tiers for a specific Object Storage cluster.
 
         Args:
@@ -89,7 +89,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
 
     # Object Storage management tools
     @mcp.tool()
-    async def list() -> list[dict[str, Any]]:
+    async def list() -> List[dict[str, Any]]:
         """List all Object Storage instances in your Vultr account.
 
         Returns:
@@ -184,7 +184,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
 
     # Cluster and tier information tools
     @mcp.tool()
-    async def list_clusters() -> builtins.list[dict[str, Any]]:
+    async def list_clusters() -> List[dict[str, Any]]:
         """List all available Object Storage clusters.
 
         Returns:
@@ -197,7 +197,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
         return await vultr_client.list_object_storage_clusters()
 
     @mcp.tool()
-    async def list_cluster_tiers(cluster_id: int) -> builtins.list[dict[str, Any]]:
+    async def list_cluster_tiers(cluster_id: int) -> List[dict[str, Any]]:
         """List all available tiers for a specific Object Storage cluster.
 
         Args:
@@ -245,7 +245,7 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
         }
 
     @mcp.tool()
-    async def find_by_region(region: str) -> builtins.list[dict[str, Any]]:
+    async def find_by_region(region: str) -> List[dict[str, Any]]:
         """Find all Object Storage instances in a specific region.
 
         Args:

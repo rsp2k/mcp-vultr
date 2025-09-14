@@ -4,7 +4,7 @@ Vultr Snapshots FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr snapshots.
 """
 
-from typing import Any
+from typing import Any, List
 
 from fastmcp import FastMCP
 
@@ -54,7 +54,7 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
 
     # Snapshot resources
     @mcp.resource("snapshots://list")
-    async def list_snapshots_resource() -> list[dict[str, Any]]:
+    async def list_snapshots_resource() -> List[dict[str, Any]]:
         """List all snapshots in your Vultr account."""
         return await vultr_client.list_snapshots()
 
@@ -70,7 +70,7 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
 
     # Snapshot tools
     @mcp.tool
-    async def list() -> list[dict[str, Any]]:
+    async def list() -> List[dict[str, Any]]:
         """List all snapshots in your Vultr account.
 
         Returns:

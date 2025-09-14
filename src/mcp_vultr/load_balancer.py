@@ -4,8 +4,8 @@ Vultr Load Balancer FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr Load Balancers.
 """
 
-import builtins
-from typing import Any
+from typing import Any, List
+from typing import Any, List
 
 from fastmcp import FastMCP
 
@@ -54,12 +54,12 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
         raise ValueError(f"Load balancer '{identifier}' not found (searched by label)")
 
     # Load Balancer resources
-    @mcp.resource("load_balancers://list")
-    async def list_load_balancers_resource() -> list[dict[str, Any]]:
+    @mcp.resource("load-balancers://list")
+    async def list_load_balancers_resource() -> List[dict[str, Any]]:
         """List all load balancers in your Vultr account."""
         return await vultr_client.list_load_balancers()
 
-    @mcp.resource("load_balancers://{load_balancer_id}")
+    @mcp.resource("load-balancers://{load_balancer_id}")
     async def get_load_balancer_resource(load_balancer_id: str) -> dict[str, Any]:
         """Get information about a specific load balancer.
 
@@ -71,7 +71,7 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
 
     # Load Balancer tools
     @mcp.tool
-    async def list() -> list[dict[str, Any]]:
+    async def list() -> List[dict[str, Any]]:
         """List all load balancers in your Vultr account.
 
         Returns:
@@ -118,11 +118,11 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
         label: str | None = None,
         nodes: int = 1,
         health_check: dict[str, Any] | None = None,
-        forwarding_rules: builtins.list[dict[str, Any]] | None = None,
+        forwarding_rules: List[dict[str, Any]] | None = None,
         ssl: dict[str, str] | None = None,
-        firewall_rules: builtins.list[dict[str, Any]] | None = None,
+        firewall_rules: List[dict[str, Any]] | None = None,
         auto_ssl: dict[str, str] | None = None,
-        global_regions: builtins.list[str] | None = None,
+        global_regions: List[str] | None = None,
         vpc: str | None = None,
         private_network: str | None = None,
         sticky_session: dict[str, str] | None = None,
@@ -197,7 +197,7 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
         load_balancer_id: str,
         ssl: dict[str, str] | None = None,
         sticky_session: dict[str, str] | None = None,
-        forwarding_rules: builtins.list[dict[str, Any]] | None = None,
+        forwarding_rules: List[dict[str, Any]] | None = None,
         health_check: dict[str, Any] | None = None,
         proxy_protocol: bool | None = None,
         timeout: int | None = None,
@@ -206,7 +206,7 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
         http3: bool | None = None,
         nodes: int | None = None,
         balancing_algorithm: str | None = None,
-        instances: builtins.list[str] | None = None,
+        instances: List[str] | None = None,
     ) -> dict[str, Any]:
         """Update an existing load balancer.
 
@@ -298,10 +298,10 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
         }
 
     # Forwarding Rules Management
-    @mcp.resource("load_balancers://{load_balancer_id}/forwarding_rules")
+    @mcp.resource("load-balancers://{load_balancer_id}/forwarding-rules")
     async def list_forwarding_rules_resource(
         load_balancer_id: str,
-    ) -> builtins.list[dict[str, Any]]:
+    ) -> List[dict[str, Any]]:
         """List forwarding rules for a load balancer.
 
         Args:
@@ -313,7 +313,7 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
     @mcp.tool
     async def list_forwarding_rules(
         load_balancer_id: str,
-    ) -> builtins.list[dict[str, Any]]:
+    ) -> List[dict[str, Any]]:
         """List forwarding rules for a load balancer.
 
         Args:
@@ -395,10 +395,10 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
         }
 
     # Firewall Rules Management
-    @mcp.resource("load_balancers://{load_balancer_id}/firewall_rules")
+    @mcp.resource("load-balancers://{load_balancer_id}/firewall-rules")
     async def list_firewall_rules_resource(
         load_balancer_id: str,
-    ) -> builtins.list[dict[str, Any]]:
+    ) -> List[dict[str, Any]]:
         """List firewall rules for a load balancer.
 
         Args:
@@ -410,7 +410,7 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
     @mcp.tool
     async def list_firewall_rules(
         load_balancer_id: str,
-    ) -> builtins.list[dict[str, Any]]:
+    ) -> List[dict[str, Any]]:
         """List firewall rules for a load balancer.
 
         Args:
@@ -445,7 +445,7 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
     async def configure_basic_web_lb(
         region: str,
         label: str,
-        backend_instances: builtins.list[str],
+        backend_instances: List[str],
         enable_ssl: bool = True,
         ssl_redirect: bool = True,
         domain_zone: str | None = None,

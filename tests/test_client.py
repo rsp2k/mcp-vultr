@@ -133,6 +133,16 @@ class TestVultrDNSClient:
 
             assert result is False
 
+    @pytest.mark.asyncio
+    async def test_record_method(self, mock_api_key, mock_vultr_client):
+        """Test the record() method - covers line 70."""
+        with patch("mcp_vultr.client.VultrDNSServer", return_value=mock_vultr_client):
+            client = VultrDNSClient(mock_api_key)
+            result = await client.record("example.com", "record-123")
+
+            assert result is not None
+            mock_vultr_client.get_record.assert_called_once_with("example.com", "record-123")
+
 
 @pytest.mark.unit
 class TestConvenienceMethods:
@@ -331,6 +341,25 @@ class TestSetupMethods:
             assert len(result["errors"]) > 0
 
     @pytest.mark.asyncio
+    async def test_setup_basic_website_with_error_responses(self, mock_api_key):
+        """Test website setup with error responses from create_record - covers lines 253, 261."""
+        mock_client = AsyncMock()
+        # Mock create_record to return error responses instead of raising exceptions
+        mock_client.create_record.return_value = {"error": "API error message"}
+
+        with patch("mcp_vultr.client.VultrDNSServer", return_value=mock_client):
+            client = VultrDNSClient(mock_api_key)
+            result = await client.setup_basic_website(
+                "example.com", "192.168.1.100", True, 300
+            )
+
+            assert result["domain"] == "example.com"
+            assert len(result["errors"]) == 2  # Both root and www should have errors
+            assert "Root A record: API error message" in result["errors"]
+            assert "WWW A record: API error message" in result["errors"]
+            assert len(result["created_records"]) == 0
+
+    @pytest.mark.asyncio
     async def test_setup_email_success(self, mock_api_key, mock_vultr_client):
         """Test successful email setup."""
         with patch("mcp_vultr.client.VultrDNSServer", return_value=mock_vultr_client):
@@ -362,6 +391,24 @@ class TestSetupMethods:
 
             assert result["domain"] == "example.com"
             assert len(result["errors"]) > 0
+
+    @pytest.mark.asyncio
+    async def test_setup_email_with_error_response(self, mock_api_key):
+        """Test email setup with error response from create_record - covers line 297."""
+        mock_client = AsyncMock()
+        # Mock create_record to return error response instead of raising exception
+        mock_client.create_record.return_value = {"error": "MX record creation failed"}
+
+        with patch("mcp_vultr.client.VultrDNSServer", return_value=mock_client):
+            client = VultrDNSClient(mock_api_key)
+            result = await client.setup_email(
+                "example.com", "mail.example.com", 10, 300
+            )
+
+            assert result["domain"] == "example.com"
+            assert len(result["errors"]) == 1
+            assert "MX record: MX record creation failed" in result["errors"]
+            assert len(result["created_records"]) == 0
 
 
 if __name__ == "__main__":

@@ -456,8 +456,18 @@ cd mcp-vultr
 # ⚡ Install with uv (recommended)
 uv sync --extra dev
 
-# 🧪 Run tests
-uv run pytest
+# 🧪 Run tests (multiple performance modes)
+make test-fast          # ⚡ Quick tests (30-60s)
+make test-parallel      # 🚀 Parallel execution (60-120s) 
+make test-coverage      # 📊 Full coverage (180-300s)
+
+# 🎯 Targeted testing
+make test-unit          # Unit tests only
+make test-mcp           # MCP server tests
+make test-error         # Error handling tests
+
+# 📈 Performance monitoring
+python test_performance_benchmark.py
 
 # 🎨 Format code  
 uv run black src tests && uv run isort src tests
@@ -496,7 +506,7 @@ We ❤️ contributions! Whether it's:
 1. 🍴 **Fork** the repository
 2. 🌿 **Create** a feature branch (`git checkout -b feature/amazing-feature`)
 3. ✍️ **Make** your changes
-4. ✅ **Test** everything (`uv run python run_tests.py --all-checks`)
+4. ✅ **Test** everything (`make test-parallel` or `make test-coverage`)
 5. 📝 **Commit** your changes (`git commit -m 'Add amazing feature'`)
 6. 📤 **Push** to the branch (`git push origin feature/amazing-feature`)
 7. 🎉 **Open** a Pull Request

@@ -10,21 +10,44 @@ import click
 
 from ._version import __version__
 from .cli.utils import console
-from .server import run_server
+from .fastmcp_server import run_server
 
 
-@click.group()
+@click.group(invoke_without_command=True)
 @click.version_option(__version__)
 @click.option(
     "--api-key",
     envvar="VULTR_API_KEY",
     help="Vultr API key (or set VULTR_API_KEY environment variable)",
 )
+@click.option(
+    "--tui", 
+    is_flag=True, 
+    help="Force launch the Terminal User Interface"
+)
 @click.pass_context
-def cli(ctx: click.Context, api_key: str | None):
-    """Vultr DNS MCP - Manage Vultr DNS through Model Context Protocol."""
+def cli(ctx: click.Context, api_key: str | None, tui: bool):
+    """Vultr Management Platform - Full-featured CLI and TUI for Vultr services."""
     ctx.ensure_object(dict)
     ctx.obj["api_key"] = api_key
+    
+    # Launch TUI if no subcommand provided or --tui flag used
+    if ctx.invoked_subcommand is None or tui:
+        console.print("[bold blue]🚀 Launching Vultr Management TUI...[/bold blue]")
+        console.print("[dim]Press Ctrl+Q to quit, Ctrl+H for help[/dim]\n")
+        
+        try:
+            from .tui_app import run_tui
+            run_tui()
+        except ImportError as e:
+            console.print(f"[red]Error: Failed to import TUI components: {e}[/red]")
+            console.print("[yellow]Try installing with: pip install textual[/yellow]")
+            sys.exit(1)
+        except KeyboardInterrupt:
+            console.print("\n[yellow]TUI closed by user[/yellow]")
+        except Exception as e:
+            console.print(f"[red]TUI Error: {e}[/red]")
+            sys.exit(1)
 
 
 @cli.command()
@@ -44,6 +67,9 @@ def server(ctx: click.Context):
         console.print("[bold green]Starting Vultr DNS MCP Server...[/bold green]")
         console.print("[dim]Press Ctrl+C to stop[/dim]")
         run_server(api_key)
+    except KeyboardInterrupt:
+        console.print("[yellow]Server stopped by user[/yellow]")
+        sys.exit(0)
     except Exception as e:
         console.print(f"[red]Error starting server: {e}[/red]")
         sys.exit(1)
@@ -53,10 +79,12 @@ def server(ctx: click.Context):
 def register_commands():
     """Register all command groups from refactored modules."""
     # Import and register DNS commands
-    from .cli.dns import domains, records
+    from .cli.dns import domains, records, setup_email, setup_website
 
     cli.add_command(domains)
     cli.add_command(records)
+    cli.add_command(setup_website)
+    cli.add_command(setup_email)
 
     # Import and register billing commands
     from .cli.billing import billing

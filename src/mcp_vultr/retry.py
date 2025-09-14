@@ -20,7 +20,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from .logging import get_logger
+from .vultr_logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -121,7 +121,9 @@ async def retry_async(
     """
     last_exception = None
 
-    for attempt in range(1, max_attempts + 1):
+    # Ensure at least one attempt is made
+    attempts_to_make = max(1, max_attempts)
+    for attempt in range(1, attempts_to_make + 1):
         try:
             result = await func(*args, **kwargs)
             if attempt > 1:
@@ -129,19 +131,19 @@ async def retry_async(
                     "Function succeeded after retry",
                     function=func.__name__,
                     attempt=attempt,
-                    max_attempts=max_attempts,
+                    max_attempts=attempts_to_make,
                 )
             return result
 
         except Exception as e:
             last_exception = e
 
-            if attempt == max_attempts:
+            if attempt == attempts_to_make:
                 logger.error(
                     "Function failed after all retry attempts",
                     function=func.__name__,
                     attempt=attempt,
-                    max_attempts=max_attempts,
+                    max_attempts=attempts_to_make,
                     error=str(e),
                 )
                 break
@@ -158,7 +160,7 @@ async def retry_async(
                 "Function failed, retrying",
                 function=func.__name__,
                 attempt=attempt,
-                max_attempts=max_attempts,
+                max_attempts=attempts_to_make,
                 delay=delay,
                 error=str(e),
             )

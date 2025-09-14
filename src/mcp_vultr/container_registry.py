@@ -4,8 +4,8 @@ Vultr Container Registry FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr container registries.
 """
 
-import builtins
-from typing import Any
+from typing import Any, List
+from typing import Any, List
 
 from fastmcp import FastMCP
 
@@ -58,7 +58,7 @@ def create_container_registry_mcp(vultr_client) -> FastMCP:
 
     # Container Registry resources
     @mcp.resource("container-registry://list")
-    async def list_registries_resource() -> list[dict[str, Any]]:
+    async def list_registries_resource() -> List[dict[str, Any]]:
         """List all container registries."""
         return await vultr_client.list_container_registries()
 
@@ -73,13 +73,13 @@ def create_container_registry_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_container_registry(registry_id)
 
     @mcp.resource("container-registry://plans")
-    async def list_plans_resource() -> list[dict[str, Any]]:
+    async def list_plans_resource() -> List[dict[str, Any]]:
         """List all available container registry plans."""
         return await vultr_client.list_registry_plans()
 
     # Container Registry tools
     @mcp.tool
-    async def list() -> list[dict[str, Any]]:
+    async def list() -> List[dict[str, Any]]:
         """List all container registries in your account.
 
         Returns:
@@ -165,7 +165,7 @@ def create_container_registry_mcp(vultr_client) -> FastMCP:
         }
 
     @mcp.tool
-    async def list_plans() -> builtins.list[dict[str, Any]]:
+    async def list_plans() -> List[dict[str, Any]]:
         """List all available container registry plans.
 
         Returns:

@@ -4,8 +4,8 @@ Vultr VPCs FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr VPCs and VPC 2.0 networks.
 """
 
-import builtins
-from typing import Any
+from typing import Any, List
+from typing import Any, List
 
 from fastmcp import FastMCP
 
@@ -84,7 +84,7 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
 
     # VPC resources
     @mcp.resource("vpcs://list")
-    async def list_vpcs_resource() -> list[dict[str, Any]]:
+    async def list_vpcs_resource() -> List[dict[str, Any]]:
         """List all VPCs."""
         return await vultr_client.list_vpcs()
 
@@ -99,7 +99,7 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_vpc(vpc_id)
 
     @mcp.resource("vpc2s://list")
-    async def list_vpc2s_resource() -> list[dict[str, Any]]:
+    async def list_vpc2s_resource() -> List[dict[str, Any]]:
         """List all VPC 2.0 networks."""
         return await vultr_client.list_vpc2s()
 
@@ -115,7 +115,7 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
 
     # VPC tools
     @mcp.tool
-    async def list() -> list[dict[str, Any]]:
+    async def list() -> List[dict[str, Any]]:
         """List all VPCs in your account.
 
         Returns:
@@ -209,7 +209,7 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
 
     # VPC 2.0 tools
     @mcp.tool
-    async def list_vpc2() -> builtins.list[dict[str, Any]]:
+    async def list_vpc2() -> List[dict[str, Any]]:
         """List all VPC 2.0 networks in your account.
 
         Returns:

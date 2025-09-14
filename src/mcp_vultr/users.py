@@ -5,8 +5,8 @@ This module contains FastMCP tools and resources for managing Vultr users,
 API keys, permissions, and security settings.
 """
 
-import builtins
-from typing import Any
+from typing import Any, List
+from typing import Any, List
 
 from fastmcp import FastMCP
 
@@ -56,7 +56,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
 
     # User resources
     @mcp.resource("users://list")
-    async def list_users_resource() -> list[dict[str, Any]]:
+    async def list_users_resource() -> List[dict[str, Any]]:
         """List all users in your Vultr account."""
         return await vultr_client.list_users()
 
@@ -71,7 +71,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_user(actual_id)
 
     @mcp.resource("users://{user_id}/ip-whitelist")
-    async def get_user_ip_whitelist_resource(user_id: str) -> list[dict[str, Any]]:
+    async def get_user_ip_whitelist_resource(user_id: str) -> List[dict[str, Any]]:
         """Get IP whitelist for a specific user.
 
         Args:
@@ -82,7 +82,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
 
     # User management tools
     @mcp.tool
-    async def list() -> list[dict[str, Any]]:
+    async def list() -> List[dict[str, Any]]:
         """List all users in your Vultr account.
 
         Returns:
@@ -119,7 +119,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
         password: str,
         api_enabled: bool = True,
         service_user: bool = False,
-        acls: builtins.list[str] | None = None,
+        acls: List[str] | None = None,
     ) -> dict[str, Any]:
         """Create a new user.
 
@@ -165,7 +165,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
     async def update(
         user_id: str,
         api_enabled: bool | None = None,
-        acls: builtins.list[str] | None = None,
+        acls: List[str] | None = None,
     ) -> dict[str, Any]:
         """Update an existing user's settings.
 
@@ -211,7 +211,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
 
     # IP Whitelist management tools
     @mcp.tool
-    async def get_ip_whitelist(user_id: str) -> builtins.list[dict[str, Any]]:
+    async def get_ip_whitelist(user_id: str) -> List[dict[str, Any]]:
         """Get the IP whitelist for a user.
 
         Args:
@@ -379,7 +379,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
         email: str,
         first_name: str,
         last_name: str,
-        permissions: builtins.list[str] | None = None,
+        permissions: List[str] | None = None,
     ) -> dict[str, Any]:
         """Set up a new service user (API-only access) with specified permissions.
 

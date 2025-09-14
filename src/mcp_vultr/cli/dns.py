@@ -217,3 +217,85 @@ def delete_record(ctx: click.Context, domain: str, record_id: str):
             sys.exit(1)
 
     run_async_command(_delete_record)
+
+
+@click.command("setup-website")
+@click.argument("domain")
+@click.argument("ip")
+@click.option("--no-www", is_flag=True, help="Skip creating www subdomain")
+@click.option("--ttl", type=int, help="TTL for records in seconds")
+@click.pass_context
+def setup_website(
+    ctx: click.Context, domain: str, ip: str, no_www: bool, ttl: int | None
+):
+    """Set up basic DNS records for a website."""
+    api_key = handle_api_key_error(ctx.obj.get("api_key"))
+
+    async def _setup_website():
+        client = VultrDNSClient(api_key)
+        console.print(
+            f"[bold green]Setting up website DNS for {domain}...[/bold green]"
+        )
+
+        result = await client.setup_basic_website(
+            domain, ip, include_www=not no_www, ttl=ttl
+        )
+
+        if "error" in result:
+            console.print(f"[red]Error: {result['error']}[/red]")
+            sys.exit(1)
+
+        console.print(f"[green]✅ Website setup complete for {domain}[/green]")
+
+        if result.get("created_records"):
+            console.print("[bold]Created records:[/bold]")
+            for record in result["created_records"]:
+                console.print(f"  • {record}")
+
+        if result.get("errors"):
+            console.print("[yellow]Setup completed with some errors:[/yellow]")
+            for error in result["errors"]:
+                console.print(f"  • {error}")
+
+    run_async_command(_setup_website)
+
+
+@click.command("setup-email")
+@click.argument("domain")
+@click.argument("mail_server")
+@click.option(
+    "--priority", type=int, default=10, help="MX record priority (default: 10)"
+)
+@click.option("--ttl", type=int, help="TTL for records in seconds")
+@click.pass_context
+def setup_email(
+    ctx: click.Context, domain: str, mail_server: str, priority: int, ttl: int | None
+):
+    """Set up basic email DNS records."""
+    api_key = handle_api_key_error(ctx.obj.get("api_key"))
+
+    async def _setup_email():
+        client = VultrDNSClient(api_key)
+        console.print(f"[bold green]Setting up email DNS for {domain}...[/bold green]")
+
+        result = await client.setup_email(
+            domain, mail_server, priority=priority, ttl=ttl
+        )
+
+        if "error" in result:
+            console.print(f"[red]Error: {result['error']}[/red]")
+            sys.exit(1)
+
+        console.print(f"[green]✅ Email setup complete for {domain}[/green]")
+
+        if result.get("created_records"):
+            console.print("[bold]Created records:[/bold]")
+            for record in result["created_records"]:
+                console.print(f"  • {record}")
+
+        if result.get("skipped_records"):
+            console.print("[yellow]Skipped (already exist):[/yellow]")
+            for record in result["skipped_records"]:
+                console.print(f"  • {record}")
+
+    run_async_command(_setup_email)

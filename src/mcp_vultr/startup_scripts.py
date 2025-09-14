@@ -172,14 +172,14 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
 
     @mcp.tool()
     async def create_common_startup_script(
-        script_type: str, **kwargs
+        script_type: str, ssh_port: int = 22
     ) -> dict[str, Any]:
         """
         Create a common startup script from templates.
 
         Args:
             script_type: Type of script ('docker_install', 'nodejs_install', 'security_updates', 'ssh_setup')
-            **kwargs: Additional parameters for the script template
+            ssh_port: SSH port to use for 'ssh_setup' script type (default: 22)
 
         Returns:
             Created startup script details
@@ -223,7 +223,7 @@ dpkg-reconfigure -f noninteractive unattended-upgrades
                 "script": f"""#!/bin/bash
 sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
 sed -i 's/#PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
-sed -i 's/#Port 22/Port {kwargs.get("ssh_port", "22")}/' /etc/ssh/sshd_config
+sed -i 's/#Port 22/Port {ssh_port}/' /etc/ssh/sshd_config
 systemctl restart sshd
 """,
             },

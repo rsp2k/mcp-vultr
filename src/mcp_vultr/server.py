@@ -16,7 +16,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Resource, TextContent, Tool
 
 from .cache import CacheManager
-from .logging import get_logger, log_api_request
+from .vultr_logging import get_logger, log_api_request
 from .metrics import record_api_call
 from .retry import NetworkError, RateLimitError, retry_api_call
 
@@ -170,7 +170,7 @@ class VultrDNSServer:
                     else:
                         raise VultrAPIError(response.status_code, response.text)
 
-                result = {} if response.status_code == 204 else response.json()
+                result = {} if response.status_code == 204 else await response.json()
 
                 # Cache successful GET requests
                 if method.upper() == "GET" and result:
@@ -4844,14 +4844,17 @@ def create_mcp_server(api_key: str | None = None) -> Server:
     @server.read_resource()
     async def read_resource(uri: str) -> str:
         """Read a specific resource."""
-        if uri == "vultr://domains":
+        # Convert AnyUrl to string if needed
+        uri_str = str(uri)
+
+        if uri_str == "vultr://domains":
             try:
                 domains = await vultr_client.list_domains()
                 return str(domains)
             except Exception as e:
                 return f"Error loading domains: {str(e)}"
 
-        elif uri == "vultr://capabilities":
+        elif uri_str == "vultr://capabilities":
             capabilities = {
                 "supported_record_types": [
                     {
@@ -4907,8 +4910,8 @@ def create_mcp_server(api_key: str | None = None) -> Server:
             }
             return str(capabilities)
 
-        elif uri.startswith("vultr://records/"):
-            domain = uri.replace("vultr://records/", "")
+        elif uri_str.startswith("vultr://records/"):
+            domain = uri_str.replace("vultr://records/", "")
             try:
                 records = await vultr_client.list_records(domain)
                 return str(

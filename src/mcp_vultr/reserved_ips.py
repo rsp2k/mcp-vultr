@@ -4,8 +4,8 @@ Vultr Reserved IPs FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr reserved IPs.
 """
 
-import builtins
-from typing import Any
+from typing import Any, List
+from typing import Any, List
 
 from fastmcp import FastMCP
 
@@ -44,7 +44,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
 
     # Reserved IP resources
     @mcp.resource("reserved-ips://list")
-    async def list_reserved_ips_resource() -> list[dict[str, Any]]:
+    async def list_reserved_ips_resource() -> List[dict[str, Any]]:
         """List all reserved IPs."""
         return await vultr_client.list_reserved_ips()
 
@@ -64,7 +64,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
 
     # Reserved IP tools
     @mcp.tool
-    async def list() -> list[dict[str, Any]]:
+    async def list() -> List[dict[str, Any]]:
         """List all reserved IPs in your account.
 
         Returns:
@@ -217,7 +217,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
         )
 
     @mcp.tool
-    async def list_by_region(region: str) -> builtins.list[dict[str, Any]]:
+    async def list_by_region(region: str) -> List[dict[str, Any]]:
         """List all reserved IPs in a specific region.
 
         Args:
@@ -230,7 +230,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
         return [ip for ip in all_ips if ip.get("region") == region]
 
     @mcp.tool
-    async def list_unattached() -> builtins.list[dict[str, Any]]:
+    async def list_unattached() -> List[dict[str, Any]]:
         """List all unattached reserved IPs.
 
         Returns:
@@ -240,7 +240,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
         return [ip for ip in all_ips if not ip.get("instance_id")]
 
     @mcp.tool
-    async def list_attached() -> builtins.list[dict[str, Any]]:
+    async def list_attached() -> List[dict[str, Any]]:
         """List all attached reserved IPs.
 
         Returns:

@@ -4,7 +4,7 @@ Vultr SSH Keys FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr SSH keys.
 """
 
-from typing import Any
+from typing import Any, List
 
 from fastmcp import FastMCP
 
@@ -54,7 +54,7 @@ def create_ssh_keys_mcp(vultr_client) -> FastMCP:
 
     # SSH Key resources
     @mcp.resource("ssh-keys://list")
-    async def list_ssh_keys_resource() -> list[dict[str, Any]]:
+    async def list_ssh_keys_resource() -> List[dict[str, Any]]:
         """List all SSH keys in your Vultr account."""
         return await vultr_client.list_ssh_keys()
 
@@ -70,7 +70,7 @@ def create_ssh_keys_mcp(vultr_client) -> FastMCP:
 
     # SSH Key tools
     @mcp.tool
-    async def list() -> list[dict[str, Any]]:
+    async def list() -> List[dict[str, Any]]:
         """List all SSH keys in your Vultr account.
 
         Returns:

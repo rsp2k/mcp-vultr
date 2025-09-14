@@ -12,7 +12,7 @@ from typing import Any
 
 from cachetools import TTLCache
 
-from .logging import get_logger
+from .vultr_logging import get_logger
 
 logger = get_logger(__name__)
 

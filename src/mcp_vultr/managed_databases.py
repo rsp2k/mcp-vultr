@@ -6,8 +6,8 @@ Supports MySQL, PostgreSQL, Valkey (Redis), and Kafka engines with comprehensive
 database management features including users, backups, connection pools, and monitoring.
 """
 
-import builtins
-from typing import Any
+from typing import Any, List
+from typing import Any, List
 
 from fastmcp import FastMCP
 
@@ -57,7 +57,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
 
     # Database resources
     @mcp.resource("databases://list")
-    async def list_databases_resource() -> list[dict[str, Any]]:
+    async def list_databases_resource() -> List[dict[str, Any]]:
         """List all managed databases in your Vultr account."""
         return await vultr_client.list_managed_databases()
 
@@ -72,13 +72,13 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_managed_database(actual_id)
 
     @mcp.resource("databases://plans")
-    async def list_database_plans_resource() -> list[dict[str, Any]]:
+    async def list_database_plans_resource() -> List[dict[str, Any]]:
         """List all available managed database plans."""
         return await vultr_client.list_database_plans()
 
     # Core Database Management Tools
     @mcp.tool
-    async def list() -> list[dict[str, Any]]:
+    async def list() -> List[dict[str, Any]]:
         """List all managed databases in your Vultr account.
 
         Returns:
@@ -119,8 +119,8 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         label: str,
         tag: str | None = None,
         vpc_id: str | None = None,
-        trusted_ips: builtins.list[str] | None = None,
-        mysql_sql_modes: builtins.list[str] | None = None,
+        trusted_ips: List[str] | None = None,
+        mysql_sql_modes: List[str] | None = None,
         mysql_require_primary_key: bool | None = None,
         mysql_slow_query_log: bool | None = None,
         valkey_eviction_policy: str | None = None,
@@ -177,8 +177,8 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         tag: str | None = None,
         vpc_id: str | None = None,
         timezone: str | None = None,
-        trusted_ips: builtins.list[str] | None = None,
-        mysql_sql_modes: builtins.list[str] | None = None,
+        trusted_ips: List[str] | None = None,
+        mysql_sql_modes: List[str] | None = None,
         mysql_require_primary_key: bool | None = None,
         mysql_slow_query_log: bool | None = None,
         valkey_eviction_policy: str | None = None,
@@ -259,7 +259,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
 
     # Database User Management Tools
     @mcp.tool
-    async def list_users(database_id: str) -> builtins.list[dict[str, Any]]:
+    async def list_users(database_id: str) -> List[dict[str, Any]]:
         """List all users in a managed database.
 
         Args:
@@ -360,10 +360,10 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
     async def update_user_access_control(
         database_id: str,
         username: str,
-        acl_categories: builtins.list[str] | None = None,
-        acl_channels: builtins.list[str] | None = None,
-        acl_commands: builtins.list[str] | None = None,
-        acl_keys: builtins.list[str] | None = None,
+        acl_categories: List[str] | None = None,
+        acl_channels: List[str] | None = None,
+        acl_commands: List[str] | None = None,
+        acl_keys: List[str] | None = None,
     ) -> dict[str, str]:
         """Update access control for a database user (Valkey/Redis only).
 
@@ -394,7 +394,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
 
     # Database Schema Management
     @mcp.tool
-    async def list_databases(database_id: str) -> builtins.list[dict[str, Any]]:
+    async def list_databases(database_id: str) -> List[dict[str, Any]]:
         """List logical databases within a managed database instance.
 
         Args:
@@ -454,7 +454,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
 
     # Connection Pool Management
     @mcp.tool
-    async def list_connection_pools(database_id: str) -> builtins.list[dict[str, Any]]:
+    async def list_connection_pools(database_id: str) -> List[dict[str, Any]]:
         """List connection pools for a managed database.
 
         Args:
@@ -561,7 +561,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
 
     # Backup Management
     @mcp.tool
-    async def list_backups(database_id: str) -> builtins.list[dict[str, Any]]:
+    async def list_backups(database_id: str) -> List[dict[str, Any]]:
         """List available backups for a managed database.
 
         Args:
@@ -672,7 +672,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
     @mcp.tool
     async def list_available_versions(
         database_id: str,
-    ) -> builtins.list[dict[str, Any]]:
+    ) -> List[dict[str, Any]]:
         """List available versions for database engine upgrades.
 
         Args:
@@ -705,7 +705,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
     @mcp.tool
     async def get_maintenance_updates(
         database_id: str,
-    ) -> builtins.list[dict[str, Any]]:
+    ) -> List[dict[str, Any]]:
         """Get available maintenance updates for a database.
 
         Args:
@@ -799,7 +799,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
 
     # Kafka-specific Tools
     @mcp.tool
-    async def list_kafka_topics(database_id: str) -> builtins.list[dict[str, Any]]:
+    async def list_kafka_topics(database_id: str) -> List[dict[str, Any]]:
         """List Kafka topics (Kafka databases only).
 
         Args:
@@ -909,7 +909,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
 
     # Helper Setup Tools
     @mcp.tool
-    async def list_plans() -> builtins.list[dict[str, Any]]:
+    async def list_plans() -> List[dict[str, Any]]:
         """List all available managed database plans.
 
         Returns:

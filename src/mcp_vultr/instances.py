@@ -4,8 +4,7 @@ Vultr Instances FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr instances.
 """
 
-import builtins
-from typing import Any
+from typing import Any, List
 
 from fastmcp import FastMCP
 
@@ -60,7 +59,7 @@ def create_instances_mcp(vultr_client) -> FastMCP:
 
     # Instance resources
     @mcp.resource("instances://list")
-    async def list_instances_resource() -> list[dict[str, Any]]:
+    async def list_instances_resource() -> List[dict[str, Any]]:
         """List all instances in your Vultr account."""
         return await vultr_client.list_instances()
 
@@ -76,7 +75,7 @@ def create_instances_mcp(vultr_client) -> FastMCP:
 
     # Instance tools
     @mcp.tool
-    async def list() -> list[dict[str, Any]]:
+    async def list() -> List[dict[str, Any]]:
         """List all instances in your Vultr account.
 
         Returns:
@@ -118,8 +117,8 @@ def create_instances_mcp(vultr_client) -> FastMCP:
         snapshot_id: str | None = None,
         enable_ipv6: bool = False,
         enable_private_network: bool = False,
-        attach_private_network: builtins.list[str] | None = None,
-        ssh_key_ids: builtins.list[str] | None = None,
+        attach_private_network: List[str] | None = None,
+        ssh_key_ids: List[str] | None = None,
         backups: bool = False,
         app_id: int | None = None,
         user_data: str | None = None,
@@ -330,7 +329,7 @@ def create_instances_mcp(vultr_client) -> FastMCP:
 
     # IPv4 management
     @mcp.tool
-    async def list_ipv4(instance_id: str) -> builtins.list[dict[str, Any]]:
+    async def list_ipv4(instance_id: str) -> List[dict[str, Any]]:
         """List IPv4 addresses for an instance.
 
         Args:
@@ -373,7 +372,7 @@ def create_instances_mcp(vultr_client) -> FastMCP:
 
     # IPv6 management
     @mcp.resource("instances://{instance_id}/ipv6")
-    async def list_ipv6_resource(instance_id: str) -> builtins.list[dict[str, Any]]:
+    async def list_ipv6_resource(instance_id: str) -> List[dict[str, Any]]:
         """List IPv6 addresses for an instance.
 
         Args:
@@ -383,7 +382,7 @@ def create_instances_mcp(vultr_client) -> FastMCP:
         return await vultr_client.list_instance_ipv6(actual_id)
 
     @mcp.tool
-    async def list_ipv6(instance_id: str) -> builtins.list[dict[str, Any]]:
+    async def list_ipv6(instance_id: str) -> List[dict[str, Any]]:
         """List IPv6 addresses for an instance.
 
         Args:

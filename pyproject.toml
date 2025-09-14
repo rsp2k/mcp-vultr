@@ -46,21 +46,29 @@ dependencies = [
     "fastmcp>=0.1.0",
     "httpx>=0.24.0",
     "pydantic>=2.0.0",
-    "click>=8.0.0"
+    "click>=8.0.0",
+    "structlog>=23.0.0",
+    "tenacity>=8.0.0",
+    "cachetools>=5.0.0",
+    "psutil>=6.0.0",
+    "textual>=0.45.0",
+    "rich>=13.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
+    "pytest-textual-snapshot>=0.4.0",
     "pytest-cov>=4.0.0",
+    "pytest-xdist>=3.0.0",
+    "pytest-timeout>=2.1.0",
+    "pytest-mock>=3.10.0",
+    "pytest-textual-snapshot>=0.4.0",
     "ruff>=0.1.14",
     "mypy>=1.0.0",
     "pre-commit>=3.0.0",
     "rich>=13.0.0",
-    "structlog>=23.0.0",
-    "tenacity>=8.0.0",
-    "cachetools>=5.0.0",
     "bandit>=1.7.0",
     "safety>=3.0.0"
 ]
@@ -73,7 +81,11 @@ test = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
-    "pytest-httpx>=0.21.0"
+    "pytest-httpx>=0.21.0",
+    "pytest-xdist>=3.0.0",
+    "pytest-timeout>=2.1.0",
+    "pytest-mock>=3.10.0",
+    "pytest-textual-snapshot>=0.4.0"
 ]
 
 [project.urls]
@@ -84,16 +96,15 @@ Repository = "https://git.supported.systems/MCP/mcp-vultr.git"
 Changelog = "https://git.supported.systems/MCP/mcp-vultr/blob/main/CHANGELOG.md"
 
 [project.scripts]
-mcp-vultr = "mcp_vultr.cli:main"
-vultr-dns-server = "mcp_vultr.cli:server_command"
-vultr-mcp-server = "mcp_vultr.fastmcp_server:run_server"
+mcp-vultr = "mcp_vultr.fastmcp_server:run_server"
+vultr-cli = "mcp_vultr.cli_main:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["mcp_vultr*"]
 
 [tool.setuptools.package-data]
 mcp_vultr = ["py.typed"]
-
 
 [tool.mypy]
 python_version = "3.12"
@@ -196,28 +207,34 @@ python_functions = ["test_*"]
 addopts = [
     "--strict-markers",
     "--strict-config",
-    "--verbose",
     "--tb=short",
-    "--cov=mcp_vultr",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-report=xml",
-    "--cov-fail-under=80"
+    "--maxfail=5",
+    "--timeout=30"
 ]
+# Separate addopts for different environments
+# Fast mode: no coverage, minimal output
+# Coverage mode: full coverage reporting
+# CI mode: verbose with coverage
 asyncio_mode = "auto"
+timeout = 30
+timeout_method = "thread"
 markers = [
-    "unit: Unit tests that test individual components in isolation",
+    "unit: Unit tests that test individual components in isolation", 
     "integration: Integration tests that test component interactions",
     "mcp: Tests specifically for MCP server functionality",
-    "slow: Tests that take a long time to run"
+    "slow: Tests that take a long time to run (>10s)",
+    "fast: Quick tests that should complete in <5s",
+    "network: Tests that mock network operations",
+    "error_handling: Tests focused on error scenarios"
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
-    "ignore::PendingDeprecationWarning"
+    "ignore::PendingDeprecationWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning"
 ]
 
 [tool.coverage.run]
-source = ["src/mcp_vultr"]
+source = ["src"]
 omit = [
     "*/tests/*",
     "*/test_*",
@@ -241,6 +258,9 @@ dev-dependencies = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
+    "pytest-xdist>=3.0.0",
+    "pytest-timeout>=2.1.0",
+    "pytest-mock>=3.10.0",
     "ruff>=0.1.14",
     "mypy>=1.0.0",
     "pre-commit>=3.0.0",
