@@ -170,7 +170,7 @@ class VultrDNSServer:
                     else:
                         raise VultrAPIError(response.status_code, response.text)
 
-                result = {} if response.status_code == 204 else await response.json()
+                result = {} if response.status_code == 204 else response.json()
 
                 # Cache successful GET requests
                 if method.upper() == "GET" and result:
