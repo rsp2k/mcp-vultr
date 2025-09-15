@@ -51,8 +51,13 @@ def cli(ctx: click.Context, api_key: str | None, tui: bool):
 
 
 @cli.command()
+@click.option(
+    "--transport",
+    type=click.Choice(["stdio", "sse", "streamable-http"]),
+    help="Transport protocol (auto-detected if not specified)",
+)
 @click.pass_context
-def server(ctx: click.Context):
+def server(ctx: click.Context, transport: str | None):
     """Start the Vultr DNS MCP server."""
     api_key = ctx.obj.get("api_key")
 
@@ -65,8 +70,12 @@ def server(ctx: click.Context):
 
     try:
         console.print("[bold green]Starting Vultr DNS MCP Server...[/bold green]")
+        if transport:
+            console.print(f"[dim]Using {transport} transport[/dim]")
+        else:
+            console.print("[dim]Auto-detecting transport (likely stdio for MCP)[/dim]")
         console.print("[dim]Press Ctrl+C to stop[/dim]")
-        run_server(api_key)
+        run_server(api_key, transport=transport)
     except KeyboardInterrupt:
         console.print("[yellow]Server stopped by user[/yellow]")
         sys.exit(0)
