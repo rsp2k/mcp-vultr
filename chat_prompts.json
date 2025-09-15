@@ -1,0 +1,109 @@
+{
+  "version": "1.0",
+  "description": "Chat prompts for interactive demonstrations and examples",
+  "categories": {
+    "bpy_automation": {
+      "title": "bpy Automation & Production Pipeline",
+      "description": "Complex Blender automation tasks using Python API",
+      "prompts": [
+        "Take every object in the 'HighPoly_Characters' collection, create a duplicate, and apply a decimate modifier to reduce the poly count by 80%. Place the results in a new collection called 'LOD1_Characters'.",
+        "Scan the entire scene for materials that don't have any image textures assigned. List them for me, and then change their base color to a bright pink to flag them for review.",
+        "Create a batch export script. For every selected object, export it as an FBX with 'apply transform' enabled and as a GLB with compression. Name each file after the object and save them in a folder on my desktop called 'Project_Exports'.",
+        "Open the 'Props_Library.blend' file, append the 'Vintage_Camera' object and all its materials into the current scene, and then place it at the 3D cursor's location.",
+        "Find all objects in the scene larger than 10 meters in any dimension, add them to a new 'Large_Scale_Assets' collection, and then disable them in the viewport to improve performance.",
+        "Connect to the Poly Haven API and import a 4K 'abandoned warehouse' HDRI for the world environment. Set its strength to 1.5.",
+        "Go through all the cameras in the scene and set their render resolution to 1920x1080 and their focal length to 50mm."
+      ]
+    },
+    "addon_interaction": {
+      "title": "Addon Interaction",
+      "description": "Working with popular Blender addons and extensions",
+      "prompts": [
+        "(FLIP Fluids) Select the object named 'Tank' and turn it into a FLIP Fluids domain. Then, make the sphere inside it an inflow object with a high initial velocity pointing down.",
+        "(BlenderGIS) Using BlenderGIS, import the OpenStreetMap data for downtown San Francisco, focusing on buildings and roadways.",
+        "(Sverchok/Geometry Nodes) Generate a Sverchok node tree that creates a 10x10 grid of cubes, where each cube's height is driven by a noise texture.",
+        "(MolecularNodes) Import the protein structure with PDB ID '6VXX', show it as a cartoon representation, and color it by chain.",
+        "(EpicGames BlenderTools) Take the selected skeletal mesh and its active animation, and send it directly to my open Unreal Engine project using the Send to Unreal addon."
+      ]
+    },
+    "bmesh_procedural": {
+      "title": "bmesh & Procedural Geometry",
+      "description": "Programmatic mesh creation and manipulation",
+      "prompts": [
+        "Create a parametric gear using bmesh. Give it 28 teeth, a major radius of 1 meter, and a minor radius of 0.8 meters.",
+        "Select the face of this cube and perform a recursive inset operation three times with a factor of 0.1 each time.",
+        "Generate a simple four-story building on the selected plane. Use bmesh to create window cutouts on each floor, with three windows per side.",
+        "Analyze the selected mesh and highlight all non-manifold edges in red. Attempt to automatically fix any simple boundary edges.",
+        "Create a voronoi fracture on this sphere and then slightly separate the pieces to give it an exploded view."
+      ]
+    },
+    "game_development": {
+      "title": "Game Development Pipeline",
+      "description": "Asset optimization and game-ready content creation",
+      "prompts": [
+        "For the selected object 'Character_Armor', create two lower levels of detail: one at 50% polygon count and another at 25%. Name them appropriately with '_LOD1' and '_LOD2' suffixes.",
+        "Find all materials in the scene that use a Principled BSDF node. Bake their base color, metallic, and roughness properties into 2K textures and save them with names matching the material slots.",
+        "Create a simple convex hull collision mesh for every object in the 'CollisionProxy' collection and ensure they all have the '_COLL' suffix.",
+        "Select the character's skeleton. Create socket joints at the positions of the objects named 'hand_socket_L' and 'head_socket'."
+      ]
+    },
+    "architectural_viz": {
+      "title": "Architectural Visualization & BIM",
+      "description": "Professional architectural workflows and BIM integration",
+      "prompts": [
+        "Using the BlenderBIM addon, import the IFC file for the structural frame from the project server and automatically classify the objects into collections based on their IFC class.",
+        "Set up a sun position study for latitude 40.7128, longitude -74.0060. Animate the sun's position from sunrise to sunset for today's date.",
+        "Replace all the placeholder window objects in this architectural model with the 'Double_Hung_Window' asset from my library, ensuring they match the orientation of the placeholders.",
+        "Calculate the total interior volume of the selected room object to estimate HVAC requirements."
+      ]
+    },
+    "scientific_viz": {
+      "title": "Scientific Visualization & Data",
+      "description": "Data visualization and scientific modeling",
+      "prompts": [
+        "Load the volumetric dataset 'brain_scan.raw' as a volume object and apply a cinematic fire color ramp to its shader.",
+        "Take the animation data from 'trajectory.xyz' and apply it to the imported molecular model, creating keyframes for each step.",
+        "Generate a 3D surface plot from the data in 'surface_data.csv'. The first column is X, second is Y, and third is Z."
+      ]
+    },
+    "ai_creativity": {
+      "title": "AI-Assisted Creativity",
+      "description": "Creative content generation with AI assistance",
+      "prompts": [
+        "Generate three different sci-fi container variations based on this simple cube shape. One should be cylindrical, one angular, and one heavily detailed with greebles.",
+        "I need a prop for a fantasy scene. Make me a 'potion bottle'. It should be oddly shaped, with a glowing liquid inside and a cork stopper."
+      ]
+    },
+    "vultr_cloud": {
+      "title": "Vultr Cloud Management",
+      "description": "Cloud infrastructure and API management examples",
+      "prompts": [
+        "List all my Vultr instances across regions and show their current status, IP addresses, and monthly costs in a formatted table.",
+        "Create a new compute instance in the New York datacenter with 2GB RAM, deploy Ubuntu 22.04, and set up automatic backups.",
+        "Show me the DNS records for my domain 'example.com' and add a new CNAME record pointing 'api' to 'server.example.com'.",
+        "Set up a new VPC network with CIDR 10.0.0.0/24 in the Miami region and create firewall rules to allow HTTP/HTTPS traffic.",
+        "Take a snapshot of my production server 'web-01', then create a new instance from that snapshot for testing purposes.",
+        "Configure load balancing between my three web servers with health checks and SSL termination enabled.",
+        "List all my object storage buckets, show their sizes and costs, then create a new bucket for storing application logs."
+      ]
+    },
+    "mcp_integration": {
+      "title": "MCP Server Integration",
+      "description": "Model Context Protocol server management and integration",
+      "prompts": [
+        "Show me all available MCP tools and group them by category. Highlight any new tools added in the last update.",
+        "Test the connection to my Vultr API and verify all 335+ tools are working correctly with proper authentication.",
+        "Set up a new Claude Desktop integration with custom keyboard shortcuts for quick DNS management.",
+        "Create a backup of my current MCP server configuration and test it by spinning up a temporary instance.",
+        "Monitor the MCP server logs in real-time and show any error patterns or performance issues.",
+        "Generate a comprehensive report of my API usage patterns and suggest optimizations for better performance."
+      ]
+    }
+  },
+  "metadata": {
+    "total_categories": 9,
+    "total_prompts": 40,
+    "last_updated": "2024-09-13",
+    "format_version": "1.0"
+  }
+}

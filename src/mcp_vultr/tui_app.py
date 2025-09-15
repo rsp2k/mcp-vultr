@@ -8,6 +8,9 @@ showcasing the full power of the Vultr API and MCP integration.
 from __future__ import annotations
 
 import asyncio
+import json
+import random
+from pathlib import Path
 from typing import Any
 
 from textual import on
@@ -31,17 +34,184 @@ from textual.widgets import (
 )
 from textual.reactive import reactive
 from textual.message import Message
+from textual.timer import Timer
 from rich.text import Text
 from rich.panel import Panel
 from rich.syntax import Syntax
+from rich.align import Align
 
 from ._version import __version__
 
 
+class ChatPromptsLoader:
+    """Load and manage chat prompts from JSON file."""
+    
+    def __init__(self, prompts_file: str = "chat_prompts.json"):
+        self.prompts_file = Path(prompts_file)
+        self.prompts_data = self._load_prompts()
+    
+    def _load_prompts(self) -> dict:
+        """Load prompts from JSON file."""
+        try:
+            if self.prompts_file.exists():
+                with open(self.prompts_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            pass
+        
+        # Fallback default prompts
+        return {
+            "categories": {
+                "vultr_cloud": {
+                    "title": "Vultr Cloud Management",
+                    "prompts": [
+                        "List all my Vultr instances across regions and show their current status, IP addresses, and monthly costs.",
+                        "Create a new compute instance in the New York datacenter with 2GB RAM and deploy Ubuntu 22.04.",
+                        "Show me the DNS records for my domain and add a new CNAME record.",
+                    ]
+                }
+            }
+        }
+    
+    def get_random_prompt(self) -> tuple[str, str]:
+        """Get a random prompt with its category title."""
+        categories = self.prompts_data.get("categories", {})
+        if not categories:
+            return "Demo", "Welcome to the Vultr Management TUI!"
+        
+        category_key = random.choice(list(categories.keys()))
+        category = categories[category_key]
+        prompt = random.choice(category.get("prompts", ["Welcome!"]))
+        
+        return category.get("title", category_key), prompt
+    
+    def get_all_prompts(self) -> list[tuple[str, str]]:
+        """Get all prompts with their category titles."""
+        all_prompts = []
+        categories = self.prompts_data.get("categories", {})
+        
+        for category in categories.values():
+            title = category.get("title", "Unknown")
+            for prompt in category.get("prompts", []):
+                all_prompts.append((title, prompt))
+        
+        return all_prompts
+
+
+class StarWarsScroll(Static):
+    """A Star Wars-style scrolling text widget for chat prompts."""
+    
+    scroll_position: reactive[int] = reactive(0)
+    
+    def __init__(self, prompts_loader: ChatPromptsLoader, **kwargs):
+        super().__init__(**kwargs)
+        self.prompts_loader = prompts_loader
+        self.current_prompt = ""
+        self.current_category = ""
+        self.scroll_timer: Timer | None = None
+        self.lines: list[str] = []
+        self.max_width = 60
+        
+    def on_mount(self) -> None:
+        """Start the scrolling animation."""
+        self._load_new_prompt()
+        self.scroll_timer = self.set_interval(0.1, self._update_scroll)
+    
+    def _load_new_prompt(self) -> None:
+        """Load a new random prompt."""
+        self.current_category, self.current_prompt = self.prompts_loader.get_random_prompt()
+        self._prepare_text()
+        self.scroll_position = len(self.lines) + 5  # Start below visible area
+    
+    def _prepare_text(self) -> None:
+        """Prepare the text for scrolling display."""
+        # Create title
+        title_lines = [
+            "",
+            f"💫 {self.current_category.upper()} 💫",
+            "=" * len(self.current_category),
+            "",
+        ]
+        
+        # Wrap the prompt text
+        words = self.current_prompt.split()
+        lines = []
+        current_line = ""
+        
+        for word in words:
+            if len(current_line + " " + word) <= self.max_width:
+                current_line += " " + word if current_line else word
+            else:
+                if current_line:
+                    lines.append(current_line)
+                current_line = word
+        
+        if current_line:
+            lines.append(current_line)
+        
+        # Center the text
+        centered_lines = []
+        for line in title_lines + lines:
+            if line.strip():
+                padding = max(0, (self.max_width - len(line)) // 2)
+                centered_lines.append(" " * padding + line)
+            else:
+                centered_lines.append("")
+        
+        self.lines = centered_lines + ["", "", "", ""]  # Add trailing space
+    
+    def _update_scroll(self) -> None:
+        """Update scroll position."""
+        self.scroll_position -= 1
+        
+        # If fully scrolled off screen, load new prompt
+        if self.scroll_position < -len(self.lines) - 5:
+            self._load_new_prompt()
+        
+        self.refresh()
+    
+    def render(self) -> Panel:
+        """Render the scrolling text."""
+        content_lines = []
+        visible_height = 12  # Height of the visible area
+        
+        # Calculate which lines should be visible
+        for i in range(visible_height):
+            line_index = self.scroll_position - i
+            if 0 <= line_index < len(self.lines):
+                line = self.lines[line_index]
+                # Add perspective effect (fade at top and bottom)
+                if i < 2 or i > visible_height - 3:
+                    line = f"[dim]{line}[/dim]"
+                content_lines.append(line)
+            else:
+                content_lines.append("")
+        
+        # Reverse to scroll from bottom to top
+        content_lines.reverse()
+        
+        content = "\n".join(content_lines)
+        
+        return Panel(
+            Align.center(content, vertical="middle"),
+            title="[bold cyan]✨ Chat Prompt Showcase ✨[/bold cyan]",
+            subtitle="[dim]Press any key for new prompt[/dim]",
+            border_style="bright_blue",
+            padding=(1, 2),
+        )
+    
+    def on_key(self, event) -> None:
+        """Load new prompt on any keypress."""
+        self._load_new_prompt()
+
+
 class WelcomeScreen(Static):
-    """Welcome screen with Vultr branding and overview."""
+    """Welcome screen with Vultr branding and animated chat prompts."""
 
     def compose(self) -> ComposeResult:
+        # Load chat prompts
+        prompts_loader = ChatPromptsLoader()
+        
         welcome_md = f"""
 # 🌟 Welcome to Vultr Management TUI v{__version__}
 
@@ -61,12 +231,20 @@ This **interactive terminal interface** showcases the complete power of the Vult
 ### 💡 Getting Started:
 
 Use the **tabs above** to explore different areas, or press **Ctrl+H** for help!
-
+        """
+        
+        with Horizontal():
+            with Vertical():
+                yield Markdown(welcome_md)
+            with Vertical():
+                yield StarWarsScroll(prompts_loader, id="chat_scroll")
+                
+        # Footer with credits
+        footer_md = """
 ---
 *Powered by the Vultr API • Built with Textual • Integrated with MCP*
         """
-        
-        yield Markdown(welcome_md)
+        yield Markdown(footer_md)
 
 
 class MCPSetupScreen(Static):
@@ -129,6 +307,46 @@ claude mcp add vultr "mcp-vultr"
         """
         
         yield Markdown(setup_md)
+
+
+class ChatPromptsShowcaseScreen(ScrollableContainer):
+    """Interactive showcase of chat prompts with full screen Star Wars scroll."""
+
+    def compose(self) -> ComposeResult:
+        # Load chat prompts
+        prompts_loader = ChatPromptsLoader()
+        
+        # Full screen scroll
+        yield StarWarsScroll(prompts_loader, id="fullscreen_scroll")
+        
+        # Instructions
+        instructions = """
+### 🎬 Chat Prompts Cinema Mode
+
+This screen showcases example chat prompts that demonstrate the power of AI-assisted workflows.
+The prompts continuously scroll in a Star Wars-style animation.
+
+**Features:**
+- **Dynamic Content**: Prompts loaded from JSON configuration
+- **Multiple Categories**: Blender automation, cloud management, MCP integration, and more
+- **Interactive**: Press any key to load a new random prompt
+- **Cinematic Experience**: Smooth scrolling animation with perspective effects
+
+**Categories Available:**
+- 🎨 bpy Automation & Production Pipeline
+- 🔧 Addon Interaction
+- 📐 bmesh & Procedural Geometry
+- 🎮 Game Development Pipeline
+- 🏢 Architectural Visualization & BIM
+- 🔬 Scientific Visualization & Data
+- 🤖 AI-Assisted Creativity
+- ☁️ Vultr Cloud Management
+- 🔌 MCP Server Integration
+
+Press any key to cycle through prompts, or switch to other tabs to explore the TUI!
+        """
+        
+        yield Markdown(instructions)
 
 
 class APIShowcaseScreen(ScrollableContainer):
@@ -309,6 +527,9 @@ class VultrTUI(App):
         with TabbedContent(initial="welcome"):
             with TabPane("🏠 Welcome", id="welcome"):
                 yield WelcomeScreen()
+            
+            with TabPane("🎬 Chat Prompts", id="prompts"):
+                yield ChatPromptsShowcaseScreen()
             
             with TabPane("🤖 MCP Setup", id="setup"):
                 yield MCPSetupScreen()
