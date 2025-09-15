@@ -10,6 +10,7 @@ import sys
 
 from fastmcp import FastMCP
 
+from ._version import __version__
 from .backups import create_backups_mcp
 from .bare_metal import create_bare_metal_mcp
 from .billing import create_billing_mcp
@@ -58,8 +59,8 @@ def create_vultr_mcp_server(api_key: str | None = None) -> FastMCP:
             "VULTR_API_KEY must be provided either as parameter or environment variable"
         )
 
-    # Create main FastMCP server
-    mcp = FastMCP(name="mcp-vultr")
+    # Create main FastMCP server with version info
+    mcp = FastMCP(name=f"mcp-vultr v{__version__}")
 
     # Initialize Vultr client
     vultr_client = VultrDNSServer(api_key)
@@ -180,6 +181,9 @@ def run_server(api_key: str | None = None, transport: str | None = None) -> None
         transport: Transport protocol ("stdio", "sse", "streamable-http"). 
                   If not provided, will auto-detect based on environment.
     """
+    # Print version info for debugging/verification
+    print(f"🚀 Starting mcp-vultr v{__version__}")
+    
     mcp = create_vultr_mcp_server(api_key)
     
     # Use provided transport or auto-detect
