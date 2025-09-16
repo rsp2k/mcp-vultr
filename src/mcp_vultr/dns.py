@@ -62,7 +62,47 @@ def create_dns_mcp(vultr_client) -> FastMCP:
         Args:
             domain: The domain name to analyze
         """
-        return await vultr_client.analyze_records(domain)
+        try:
+            # Get domain info and records using the vultr client
+            domain_info = await vultr_client.get_domain(domain)
+            records = await vultr_client.list_records(domain)
+            
+            # Analyze the configuration locally (not via API)
+            analysis = {
+                "domain": domain,
+                "creation_date": domain_info.get("date_created"),
+                "dnssec_enabled": domain_info.get("dns_sec") == "enabled",
+                "total_records": len(records),
+                "record_types": {},
+                "recommendations": []
+            }
+            
+            # Count record types
+            for record in records:
+                record_type = record.get("type", "UNKNOWN")
+                analysis["record_types"][record_type] = analysis["record_types"].get(record_type, 0) + 1
+            
+            # Generate recommendations
+            if "A" not in analysis["record_types"] and "AAAA" not in analysis["record_types"]:
+                analysis["recommendations"].append("Consider adding A or AAAA records for web hosting")
+            
+            if "MX" not in analysis["record_types"]:
+                analysis["recommendations"].append("No MX records found - add if email is needed")
+            
+            if not analysis["dnssec_enabled"]:
+                analysis["recommendations"].append("Consider enabling DNSSEC for enhanced security")
+            
+            if "TXT" not in analysis["record_types"]:
+                analysis["recommendations"].append("Consider adding TXT records for domain verification and security policies")
+            
+            return analysis
+            
+        except Exception as e:
+            return {
+                "domain": domain,
+                "error": str(e),
+                "recommendations": ["Unable to analyze domain - check if domain exists in Vultr DNS"]
+            }
 
     @mcp.resource("domains://{domain}/zone-file")
     async def export_zone_file_resource(domain: str) -> str:
@@ -256,7 +296,47 @@ def create_dns_mcp(vultr_client) -> FastMCP:
         Returns:
             Analysis results with recommendations for improvements
         """
-        return await vultr_client.analyze_records(domain)
+        try:
+            # Get domain info and records
+            domain_info = await vultr_client.get_domain(domain)
+            records = await vultr_client.list_records(domain)
+            
+            # Analyze the configuration
+            analysis = {
+                "domain": domain,
+                "creation_date": domain_info.get("date_created"),
+                "dnssec_enabled": domain_info.get("dns_sec") == "enabled",
+                "total_records": len(records),
+                "record_types": {},
+                "recommendations": []
+            }
+            
+            # Count record types
+            for record in records:
+                record_type = record.get("type", "UNKNOWN")
+                analysis["record_types"][record_type] = analysis["record_types"].get(record_type, 0) + 1
+            
+            # Generate recommendations
+            if "A" not in analysis["record_types"] and "AAAA" not in analysis["record_types"]:
+                analysis["recommendations"].append("Consider adding A or AAAA records for web hosting")
+            
+            if "MX" not in analysis["record_types"]:
+                analysis["recommendations"].append("No MX records found - add if email is needed")
+            
+            if not analysis["dnssec_enabled"]:
+                analysis["recommendations"].append("Consider enabling DNSSEC for enhanced security")
+            
+            if "TXT" not in analysis["record_types"]:
+                analysis["recommendations"].append("Consider adding TXT records for domain verification and security policies")
+            
+            return analysis
+            
+        except Exception as e:
+            return {
+                "domain": domain,
+                "error": str(e),
+                "recommendations": ["Unable to analyze domain - check if domain exists in Vultr DNS"]
+            }
 
     @mcp.tool
     async def setup_website(
