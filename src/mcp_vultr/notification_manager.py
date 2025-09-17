@@ -120,6 +120,14 @@ class NotificationManager:
         "create_reserved_ip": ["reserved-ips://list"],
         "update_reserved_ip": ["reserved-ips://list", "reserved-ips://{reserved_ip}"],
         "delete_reserved_ip": ["reserved-ips://list"],
+        # Service Collection operations
+        "create_service_collection": ["service-collections://list", "service-collections://projects"],
+        "update_service_collection": [
+            "service-collections://list",
+            "service-collections://{collection_id}",
+            "service-collections://projects",
+        ],
+        "delete_service_collection": ["service-collections://list", "service-collections://projects"],
     }
 
     @staticmethod
