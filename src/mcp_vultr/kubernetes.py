@@ -6,7 +6,10 @@ This module contains FastMCP tools and resources for managing Vultr Kubernetes E
 
 from typing import Any
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
+
+from .kubernetes_analyzer import KubernetesAnalyzer
+from .notification_manager import NotificationManager
 
 
 def create_kubernetes_mcp(vultr_client) -> FastMCP:
@@ -20,6 +23,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with Kubernetes management tools
     """
     mcp = FastMCP(name="vultr-kubernetes")
+    kubernetes_analyzer = KubernetesAnalyzer(vultr_client)
 
     # Helper function to check if string is UUID format
     def is_uuid_format(value: str) -> bool:
@@ -122,7 +126,11 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
     @mcp.resource("kubernetes://clusters")
     async def list_clusters_resource() -> list[dict[str, Any]]:
         """List all Kubernetes clusters in your Vultr account."""
-        return await vultr_client.list_kubernetes_clusters()
+        try:
+            return await vultr_client.list_kubernetes_clusters()
+        except Exception:
+            # If the API returns an error when no clusters exist, return empty list
+            return []
 
     @mcp.resource("kubernetes://cluster/{cluster_id}")
     async def get_cluster_resource(cluster_id: str) -> dict[str, Any]:
@@ -186,6 +194,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         region: str,
         version: str,
         node_pools: list[dict[str, Any]],
+        ctx: Context | None = None,
         enable_firewall: bool = False,
         ha_controlplanes: bool = False,
     ) -> dict[str, Any]:
@@ -204,13 +213,14 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
                 - auto_scaler: Optional auto-scaling configuration
                 - min_nodes: Minimum nodes for auto-scaling
                 - max_nodes: Maximum nodes for auto-scaling
+            ctx: FastMCP context for resource change notifications
             enable_firewall: Enable firewall for cluster
             ha_controlplanes: Enable high availability control planes
 
         Returns:
             Created cluster information
         """
-        return await vultr_client.create_kubernetes_cluster(
+        result = await vultr_client.create_kubernetes_cluster(
             label=label,
             region=region,
             version=version,
@@ -219,9 +229,19 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             ha_controlplanes=ha_controlplanes,
         )
 
+        # Notify clients that Kubernetes cluster list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx,
+                operation="create_kubernetes_cluster",
+                cluster_id=result.get("id"),
+            )
+
+        return result
+
     @mcp.tool()
     async def update_kubernetes_cluster(
-        cluster_identifier: str, label: str | None = None
+        cluster_identifier: str, ctx: Context | None = None, label: str | None = None
     ) -> dict[str, str]:
         """
         Update a Kubernetes cluster configuration.
@@ -229,6 +249,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
 
         Args:
             cluster_identifier: The cluster label or ID
+            ctx: FastMCP context for resource change notifications
             label: New label for the cluster
 
         Returns:
@@ -236,25 +257,42 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         """
         cluster_id = await get_cluster_id(cluster_identifier)
         await vultr_client.update_kubernetes_cluster(cluster_id, label=label)
+
+        # Notify clients that Kubernetes clusters list and specific cluster have changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="update_kubernetes_cluster", cluster_id=cluster_id
+            )
+
         return {
             "status": "success",
             "message": f"Cluster {cluster_identifier} updated successfully",
         }
 
     @mcp.tool()
-    async def delete_kubernetes_cluster(cluster_identifier: str) -> dict[str, str]:
+    async def delete_kubernetes_cluster(
+        cluster_identifier: str, ctx: Context
+    ) -> dict[str, str]:
         """
         Delete a Kubernetes cluster.
         Smart identifier resolution: use cluster label or UUID.
 
         Args:
             cluster_identifier: The cluster label or ID to delete
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Deletion status message
         """
         cluster_id = await get_cluster_id(cluster_identifier)
         await vultr_client.delete_kubernetes_cluster(cluster_id)
+
+        # Notify clients that Kubernetes clusters list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="delete_kubernetes_cluster", cluster_id=cluster_id
+            )
+
         return {
             "status": "success",
             "message": f"Cluster {cluster_identifier} deleted successfully",
@@ -262,7 +300,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
 
     @mcp.tool()
     async def delete_kubernetes_cluster_with_resources(
-        cluster_identifier: str,
+        cluster_identifier: str, ctx: Context
     ) -> dict[str, str]:
         """
         Delete a Kubernetes cluster and all related resources.
@@ -270,12 +308,20 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
 
         Args:
             cluster_identifier: The cluster label or ID to delete
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Deletion status message
         """
         cluster_id = await get_cluster_id(cluster_identifier)
         await vultr_client.delete_kubernetes_cluster_with_resources(cluster_id)
+
+        # Notify clients that Kubernetes clusters list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="delete_kubernetes_cluster", cluster_id=cluster_id
+            )
+
         return {
             "status": "success",
             "message": f"Cluster {cluster_identifier} and all related resources deleted successfully",
@@ -394,6 +440,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         node_quantity: int,
         plan: str,
         label: str,
+        ctx: Context | None = None,
         tag: str | None = None,
         auto_scaler: bool | None = None,
         min_nodes: int | None = None,
@@ -409,6 +456,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             node_quantity: Number of nodes (minimum 1, recommended 3+)
             plan: Plan ID (e.g., 'vc2-2c-4gb')
             label: Node pool label (must be unique within cluster)
+            ctx: FastMCP context for resource change notifications
             tag: Optional tag for the node pool
             auto_scaler: Enable auto-scaling for this node pool
             min_nodes: Minimum nodes for auto-scaling
@@ -419,7 +467,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             Created node pool information
         """
         cluster_id = await get_cluster_id(cluster_identifier)
-        return await vultr_client.create_kubernetes_node_pool(
+        result = await vultr_client.create_kubernetes_node_pool(
             cluster_id=cluster_id,
             node_quantity=node_quantity,
             plan=plan,
@@ -431,10 +479,19 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             labels=labels,
         )
 
+        # Notify clients that node pools for this cluster have changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="create_node_pool", cluster_id=cluster_id
+            )
+
+        return result
+
     @mcp.tool()
     async def update_kubernetes_node_pool(
         cluster_identifier: str,
         nodepool_identifier: str,
+        ctx: Context | None = None,
         node_quantity: int | None = None,
         tag: str | None = None,
         auto_scaler: bool | None = None,
@@ -449,6 +506,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         Args:
             cluster_identifier: The cluster label or ID
             nodepool_identifier: The node pool label or ID
+            ctx: FastMCP context for resource change notifications
             node_quantity: New number of nodes
             tag: New tag for the node pool
             auto_scaler: Enable/disable auto-scaling
@@ -472,6 +530,13 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             max_nodes=max_nodes,
             labels=labels,
         )
+
+        # Notify clients that node pools for this cluster have changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="update_node_pool", cluster_id=cluster_id
+            )
+
         return {
             "status": "success",
             "message": f"Node pool {nodepool_identifier} updated successfully",
@@ -479,7 +544,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
 
     @mcp.tool()
     async def delete_kubernetes_node_pool(
-        cluster_identifier: str, nodepool_identifier: str
+        cluster_identifier: str, nodepool_identifier: str, ctx: Context
     ) -> dict[str, str]:
         """
         Delete a node pool from a Kubernetes cluster.
@@ -488,6 +553,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         Args:
             cluster_identifier: The cluster label or ID
             nodepool_identifier: The node pool label or ID to delete
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Deletion status message
@@ -496,6 +562,13 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             cluster_identifier, nodepool_identifier
         )
         await vultr_client.delete_kubernetes_node_pool(cluster_id, nodepool_id)
+
+        # Notify clients that node pools for this cluster have changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="delete_node_pool", cluster_id=cluster_id
+            )
+
         return {
             "status": "success",
             "message": f"Node pool {nodepool_identifier} deleted successfully",
@@ -545,7 +618,10 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
 
     @mcp.tool()
     async def delete_kubernetes_node(
-        cluster_identifier: str, nodepool_identifier: str, node_identifier: str
+        cluster_identifier: str,
+        nodepool_identifier: str,
+        node_identifier: str,
+        ctx: Context | None = None,
     ) -> dict[str, str]:
         """
         Delete a specific node from a node pool.
@@ -555,6 +631,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             cluster_identifier: The cluster label or ID
             nodepool_identifier: The node pool label or ID
             node_identifier: The node label or ID to delete
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Deletion status message
@@ -563,6 +640,13 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
             cluster_identifier, nodepool_identifier, node_identifier
         )
         await vultr_client.delete_kubernetes_node(cluster_id, nodepool_id, node_id)
+
+        # Notify clients that node pools for this cluster have changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="delete_kubernetes_node", cluster_id=cluster_id
+            )
+
         return {
             "status": "success",
             "message": f"Node {node_identifier} deleted successfully",
@@ -616,78 +700,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         Returns:
             Comprehensive cluster status including health, resources, and node status
         """
-        cluster_id = await get_cluster_id(cluster_identifier)
-
-        # Get cluster details
-        cluster_info = await vultr_client.get_kubernetes_cluster(cluster_id)
-
-        # Get resource usage
-        try:
-            resources = await vultr_client.get_kubernetes_cluster_resources(cluster_id)
-        except Exception:
-            resources = {"error": "Resources unavailable"}
-
-        # Get node pools and their status
-        try:
-            node_pools = await vultr_client.list_kubernetes_node_pools(cluster_id)
-
-            # Get node details for each pool
-            node_pool_details = []
-            for pool in node_pools:
-                try:
-                    nodes = await vultr_client.list_kubernetes_nodes(
-                        cluster_id, pool["id"]
-                    )
-                    pool_info = {
-                        "pool": pool,
-                        "nodes": nodes,
-                        "node_count": len(nodes),
-                        "healthy_nodes": len(
-                            [n for n in nodes if n.get("status") == "active"]
-                        ),
-                    }
-                    node_pool_details.append(pool_info)
-                except Exception:
-                    node_pool_details.append(
-                        {"pool": pool, "nodes": [], "error": "Could not fetch nodes"}
-                    )
-
-        except Exception:
-            node_pool_details = [{"error": "Could not fetch node pools"}]
-
-        # Calculate overall health
-        total_nodes = sum(detail.get("node_count", 0) for detail in node_pool_details)
-        healthy_nodes = sum(
-            detail.get("healthy_nodes", 0) for detail in node_pool_details
-        )
-
-        cluster_health = "healthy"
-        if total_nodes == 0:
-            cluster_health = "no_nodes"
-        elif healthy_nodes < total_nodes:
-            cluster_health = "degraded"
-        elif cluster_info.get("status") != "active":
-            cluster_health = "unhealthy"
-
-        return {
-            "cluster_info": cluster_info,
-            "health_status": cluster_health,
-            "total_nodes": total_nodes,
-            "healthy_nodes": healthy_nodes,
-            "resources": resources,
-            "node_pools": node_pool_details,
-            "summary": {
-                "cluster_id": cluster_id,
-                "label": cluster_info.get("label"),
-                "version": cluster_info.get("version"),
-                "region": cluster_info.get("region"),
-                "status": cluster_info.get("status"),
-                "ip": cluster_info.get("ip"),
-                "node_pool_count": len(node_pools)
-                if isinstance(node_pools, list)
-                else 0,
-            },
-        }
+        return await kubernetes_analyzer.get_cluster_status(cluster_identifier)
 
     @mcp.tool()
     async def scale_kubernetes_node_pool(
@@ -755,67 +768,13 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         Returns:
             Cost analysis including per-node costs and total estimated monthly cost
         """
-        cluster_id = await get_cluster_id(cluster_identifier)
-
-        # Get cluster and node pool information
-        cluster_info = await vultr_client.get_kubernetes_cluster(cluster_id)
-        node_pools = await vultr_client.list_kubernetes_node_pools(cluster_id)
-
-        # Calculate costs (Note: This would need actual pricing data from Vultr API)
-        # For now, we'll provide structure and placeholder calculations
-
-        cost_breakdown = []
-        total_monthly_cost = 0
-        total_nodes = 0
-
-        for pool in node_pools:
-            node_count = pool.get("node_quantity", 0)
-            plan = pool.get("plan", "unknown")
-
-            # Placeholder cost calculation - would need real pricing API
-            estimated_cost_per_node = 10.00  # Placeholder $10/month per node
-            pool_monthly_cost = node_count * estimated_cost_per_node
-
-            cost_breakdown.append(
-                {
-                    "node_pool_label": pool.get("label"),
-                    "plan": plan,
-                    "node_count": node_count,
-                    "estimated_cost_per_node": estimated_cost_per_node,
-                    "estimated_monthly_cost": pool_monthly_cost,
-                }
-            )
-
-            total_monthly_cost += pool_monthly_cost
-            total_nodes += node_count
-
-        # Add control plane costs (if HA is enabled)
-        ha_enabled = cluster_info.get("ha_controlplanes", False)
-        control_plane_cost = 20.00 if ha_enabled else 0.00  # Placeholder
-        total_monthly_cost += control_plane_cost
-
-        return {
-            "cluster_label": cluster_info.get("label"),
-            "total_nodes": total_nodes,
-            "ha_control_plane": ha_enabled,
-            "cost_breakdown": {
-                "node_pools": cost_breakdown,
-                "control_plane_cost": control_plane_cost,
-                "total_monthly_estimate": total_monthly_cost,
-            },
-            "cost_optimization_tips": [
-                "Consider using smaller plans for development clusters",
-                "Use auto-scaling to optimize costs based on demand",
-                "Monitor resource usage and scale down unused capacity",
-                "Review node pool configurations regularly",
-            ],
-            "note": "Cost estimates are approximate. Check Vultr pricing for accurate costs.",
-        }
+        return await kubernetes_analyzer.analyze_cluster_costs(cluster_identifier)
 
     @mcp.tool()
     async def setup_kubernetes_cluster_for_workload(
         label: str,
         region: str,
+        ctx: Context | None = None,
         workload_type: str = "web",
         environment: str = "production",
         auto_scaling: bool = True,
@@ -826,6 +785,7 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         Args:
             label: Label for the new cluster
             region: Region code (e.g., 'ewr', 'lax')
+            ctx: FastMCP context for resource change notifications
             workload_type: Type of workload ('web', 'api', 'data', 'development')
             environment: Environment type ('production', 'staging', 'development')
             auto_scaling: Enable auto-scaling for node pools
@@ -833,130 +793,18 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         Returns:
             Created cluster information with setup recommendations
         """
-        # Get available Kubernetes versions and use the latest stable
-        versions = await vultr_client.get_kubernetes_versions()
-        latest_version = versions[0] if versions else "v1.28.0"  # Fallback
-
-        # Configure based on workload type and environment
-        workload_configs = {
-            "web": {
-                "node_pools": [
-                    {
-                        "label": "web-workers",
-                        "plan": "vc2-2c-4gb"
-                        if environment == "production"
-                        else "vc2-1c-2gb",
-                        "node_quantity": 3 if environment == "production" else 2,
-                        "auto_scaler": auto_scaling,
-                        "min_nodes": 2 if auto_scaling else None,
-                        "max_nodes": 6 if auto_scaling else None,
-                    }
-                ]
-            },
-            "api": {
-                "node_pools": [
-                    {
-                        "label": "api-workers",
-                        "plan": "vc2-4c-8gb"
-                        if environment == "production"
-                        else "vc2-2c-4gb",
-                        "node_quantity": 3 if environment == "production" else 2,
-                        "auto_scaler": auto_scaling,
-                        "min_nodes": 2 if auto_scaling else None,
-                        "max_nodes": 8 if auto_scaling else None,
-                    }
-                ]
-            },
-            "data": {
-                "node_pools": [
-                    {
-                        "label": "data-workers",
-                        "plan": "vc2-8c-16gb"
-                        if environment == "production"
-                        else "vc2-4c-8gb",
-                        "node_quantity": 3 if environment == "production" else 2,
-                        "auto_scaler": auto_scaling,
-                        "min_nodes": 3 if auto_scaling else None,
-                        "max_nodes": 10 if auto_scaling else None,
-                    }
-                ]
-            },
-            "development": {
-                "node_pools": [
-                    {
-                        "label": "dev-workers",
-                        "plan": "vc2-1c-1gb",
-                        "node_quantity": 1,
-                        "auto_scaler": False,
-                        "min_nodes": None,
-                        "max_nodes": None,
-                    }
-                ]
-            },
-        }
-
-        config = workload_configs.get(workload_type, workload_configs["web"])
-
-        # Create the cluster
-        cluster = await vultr_client.create_kubernetes_cluster(
-            label=label,
-            region=region,
-            version=latest_version,
-            node_pools=config["node_pools"],
-            enable_firewall=environment == "production",
-            ha_controlplanes=environment == "production",
+        result = await kubernetes_analyzer.setup_cluster_for_workload(
+            label, region, workload_type, environment, auto_scaling
         )
 
-        # Generate setup recommendations
-        recommendations = {
-            "next_steps": [
-                "Download kubeconfig using get_kubernetes_cluster_config",
-                "Install kubectl and configure cluster access",
-                "Set up ingress controller for external access",
-                "Configure monitoring and logging solutions",
-            ],
-            "workload_specific_tips": {
-                "web": [
-                    "Consider setting up horizontal pod autoscaling",
-                    "Use ingress controllers for load balancing",
-                    "Implement CDN for static assets",
-                ],
-                "api": [
-                    "Configure API rate limiting",
-                    "Set up service mesh for microservices",
-                    "Implement proper authentication and authorization",
-                ],
-                "data": [
-                    "Use persistent volumes for data storage",
-                    "Consider StatefulSets for database workloads",
-                    "Implement backup strategies for persistent data",
-                ],
-                "development": [
-                    "Use namespaces to separate environments",
-                    "Consider using development tools like Skaffold",
-                    "Set up CI/CD pipelines for automated deployments",
-                ],
-            }.get(workload_type, []),
-            "security_recommendations": [
-                "Enable network policies for pod-to-pod communication",
-                "Use RBAC for access control",
-                "Regularly update cluster and node versions",
-                "Scan container images for vulnerabilities",
-            ]
-            if environment == "production"
-            else ["Set up basic RBAC", "Use namespaces for isolation"],
-        }
+        # Notify clients that Kubernetes cluster list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx,
+                operation="create_kubernetes_cluster",
+                cluster_id=result.get("id"),
+            )
 
-        return {
-            "cluster": cluster,
-            "configuration": {
-                "workload_type": workload_type,
-                "environment": environment,
-                "auto_scaling_enabled": auto_scaling,
-                "ha_control_plane": environment == "production",
-                "firewall_enabled": environment == "production",
-            },
-            "recommendations": recommendations,
-        }
+        return result
 
     return mcp

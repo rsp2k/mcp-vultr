@@ -99,11 +99,14 @@ def plans(ctx: click.Context):
 def plans_list(ctx: click.Context, plan_type: str | None):
     """List hosting plans."""
     api_key = handle_api_key_error(ctx.obj.get("api_key"))
-    
+
     # Show helpful suggestions when no type is specified
     if not plan_type:
         from .utils import show_helpful_suggestions
-        console.print("[yellow]💡 No plan type specified. Here are the available options:[/yellow]\n")
+
+        console.print(
+            "[yellow]💡 No plan type specified. Here are the available options:[/yellow]\n"
+        )
         show_helpful_suggestions("plans_list_no_type")
         console.print("\n[dim]Proceeding to list all plans...[/dim]\n")
 

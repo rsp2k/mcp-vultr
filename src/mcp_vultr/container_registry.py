@@ -4,10 +4,11 @@ Vultr Container Registry FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr container registries.
 """
 
-from typing import Any, List
-from typing import Any, List
+from typing import Any
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
+
+from .notification_manager import NotificationManager
 
 
 def create_container_registry_mcp(vultr_client) -> FastMCP:
@@ -58,9 +59,13 @@ def create_container_registry_mcp(vultr_client) -> FastMCP:
 
     # Container Registry resources
     @mcp.resource("container-registry://list")
-    async def list_registries_resource() -> List[dict[str, Any]]:
+    async def list_registries_resource() -> list[dict[str, Any]]:
         """List all container registries."""
-        return await vultr_client.list_container_registries()
+        try:
+            return await vultr_client.list_container_registries()
+        except Exception:
+            # If the API returns an error when no registries exist, return empty list
+            return []
 
     @mcp.resource("container-registry://{registry_identifier}")
     async def get_registry_resource(registry_identifier: str) -> dict[str, Any]:
@@ -73,58 +78,44 @@ def create_container_registry_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_container_registry(registry_id)
 
     @mcp.resource("container-registry://plans")
-    async def list_plans_resource() -> List[dict[str, Any]]:
+    async def list_plans_resource() -> list[dict[str, Any]]:
         """List all available container registry plans."""
         return await vultr_client.list_registry_plans()
 
     # Container Registry tools
-    @mcp.tool
-    async def list() -> List[dict[str, Any]]:
-        """List all container registries in your account.
-
-        Returns:
-            List of container registry objects with details including:
-            - id: Registry ID
-            - name: Registry name
-            - urn: Universal Resource Name
-            - storage: Storage details
-            - date_created: Creation date
-            - public: Whether registry is public
-            - root_user: Root user details
-        """
-        return await vultr_client.list_container_registries()
+    # Container Registry management tools
 
     @mcp.tool
-    async def get(registry_identifier: str) -> dict[str, Any]:
-        """Get detailed information about a specific container registry.
-
-        Smart identifier resolution: Use registry name or ID.
-
-        Args:
-            registry_identifier: Registry name or ID to retrieve
-
-        Returns:
-            Detailed registry information including storage, plan, and configuration
-        """
-        registry_id = await get_registry_id(registry_identifier)
-        return await vultr_client.get_container_registry(registry_id)
-
-    @mcp.tool
-    async def create(name: str, plan: str, region: str) -> dict[str, Any]:
+    async def create(
+        name: str, plan: str, region: str, ctx: Context | None = None
+    ) -> dict[str, Any]:
         """Create a new container registry subscription.
 
         Args:
             name: Name for the container registry
             plan: Registry plan ("start_up", "business", "premium", etc.)
             region: Region code for the registry (e.g., "ewr", "lax", "fra")
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Created registry information including ID, URN, and configuration
         """
-        return await vultr_client.create_container_registry(name, plan, region)
+        result = await vultr_client.create_container_registry(name, plan, region)
+
+        # Notify clients that container registry list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx,
+                operation="create_container_registry",
+                registry_id=result.get("id"),
+            )
+
+        return result
 
     @mcp.tool
-    async def update(registry_identifier: str, plan: str) -> dict[str, str]:
+    async def update(
+        registry_identifier: str, plan: str, ctx: Context
+    ) -> dict[str, str]:
         """Update container registry plan.
 
         Smart identifier resolution: Use registry name or ID.
@@ -132,12 +123,20 @@ def create_container_registry_mcp(vultr_client) -> FastMCP:
         Args:
             registry_identifier: Registry name or ID to update
             plan: New registry plan ("start_up", "business", "premium", etc.)
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Success confirmation
         """
         registry_id = await get_registry_id(registry_identifier)
         await vultr_client.update_container_registry(registry_id, plan)
+
+        # Notify clients that container registry list and specific registry have changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="update_container_registry", registry_id=registry_id
+            )
+
         return {
             "success": True,
             "message": f"Registry plan updated to {plan}",
@@ -145,19 +144,29 @@ def create_container_registry_mcp(vultr_client) -> FastMCP:
         }
 
     @mcp.tool
-    async def delete(registry_identifier: str) -> dict[str, str]:
+    async def delete(
+        registry_identifier: str, ctx: Context | None = None
+    ) -> dict[str, str]:
         """Delete a container registry subscription.
 
         Smart identifier resolution: Use registry name or ID.
 
         Args:
             registry_identifier: Registry name or ID to delete
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Success confirmation
         """
         registry_id = await get_registry_id(registry_identifier)
         await vultr_client.delete_container_registry(registry_id)
+
+        # Notify clients that container registry list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="delete_container_registry", registry_id=registry_id
+            )
+
         return {
             "success": True,
             "message": "Registry deleted successfully",
@@ -165,7 +174,7 @@ def create_container_registry_mcp(vultr_client) -> FastMCP:
         }
 
     @mcp.tool
-    async def list_plans() -> List[dict[str, Any]]:
+    async def list_plans() -> list[dict[str, Any]]:
         """List all available container registry plans.
 
         Returns:

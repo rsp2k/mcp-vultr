@@ -153,7 +153,7 @@ def create_vultr_mcp_server(api_key: str | None = None) -> FastMCP:
 def _detect_transport() -> str:
     """
     Intelligently detect the appropriate transport based on environment.
-    
+
     Returns:
         Transport type: "stdio" for MCP clients, "sse" for HTTP deployment
     """
@@ -167,7 +167,7 @@ def _detect_transport() -> str:
         and len(sys.argv) == 1
     ):
         return "stdio"
-    
+
     # Default to stdio for MCP compatibility
     return "stdio"
 
@@ -178,17 +178,17 @@ def run_server(api_key: str | None = None, transport: str | None = None) -> None
 
     Args:
         api_key: Vultr API key. If not provided, will read from VULTR_API_KEY env var.
-        transport: Transport protocol ("stdio", "sse", "streamable-http"). 
+        transport: Transport protocol ("stdio", "sse", "streamable-http").
                   If not provided, will auto-detect based on environment.
     """
     # Print version info for debugging/verification
     print(f"🚀 Starting mcp-vultr v{__version__}")
-    
+
     mcp = create_vultr_mcp_server(api_key)
-    
+
     # Use provided transport or auto-detect
     selected_transport = transport or _detect_transport()
-    
+
     # Explicitly specify transport for reliable operation
     mcp.run(transport=selected_transport)
 

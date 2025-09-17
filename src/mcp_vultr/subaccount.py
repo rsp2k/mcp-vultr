@@ -4,8 +4,7 @@ Vultr Subaccount FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr subaccounts.
 """
 
-from typing import Any, List
-from typing import Any, List
+from typing import Any
 
 from fastmcp import FastMCP
 
@@ -61,7 +60,7 @@ def create_subaccount_mcp(vultr_client) -> FastMCP:
 
     # Helper function for subaccount setup
     async def setup_subaccount_permissions(
-        subaccount_id: str, permissions: List[str]
+        subaccount_id: str, permissions: list[str]
     ) -> dict[str, Any]:
         """
         Helper function to configure subaccount permissions.
@@ -122,9 +121,13 @@ def create_subaccount_mcp(vultr_client) -> FastMCP:
 
     # Subaccount resources
     @mcp.resource("subaccounts://list")
-    async def list_subaccounts_resource() -> List[dict[str, Any]]:
+    async def list_subaccounts_resource() -> list[dict[str, Any]]:
         """List all subaccounts in your Vultr account."""
-        return await vultr_client.list_subaccounts()
+        try:
+            return await vultr_client.list_subaccounts()
+        except Exception:
+            # If the API returns an error when no subaccounts exist, return empty list
+            return []
 
     @mcp.resource("subaccounts://{subaccount_id}")
     async def get_subaccount_resource(subaccount_id: str) -> dict[str, Any]:
@@ -141,38 +144,6 @@ def create_subaccount_mcp(vultr_client) -> FastMCP:
         raise ValueError(f"Subaccount {actual_id} not found")
 
     # Subaccount management tools
-    @mcp.tool
-    async def list() -> List[dict[str, Any]]:
-        """List all subaccounts in your Vultr account.
-
-        Returns:
-            List of subaccount objects with details including:
-            - id: Subaccount UUID
-            - email: Email address
-            - subaccount_name: Display name
-            - subaccount_id: Custom identifier
-            - activated: Whether the subaccount is activated
-            - balance: Current account balance
-            - pending_charges: Pending charges
-        """
-        return await vultr_client.list_subaccounts()
-
-    @mcp.tool
-    async def get(subaccount_id: str) -> dict[str, Any]:
-        """Get detailed information about a specific subaccount.
-
-        Args:
-            subaccount_id: The subaccount ID, name, email, or UUID (e.g., "dev-team", "dev@example.com", or UUID)
-
-        Returns:
-            Detailed subaccount information
-        """
-        actual_id = await get_subaccount_id(subaccount_id)
-        subaccounts = await vultr_client.list_subaccounts()
-        for subaccount in subaccounts:
-            if subaccount["id"] == actual_id:
-                return subaccount
-        raise ValueError(f"Subaccount {actual_id} not found")
 
     @mcp.tool
     async def create(
@@ -195,7 +166,7 @@ def create_subaccount_mcp(vultr_client) -> FastMCP:
         )
 
     @mcp.tool
-    async def find_by_email(email: str) -> List[dict[str, Any]]:
+    async def find_by_email(email: str) -> list[dict[str, Any]]:
         """Find subaccounts by email address.
 
         Args:
@@ -211,7 +182,7 @@ def create_subaccount_mcp(vultr_client) -> FastMCP:
         return matches
 
     @mcp.tool
-    async def find_by_name(name: str) -> List[dict[str, Any]]:
+    async def find_by_name(name: str) -> list[dict[str, Any]]:
         """Find subaccounts by name (partial match).
 
         Args:
@@ -301,7 +272,7 @@ def create_subaccount_mcp(vultr_client) -> FastMCP:
 
     @mcp.tool
     async def setup_permissions(
-        subaccount_id: str, permissions: List[str]
+        subaccount_id: str, permissions: list[str]
     ) -> dict[str, Any]:
         """Configure permissions for a subaccount.
 
@@ -404,7 +375,7 @@ def create_subaccount_mcp(vultr_client) -> FastMCP:
         return overview
 
     @mcp.tool
-    async def monitor_usage() -> List[dict[str, Any]]:
+    async def monitor_usage() -> list[dict[str, Any]]:
         """Monitor usage across all subaccounts and identify potential issues.
 
         Returns:

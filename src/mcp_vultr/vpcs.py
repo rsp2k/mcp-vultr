@@ -4,10 +4,11 @@ Vultr VPCs FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr VPCs and VPC 2.0 networks.
 """
 
-from typing import Any, List
-from typing import Any, List
+from typing import Any
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
+
+from .notification_manager import NotificationManager
 
 
 def create_vpcs_mcp(vultr_client) -> FastMCP:
@@ -84,9 +85,13 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
 
     # VPC resources
     @mcp.resource("vpcs://list")
-    async def list_vpcs_resource() -> List[dict[str, Any]]:
+    async def list_vpcs_resource() -> list[dict[str, Any]]:
         """List all VPCs."""
-        return await vultr_client.list_vpcs()
+        try:
+            return await vultr_client.list_vpcs()
+        except Exception:
+            # If the API returns an error when no VPCs exist, return empty list
+            return []
 
     @mcp.resource("vpcs://{vpc_identifier}")
     async def get_vpc_resource(vpc_identifier: str) -> dict[str, Any]:
@@ -99,7 +104,7 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_vpc(vpc_id)
 
     @mcp.resource("vpc2s://list")
-    async def list_vpc2s_resource() -> List[dict[str, Any]]:
+    async def list_vpc2s_resource() -> list[dict[str, Any]]:
         """List all VPC 2.0 networks."""
         return await vultr_client.list_vpc2s()
 
@@ -113,41 +118,13 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
         vpc2_id = await get_vpc2_id(vpc2_identifier)
         return await vultr_client.get_vpc2(vpc2_id)
 
-    # VPC tools
-    @mcp.tool
-    async def list() -> List[dict[str, Any]]:
-        """List all VPCs in your account.
-
-        Returns:
-            List of VPC objects with details including:
-            - id: VPC ID
-            - description: User-defined description
-            - region: Region where VPC is located
-            - v4_subnet: IPv4 subnet
-            - v4_subnet_mask: IPv4 subnet mask
-            - date_created: Creation date
-        """
-        return await vultr_client.list_vpcs()
-
-    @mcp.tool
-    async def get(vpc_identifier: str) -> dict[str, Any]:
-        """Get detailed information about a specific VPC.
-
-        Smart identifier resolution: Use VPC description or ID.
-
-        Args:
-            vpc_identifier: VPC description or ID to retrieve
-
-        Returns:
-            Detailed VPC information including subnet configuration
-        """
-        vpc_id = await get_vpc_id(vpc_identifier)
-        return await vultr_client.get_vpc(vpc_id)
+    # VPC management tools
 
     @mcp.tool
     async def create(
         region: str,
         description: str,
+        ctx: Context | None = None,
         v4_subnet: str | None = None,
         v4_subnet_mask: int | None = None,
     ) -> dict[str, Any]:
@@ -156,18 +133,29 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
         Args:
             region: Region code where the VPC will be created (e.g., "ewr", "lax", "fra")
             description: Description/label for the VPC
+            ctx: FastMCP context for resource change notifications
             v4_subnet: IPv4 subnet for the VPC (e.g., "10.0.0.0", defaults to auto-assigned)
             v4_subnet_mask: IPv4 subnet mask (e.g., 24, defaults to 24)
 
         Returns:
             Created VPC information including ID and subnet details
         """
-        return await vultr_client.create_vpc(
+        result = await vultr_client.create_vpc(
             region, description, v4_subnet, v4_subnet_mask
         )
 
+        # Notify clients that VPC list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="create_vpc", vpc_id=result.get("id")
+            )
+
+        return result
+
     @mcp.tool
-    async def update(vpc_identifier: str, description: str) -> dict[str, str]:
+    async def update(
+        vpc_identifier: str, description: str, ctx: Context
+    ) -> dict[str, str]:
         """Update VPC description.
 
         Smart identifier resolution: Use VPC description or ID.
@@ -175,12 +163,20 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
         Args:
             vpc_identifier: VPC description or ID to update
             description: New description for the VPC
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Success confirmation
         """
         vpc_id = await get_vpc_id(vpc_identifier)
         await vultr_client.update_vpc(vpc_id, description)
+
+        # Notify clients that VPC list and specific VPC have changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="update_vpc", vpc_id=vpc_id
+            )
+
         return {
             "success": True,
             "message": f"VPC description updated to '{description}'",
@@ -188,55 +184,34 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
         }
 
     @mcp.tool
-    async def delete(vpc_identifier: str) -> dict[str, str]:
+    async def delete(vpc_identifier: str, ctx: Context | None = None) -> dict[str, str]:
         """Delete a VPC.
 
         Smart identifier resolution: Use VPC description or ID.
 
         Args:
             vpc_identifier: VPC description or ID to delete
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Success confirmation
         """
         vpc_id = await get_vpc_id(vpc_identifier)
         await vultr_client.delete_vpc(vpc_id)
+
+        # Notify clients that VPC list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="delete_vpc", vpc_id=vpc_id
+            )
+
         return {
             "success": True,
             "message": "VPC deleted successfully",
             "vpc_id": vpc_id,
         }
 
-    # VPC 2.0 tools
-    @mcp.tool
-    async def list_vpc2() -> List[dict[str, Any]]:
-        """List all VPC 2.0 networks in your account.
-
-        Returns:
-            List of VPC 2.0 objects with details including:
-            - id: VPC 2.0 ID
-            - description: User-defined description
-            - region: Region where VPC 2.0 is located
-            - ip_block: IP block (e.g., "10.0.0.0")
-            - prefix_length: Prefix length (e.g., 24)
-            - date_created: Creation date
-        """
-        return await vultr_client.list_vpc2s()
-
-    @mcp.tool
-    async def get_vpc2(vpc2_identifier: str) -> dict[str, Any]:
-        """Get detailed information about a specific VPC 2.0.
-
-        Smart identifier resolution: Use VPC 2.0 description or ID.
-
-        Args:
-            vpc2_identifier: VPC 2.0 description or ID to retrieve
-
-        Returns:
-            Detailed VPC 2.0 information including IP block configuration
-        """
-        vpc2_id = await get_vpc2_id(vpc2_identifier)
-        return await vultr_client.get_vpc2(vpc2_id)
+    # VPC 2.0 management tools
 
     @mcp.tool
     async def create_vpc2(

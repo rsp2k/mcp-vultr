@@ -185,43 +185,6 @@ def create_marketplace_mcp(vultr_client) -> FastMCP:
 
     # Marketplace tools
     @mcp.tool
-    async def list_applications(app_type: str | None = None) -> list[dict[str, Any]]:
-        """List all available applications (marketplace and one-click).
-
-        Args:
-            app_type: Optional filter by type ('marketplace', 'one-click', or None for all)
-
-        Returns:
-            List of application objects with details including:
-            - id: Application ID
-            - name: Application name
-            - short_name: Short name for URL/API use
-            - deploy_name: Full deployment name
-            - type: Type (marketplace or one-click)
-            - vendor: Vendor name
-            - image_id: Image ID (for marketplace apps)
-        """
-        return await vultr_client.list_applications(app_type=app_type)
-
-    @mcp.tool
-    async def list_marketplace_applications() -> list[dict[str, Any]]:
-        """List only marketplace applications.
-
-        Returns:
-            List of marketplace application objects
-        """
-        return await vultr_client.list_applications(app_type="marketplace")
-
-    @mcp.tool
-    async def list_oneclick_applications() -> list[dict[str, Any]]:
-        """List only one-click applications.
-
-        Returns:
-            List of one-click application objects
-        """
-        return await vultr_client.list_applications(app_type="one-click")
-
-    @mcp.tool
     async def get_application(app_id: str) -> dict[str, Any]:
         """Get detailed information about a specific application.
 

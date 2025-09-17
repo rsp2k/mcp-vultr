@@ -6,7 +6,9 @@ This module contains FastMCP tools and resources for managing Vultr firewall gro
 
 from typing import Any
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
+
+from .notification_manager import NotificationManager
 
 
 def create_firewall_mcp(vultr_client) -> FastMCP:
@@ -122,47 +124,80 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_firewall_group(actual_id)
 
     @mcp.tool
-    async def create_group(description: str) -> dict[str, Any]:
+    async def create_group(
+        description: str, ctx: Context | None = None
+    ) -> dict[str, Any]:
         """Create a new firewall group.
 
         Args:
             description: Description for the firewall group
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Created firewall group information
         """
-        return await vultr_client.create_firewall_group(description)
+        result = await vultr_client.create_firewall_group(description)
+
+        # Notify clients that firewall group list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx,
+                operation="create_firewall_group",
+                firewall_group_id=result.get("id"),
+            )
+
+        return result
 
     @mcp.tool
-    async def update_group(firewall_group_id: str, description: str) -> dict[str, str]:
+    async def update_group(
+        firewall_group_id: str, description: str, ctx: Context
+    ) -> dict[str, str]:
         """Update a firewall group description.
 
         Args:
             firewall_group_id: The firewall group ID or description (e.g., "web-servers" or UUID)
             description: New description for the firewall group
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Status message confirming update
         """
         actual_id = await get_firewall_group_id(firewall_group_id)
         await vultr_client.update_firewall_group(actual_id, description)
+
+        # Notify clients that firewall group list and specific group have changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="update_firewall_group", firewall_group_id=actual_id
+            )
+
         return {
             "status": "success",
             "message": f"Firewall group {firewall_group_id} updated successfully",
         }
 
     @mcp.tool
-    async def delete_group(firewall_group_id: str) -> dict[str, str]:
+    async def delete_group(
+        firewall_group_id: str, ctx: Context | None = None
+    ) -> dict[str, str]:
         """Delete a firewall group.
 
         Args:
             firewall_group_id: The firewall group ID or description (e.g., "web-servers" or UUID)
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Status message confirming deletion
         """
         actual_id = await get_firewall_group_id(firewall_group_id)
         await vultr_client.delete_firewall_group(actual_id)
+
+        # Notify clients that firewall group list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="delete_firewall_group", firewall_group_id=actual_id
+            )
+
         return {
             "status": "success",
             "message": f"Firewall group {firewall_group_id} deleted successfully",
@@ -203,6 +238,7 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
         protocol: str,
         subnet: str,
         subnet_size: int,
+        ctx: Context | None = None,
         port: str | None = None,
         source: str | None = None,
         notes: str | None = None,
@@ -215,6 +251,7 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
             protocol: Protocol (tcp, udp, icmp, gre)
             subnet: IP subnet (use "0.0.0.0" for any IPv4, "::" for any IPv6)
             subnet_size: Subnet size (0-32 for IPv4, 0-128 for IPv6)
+            ctx: FastMCP context for resource change notifications
             port: Port or port range (e.g., "80" or "8000:8999") - required for tcp/udp
             source: Source type (e.g., "cloudflare") - optional
             notes: Notes for the rule - optional
@@ -224,34 +261,50 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
 
         Examples:
             # Allow HTTP from anywhere
-            create_rule(group_id, "v4", "tcp", "0.0.0.0", 0, port="80")
+            create_rule(group_id, "v4", "tcp", "0.0.0.0", 0, ctx, port="80")
 
             # Allow SSH from specific subnet
-            create_rule(group_id, "v4", "tcp", "192.168.1.0", 24, port="22", notes="Office network")
+            create_rule(group_id, "v4", "tcp", "192.168.1.0", 24, ctx, port="22", notes="Office network")
 
             # Allow ping from anywhere
-            create_rule(group_id, "v4", "icmp", "0.0.0.0", 0)
+            create_rule(group_id, "v4", "icmp", "0.0.0.0", 0, ctx)
         """
         actual_id = await get_firewall_group_id(firewall_group_id)
-        return await vultr_client.create_firewall_rule(
+        result = await vultr_client.create_firewall_rule(
             actual_id, ip_type, protocol, subnet, subnet_size, port, source, notes
         )
 
+        # Notify clients that firewall rules for this group have changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="create_firewall_rule", firewall_group_id=actual_id
+            )
+
+        return result
+
     @mcp.tool
     async def delete_rule(
-        firewall_group_id: str, firewall_rule_id: str
+        firewall_group_id: str, firewall_rule_id: str, ctx: Context
     ) -> dict[str, str]:
         """Delete a firewall rule.
 
         Args:
             firewall_group_id: The firewall group ID or description (e.g., "web-servers" or UUID)
             firewall_rule_id: The firewall rule ID to delete
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Status message confirming deletion
         """
         actual_id = await get_firewall_group_id(firewall_group_id)
         await vultr_client.delete_firewall_rule(actual_id, firewall_rule_id)
+
+        # Notify clients that firewall rules for this group have changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="delete_firewall_rule", firewall_group_id=actual_id
+            )
+
         return {
             "status": "success",
             "message": f"Firewall rule {firewall_rule_id} deleted successfully",
@@ -259,12 +312,15 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
 
     @mcp.tool
     async def setup_web_server_rules(
-        firewall_group_id: str, allow_ssh_from: str = "0.0.0.0/0"
+        firewall_group_id: str,
+        ctx: Context | None = None,
+        allow_ssh_from: str = "0.0.0.0/0",
     ) -> list[dict[str, Any]]:
         """Set up common firewall rules for a web server.
 
         Args:
             firewall_group_id: The firewall group ID or description (e.g., "web-servers" or UUID)
+            ctx: FastMCP context for resource change notifications
             allow_ssh_from: IP subnet to allow SSH from (default: anywhere)
 
         Returns:
@@ -311,6 +367,12 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
                 actual_id, "v4", "icmp", "0.0.0.0", 0, notes="ICMP/Ping"
             )
         )
+
+        # Notify clients that firewall rules for this group have changed (batch operation)
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="create_firewall_rule", firewall_group_id=actual_id
+            )
 
         return rules
 

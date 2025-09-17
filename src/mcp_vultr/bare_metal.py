@@ -6,7 +6,8 @@ This module contains FastMCP tools and resources for managing Vultr bare metal s
 
 from typing import Any
 
-from fastmcp import FastMCP
+from fastmcp import FastMCP, Context
+from .notification_manager import NotificationManager
 
 
 def create_bare_metal_mcp(vultr_client) -> FastMCP:

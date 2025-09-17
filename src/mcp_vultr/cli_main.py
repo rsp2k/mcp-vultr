@@ -20,24 +20,21 @@ from .fastmcp_server import run_server
     envvar="VULTR_API_KEY",
     help="Vultr API key (or set VULTR_API_KEY environment variable)",
 )
-@click.option(
-    "--tui", 
-    is_flag=True, 
-    help="Force launch the Terminal User Interface"
-)
+@click.option("--tui", is_flag=True, help="Force launch the Terminal User Interface")
 @click.pass_context
 def cli(ctx: click.Context, api_key: str | None, tui: bool):
     """Vultr Management Platform - Full-featured CLI and TUI for Vultr services."""
     ctx.ensure_object(dict)
     ctx.obj["api_key"] = api_key
-    
+
     # Launch TUI if no subcommand provided or --tui flag used
     if ctx.invoked_subcommand is None or tui:
         console.print("[bold blue]🚀 Launching Vultr Management TUI...[/bold blue]")
         console.print("[dim]Press Ctrl+Q to quit, Ctrl+H for help[/dim]\n")
-        
+
         try:
             from .tui_app import run_tui
+
             run_tui()
         except ImportError as e:
             console.print(f"[red]Error: Failed to import TUI components: {e}[/red]")

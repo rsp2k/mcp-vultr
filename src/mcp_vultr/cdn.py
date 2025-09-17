@@ -8,6 +8,8 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+from .cdn_analyzer import CDNAnalyzer
+
 
 def create_cdn_mcp(vultr_client) -> FastMCP:
     """
@@ -20,6 +22,7 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with CDN management tools
     """
     mcp = FastMCP(name="vultr-cdn")
+    cdn_analyzer = CDNAnalyzer(vultr_client)
 
     # Helper function to check if string is UUID format
     def is_uuid_format(value: str) -> bool:
@@ -297,64 +300,7 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
         Returns:
             Performance analysis including cache hit ratio, bandwidth usage, and recommendations
         """
-        zone_id = await get_cdn_zone_id(zone_identifier)
-
-        # Get zone details and stats
-        zone_info = await vultr_client.get_cdn_zone(zone_id)
-        stats = await vultr_client.get_cdn_zone_stats(zone_id)
-
-        # Calculate performance metrics
-        total_requests = stats.get("total_requests", 0)
-        cache_hits = stats.get("cache_hits", 0)
-        bandwidth_used = stats.get("bandwidth_bytes", 0)
-
-        cache_hit_ratio = (
-            (cache_hits / total_requests * 100) if total_requests > 0 else 0
-        )
-        avg_daily_requests = total_requests / days if days > 0 else 0
-        avg_daily_bandwidth = bandwidth_used / days if days > 0 else 0
-
-        # Generate recommendations
-        recommendations = []
-        if cache_hit_ratio < 80:
-            recommendations.append(
-                "Cache hit ratio is below 80%. Consider optimizing cache headers."
-            )
-        if avg_daily_bandwidth > 1000000000:  # 1GB per day
-            recommendations.append(
-                "High bandwidth usage detected. Consider image optimization."
-            )
-        if zone_info.get("gzip_compression") is False:
-            recommendations.append("Enable gzip compression to reduce bandwidth usage.")
-        if not zone_info.get("block_bad_bots"):
-            recommendations.append(
-                "Consider enabling bad bot blocking for better security."
-            )
-
-        return {
-            "zone_domain": zone_info.get("origin_domain"),
-            "analysis_period_days": days,
-            "performance_metrics": {
-                "total_requests": total_requests,
-                "cache_hits": cache_hits,
-                "cache_hit_ratio": round(cache_hit_ratio, 2),
-                "bandwidth_used_bytes": bandwidth_used,
-                "avg_daily_requests": round(avg_daily_requests),
-                "avg_daily_bandwidth_bytes": round(avg_daily_bandwidth),
-            },
-            "current_configuration": {
-                "gzip_compression": zone_info.get("gzip_compression"),
-                "block_ai_bots": zone_info.get("block_ai_bots"),
-                "block_bad_bots": zone_info.get("block_bad_bots"),
-                "regions": zone_info.get("regions", []),
-            },
-            "recommendations": recommendations,
-            "status": "excellent"
-            if cache_hit_ratio >= 90
-            else "good"
-            if cache_hit_ratio >= 80
-            else "needs_optimization",
-        }
+        return await cdn_analyzer.analyze_performance(zone_identifier, days)
 
     @mcp.tool()
     async def setup_cdn_for_website(
@@ -375,44 +321,12 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
         Returns:
             Created CDN zone with setup details and next steps
         """
-        # Create CDN zone with optimized settings
-        cdn_zone = await vultr_client.create_cdn_zone(
+        return await cdn_analyzer.setup_for_website(
             origin_domain=origin_domain,
-            origin_scheme="https",
-            gzip_compression=enable_compression,
-            block_ai_bots=enable_security,
-            block_bad_bots=enable_security,
+            enable_security=enable_security,
+            enable_compression=enable_compression,
             regions=regions,
         )
-
-        setup_info = {
-            "cdn_zone": cdn_zone,
-            "cdn_domain": cdn_zone.get("cdn_domain"),
-            "next_steps": [
-                f"Update your DNS to point to {cdn_zone.get('cdn_domain')}",
-                "Test the CDN by accessing your website through the CDN domain",
-                "Monitor performance using the CDN statistics",
-                "Consider uploading an SSL certificate for HTTPS support",
-            ],
-            "optimization_tips": [
-                "Set appropriate cache headers on your origin server",
-                "Optimize images and static assets for better performance",
-                "Monitor cache hit ratio and adjust cache settings as needed",
-            ],
-        }
-
-        if enable_security:
-            setup_info["security_features"] = [
-                "AI/crawler bot blocking enabled",
-                "Bad bot blocking enabled",
-            ]
-
-        if enable_compression:
-            setup_info["performance_features"] = [
-                "Gzip compression enabled for faster load times"
-            ]
-
-        return setup_info
 
     @mcp.tool()
     async def get_cdn_zone_summary(zone_identifier: str) -> dict[str, Any]:
@@ -426,35 +340,6 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
         Returns:
             Comprehensive CDN zone summary including configuration, stats, and SSL info
         """
-        zone_id = await get_cdn_zone_id(zone_identifier)
-
-        # Get all relevant information
-        zone_info = await vultr_client.get_cdn_zone(zone_id)
-
-        try:
-            stats = await vultr_client.get_cdn_zone_stats(zone_id)
-        except Exception:
-            stats = {"error": "Stats unavailable"}
-
-        try:
-            ssl_info = await vultr_client.get_cdn_ssl_certificate(zone_id)
-        except Exception:
-            ssl_info = {"status": "No SSL certificate configured"}
-
-        return {
-            "zone_info": zone_info,
-            "statistics": stats,
-            "ssl_certificate": ssl_info,
-            "summary": {
-                "origin_domain": zone_info.get("origin_domain"),
-                "cdn_domain": zone_info.get("cdn_domain"),
-                "status": zone_info.get("status"),
-                "regions": zone_info.get("regions", []),
-                "security_enabled": zone_info.get("block_bad_bots", False),
-                "compression_enabled": zone_info.get("gzip_compression", False),
-                "ssl_configured": ssl_info.get("status")
-                != "No SSL certificate configured",
-            },
-        }
+        return await cdn_analyzer.get_zone_summary(zone_identifier)
 
     return mcp

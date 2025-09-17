@@ -16,9 +16,9 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Resource, TextContent, Tool
 
 from .cache import CacheManager
-from .vultr_logging import get_logger, log_api_request
 from .metrics import record_api_call
 from .retry import NetworkError, RateLimitError, retry_api_call
+from .vultr_logging import get_logger, log_api_request
 
 
 class VultrAPIError(Exception):

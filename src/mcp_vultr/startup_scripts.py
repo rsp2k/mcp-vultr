@@ -6,7 +6,9 @@ This module contains FastMCP tools and resources for managing Vultr startup scri
 
 from typing import Any
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
+
+from .notification_manager import NotificationManager
 
 
 def create_startup_scripts_mcp(vultr_client) -> FastMCP:
@@ -69,7 +71,7 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
 
     @mcp.tool()
     async def create_startup_script(
-        name: str, script: str, script_type: str = "boot"
+        name: str, script: str, ctx: Context | None = None, script_type: str = "boot"
     ) -> dict[str, Any]:
         """
         Create a new startup script.
@@ -82,11 +84,22 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
         Returns:
             Created startup script details
         """
-        return await vultr_client.create_startup_script(name, script, script_type)
+        result = await vultr_client.create_startup_script(name, script, script_type)
+
+        # Notify clients that startup script list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="create_startup_script", script_id=result.get("id")
+            )
+
+        return result
 
     @mcp.tool()
     async def update_startup_script(
-        script_identifier: str, name: str | None = None, script: str | None = None
+        script_identifier: str,
+        name: str | None = None,
+        script: str | None = None,
+        ctx: Context | None = None,
     ) -> dict[str, Any]:
         """
         Update a startup script.
@@ -101,10 +114,20 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
             Updated startup script details
         """
         script_id = await get_startup_script_id(script_identifier)
-        return await vultr_client.update_startup_script(script_id, name, script)
+        result = await vultr_client.update_startup_script(script_id, name, script)
+
+        # Notify clients that startup script list and specific script have changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="update_startup_script", script_id=script_id
+            )
+
+        return result
 
     @mcp.tool()
-    async def delete_startup_script(script_identifier: str) -> str:
+    async def delete_startup_script(
+        script_identifier: str, ctx: Context | None = None
+    ) -> str:
         """
         Delete a startup script.
         Smart identifier resolution: use script name or UUID.
@@ -117,6 +140,13 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
         """
         script_id = await get_startup_script_id(script_identifier)
         await vultr_client.delete_startup_script(script_id)
+
+        # Notify clients that startup script list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="delete_startup_script", script_id=script_id
+            )
+
         return f"Successfully deleted startup script {script_identifier}"
 
     @mcp.tool()
@@ -172,7 +202,7 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
 
     @mcp.tool()
     async def create_common_startup_script(
-        script_type: str, ssh_port: int = 22
+        script_type: str, ctx: Context | None = None, ssh_port: int = 22
     ) -> dict[str, Any]:
         """
         Create a common startup script from templates.
@@ -235,9 +265,17 @@ systemctl restart sshd
             )
 
         template = templates[script_type]
-        return await vultr_client.create_startup_script(
+        result = await vultr_client.create_startup_script(
             template["name"], template["script"], "boot"
         )
+
+        # Notify clients that startup script list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="create_startup_script", script_id=result.get("id")
+            )
+
+        return result
 
     @mcp.tool()
     async def get_startup_script_content(script_identifier: str) -> str:

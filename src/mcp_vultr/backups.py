@@ -4,7 +4,7 @@ Vultr Backups FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr backups.
 """
 
-from typing import Any, List
+from typing import Any
 
 from fastmcp import FastMCP
 
@@ -23,9 +23,13 @@ def create_backups_mcp(vultr_client) -> FastMCP:
 
     # Backup resources
     @mcp.resource("backups://list")
-    async def list_backups_resource() -> List[dict[str, Any]]:
+    async def list_backups_resource() -> list[dict[str, Any]]:
         """List all backups in your Vultr account."""
-        return await vultr_client.list_backups()
+        try:
+            return await vultr_client.list_backups()
+        except Exception:
+            # If the API returns an error when no backups exist, return empty list
+            return []
 
     @mcp.resource("backups://{backup_id}")
     async def get_backup_resource(backup_id: str) -> dict[str, Any]:
@@ -37,35 +41,6 @@ def create_backups_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_backup(backup_id)
 
     # Backup tools
-    @mcp.tool
-    async def list() -> List[dict[str, Any]]:
-        """List all backups in your Vultr account.
-
-        Returns:
-            List of backup objects with details including:
-            - id: Backup ID
-            - date_created: Creation date
-            - description: Backup description
-            - size: Size in bytes
-            - status: Backup status
-        """
-        return await vultr_client.list_backups()
-
-    @mcp.tool
-    async def get(backup_id: str) -> dict[str, Any]:
-        """Get information about a specific backup.
-
-        Args:
-            backup_id: The backup ID to get information for
-
-        Returns:
-            Backup information including:
-            - id: Backup ID
-            - date_created: Creation date
-            - description: Backup description
-            - size: Size in bytes
-            - status: Backup status
-        """
-        return await vultr_client.get_backup(backup_id)
+    # No backup management tools currently available in the API
 
     return mcp

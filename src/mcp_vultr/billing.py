@@ -8,6 +8,8 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+from .billing_analyzer import BillingAnalyzer
+
 
 def create_billing_mcp(vultr_client) -> FastMCP:
     """
@@ -20,6 +22,7 @@ def create_billing_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with billing management tools
     """
     mcp = FastMCP(name="vultr-billing")
+    billing_analyzer = BillingAnalyzer(vultr_client)
 
     @mcp.tool()
     async def get_account_info() -> dict[str, Any]:
@@ -154,80 +157,7 @@ def create_billing_mcp(vultr_client) -> FastMCP:
         Returns:
             Spending analysis with trends and recommendations
         """
-        import calendar
-        from datetime import datetime, timedelta
-
-        current_date = datetime.now()
-        monthly_summaries = []
-
-        for i in range(months):
-            # Calculate the date for each month going backwards
-            target_date = current_date.replace(day=1) - timedelta(days=i * 30)
-            year = target_date.year
-            month = target_date.month
-
-            try:
-                summary = await vultr_client.get_monthly_usage_summary(year, month)
-                summary["month_name"] = calendar.month_name[month]
-                monthly_summaries.append(summary)
-            except Exception:
-                # Skip months with no data
-                continue
-
-        if not monthly_summaries:
-            return {"error": "No billing data available for analysis"}
-
-        # Calculate trends
-        total_costs = [summary["total_cost"] for summary in monthly_summaries]
-        average_cost = sum(total_costs) / len(total_costs)
-
-        trend = "stable"
-        if len(total_costs) >= 2:
-            recent_avg = (
-                sum(total_costs[:2]) / 2 if len(total_costs) >= 2 else total_costs[0]
-            )
-            older_avg = (
-                sum(total_costs[2:]) / len(total_costs[2:])
-                if len(total_costs) > 2
-                else recent_avg
-            )
-
-            if recent_avg > older_avg * 1.1:
-                trend = "increasing"
-            elif recent_avg < older_avg * 0.9:
-                trend = "decreasing"
-
-        # Service analysis
-        all_services = set()
-        for summary in monthly_summaries:
-            all_services.update(summary.get("service_breakdown", {}).keys())
-
-        service_trends = {}
-        for service in all_services:
-            service_costs = []
-            for summary in monthly_summaries:
-                cost = summary.get("service_breakdown", {}).get(service, 0)
-                service_costs.append(cost)
-
-            if service_costs:
-                service_trends[service] = {
-                    "average_cost": round(sum(service_costs) / len(service_costs), 2),
-                    "total_cost": round(sum(service_costs), 2),
-                    "latest_cost": service_costs[0] if service_costs else 0,
-                }
-
-        return {
-            "analysis_period": f"{months} months",
-            "monthly_summaries": monthly_summaries,
-            "overall_trend": trend,
-            "average_monthly_cost": round(average_cost, 2),
-            "highest_month_cost": max(total_costs),
-            "lowest_month_cost": min(total_costs),
-            "service_analysis": service_trends,
-            "recommendations": _generate_cost_recommendations(
-                trend, service_trends, average_cost
-            ),
-        }
+        return await billing_analyzer.analyze_spending_trends(months)
 
     @mcp.tool()
     async def get_cost_breakdown_by_service(days: int = 30) -> dict[str, Any]:
@@ -240,38 +170,7 @@ def create_billing_mcp(vultr_client) -> FastMCP:
         Returns:
             Service-wise cost breakdown with percentages
         """
-        billing_data = await vultr_client.list_billing_history(date_range=days)
-        billing_history = billing_data.get("billing_history", [])
-
-        service_costs = {}
-        total_cost = 0
-
-        for item in billing_history:
-            amount = float(item.get("amount", 0))
-            total_cost += amount
-
-            description = item.get("description", "Unknown")
-            service_type = description.split()[0] if description else "Unknown"
-
-            if service_type not in service_costs:
-                service_costs[service_type] = 0
-            service_costs[service_type] += amount
-
-        # Calculate percentages
-        service_breakdown = {}
-        for service, cost in service_costs.items():
-            percentage = (cost / total_cost * 100) if total_cost > 0 else 0
-            service_breakdown[service] = {
-                "cost": round(cost, 2),
-                "percentage": round(percentage, 1),
-            }
-
-        return {
-            "period_days": days,
-            "total_cost": round(total_cost, 2),
-            "service_breakdown": service_breakdown,
-            "transaction_count": len(billing_history),
-        }
+        return await billing_analyzer.get_cost_breakdown_by_service(days)
 
     @mcp.tool()
     async def get_payment_summary() -> dict[str, Any]:
@@ -298,37 +197,5 @@ def create_billing_mcp(vultr_client) -> FastMCP:
             "account_name": account_info.get("name"),
             "billing_email": account_info.get("billing_email"),
         }
-
-    def _generate_cost_recommendations(
-        trend: str, service_trends: dict, average_cost: float
-    ) -> list[str]:
-        """Generate cost optimization recommendations."""
-        recommendations = []
-
-        if trend == "increasing":
-            recommendations.append(
-                "Your costs are trending upward. Review recent resource usage."
-            )
-
-        if average_cost > 100:
-            recommendations.append(
-                "Consider using reserved instances or committed use discounts."
-            )
-
-        # Find most expensive service
-        if service_trends:
-            most_expensive = max(
-                service_trends.items(), key=lambda x: x[1]["total_cost"]
-            )
-            recommendations.append(
-                f"Your highest cost service is {most_expensive[0]}. Review optimization opportunities."
-            )
-
-        if not recommendations:
-            recommendations.append(
-                "Your spending appears stable. Continue monitoring for changes."
-            )
-
-        return recommendations
 
     return mcp

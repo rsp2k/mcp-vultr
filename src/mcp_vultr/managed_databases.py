@@ -6,10 +6,11 @@ Supports MySQL, PostgreSQL, Valkey (Redis), and Kafka engines with comprehensive
 database management features including users, backups, connection pools, and monitoring.
 """
 
-from typing import Any, List
-from typing import Any, List
+from typing import Any
 
 from fastmcp import FastMCP
+
+from .database_analyzer import DatabaseAnalyzer
 
 
 def create_managed_databases_mcp(vultr_client) -> FastMCP:
@@ -23,6 +24,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with managed database tools
     """
     mcp = FastMCP(name="vultr-managed-databases")
+    database_analyzer = DatabaseAnalyzer(vultr_client)
 
     # Helper function to check if a string looks like a UUID
     def is_uuid_format(s: str) -> bool:
@@ -57,9 +59,13 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
 
     # Database resources
     @mcp.resource("databases://list")
-    async def list_databases_resource() -> List[dict[str, Any]]:
+    async def list_databases_resource() -> list[dict[str, Any]]:
         """List all managed databases in your Vultr account."""
-        return await vultr_client.list_managed_databases()
+        try:
+            return await vultr_client.list_managed_databases()
+        except Exception:
+            # If the API returns an error when no databases exist, return empty list
+            return []
 
     @mcp.resource("databases://{database_id}")
     async def get_database_resource(database_id: str) -> dict[str, Any]:
@@ -72,43 +78,12 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_managed_database(actual_id)
 
     @mcp.resource("databases://plans")
-    async def list_database_plans_resource() -> List[dict[str, Any]]:
+    async def list_database_plans_resource() -> list[dict[str, Any]]:
         """List all available managed database plans."""
         return await vultr_client.list_database_plans()
 
     # Core Database Management Tools
-    @mcp.tool
-    async def list() -> List[dict[str, Any]]:
-        """List all managed databases in your Vultr account.
-
-        Returns:
-            List of database objects with details including:
-            - id: Database ID
-            - label: Database label
-            - database_engine: Engine type (mysql, pg, valkey, kafka)
-            - database_engine_version: Engine version
-            - region: Region code
-            - plan: Plan ID
-            - status: Database status (running, pending, etc.)
-            - date_created: Creation date
-            - host: Database hostname
-            - port: Database port
-            - user: Default username
-        """
-        return await vultr_client.list_managed_databases()
-
-    @mcp.tool
-    async def get(database_id: str) -> dict[str, Any]:
-        """Get detailed information about a specific managed database.
-
-        Args:
-            database_id: The database ID or label (e.g., "my-mysql-db" or UUID)
-
-        Returns:
-            Detailed database information including connection details
-        """
-        actual_id = await get_database_id(database_id)
-        return await vultr_client.get_managed_database(actual_id)
+    # Core Database Management Tools
 
     @mcp.tool
     async def create(
@@ -119,8 +94,8 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         label: str,
         tag: str | None = None,
         vpc_id: str | None = None,
-        trusted_ips: List[str] | None = None,
-        mysql_sql_modes: List[str] | None = None,
+        trusted_ips: list[str] | None = None,
+        mysql_sql_modes: list[str] | None = None,
         mysql_require_primary_key: bool | None = None,
         mysql_slow_query_log: bool | None = None,
         valkey_eviction_policy: str | None = None,
@@ -177,8 +152,8 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         tag: str | None = None,
         vpc_id: str | None = None,
         timezone: str | None = None,
-        trusted_ips: List[str] | None = None,
-        mysql_sql_modes: List[str] | None = None,
+        trusted_ips: list[str] | None = None,
+        mysql_sql_modes: list[str] | None = None,
         mysql_require_primary_key: bool | None = None,
         mysql_slow_query_log: bool | None = None,
         valkey_eviction_policy: str | None = None,
@@ -257,9 +232,22 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         actual_id = await get_database_id(database_id)
         return await vultr_client.get_database_usage(actual_id)
 
+    @mcp.tool
+    async def analyze_database_performance(database_id: str) -> dict[str, Any]:
+        """Analyze database performance and provide optimization recommendations.
+
+        Args:
+            database_id: The database ID or label (e.g., "my-mysql-db" or UUID)
+
+        Returns:
+            Performance analysis with health score and optimization recommendations
+        """
+        actual_id = await get_database_id(database_id)
+        return await database_analyzer.analyze_database_performance(actual_id)
+
     # Database User Management Tools
     @mcp.tool
-    async def list_users(database_id: str) -> List[dict[str, Any]]:
+    async def list_users(database_id: str) -> list[dict[str, Any]]:
         """List all users in a managed database.
 
         Args:
@@ -360,10 +348,10 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
     async def update_user_access_control(
         database_id: str,
         username: str,
-        acl_categories: List[str] | None = None,
-        acl_channels: List[str] | None = None,
-        acl_commands: List[str] | None = None,
-        acl_keys: List[str] | None = None,
+        acl_categories: list[str] | None = None,
+        acl_channels: list[str] | None = None,
+        acl_commands: list[str] | None = None,
+        acl_keys: list[str] | None = None,
     ) -> dict[str, str]:
         """Update access control for a database user (Valkey/Redis only).
 
@@ -394,7 +382,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
 
     # Database Schema Management
     @mcp.tool
-    async def list_databases(database_id: str) -> List[dict[str, Any]]:
+    async def list_databases(database_id: str) -> list[dict[str, Any]]:
         """List logical databases within a managed database instance.
 
         Args:
@@ -454,7 +442,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
 
     # Connection Pool Management
     @mcp.tool
-    async def list_connection_pools(database_id: str) -> List[dict[str, Any]]:
+    async def list_connection_pools(database_id: str) -> list[dict[str, Any]]:
         """List connection pools for a managed database.
 
         Args:
@@ -561,7 +549,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
 
     # Backup Management
     @mcp.tool
-    async def list_backups(database_id: str) -> List[dict[str, Any]]:
+    async def list_backups(database_id: str) -> list[dict[str, Any]]:
         """List available backups for a managed database.
 
         Args:
@@ -672,7 +660,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
     @mcp.tool
     async def list_available_versions(
         database_id: str,
-    ) -> List[dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List available versions for database engine upgrades.
 
         Args:
@@ -705,7 +693,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
     @mcp.tool
     async def get_maintenance_updates(
         database_id: str,
-    ) -> List[dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get available maintenance updates for a database.
 
         Args:
@@ -746,6 +734,19 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_database_id(database_id)
         return await vultr_client.get_migration_status(actual_id)
+
+    @mcp.tool
+    async def analyze_database_migration_status(database_id: str) -> dict[str, Any]:
+        """Get enhanced migration status analysis with recommendations.
+
+        Args:
+            database_id: The database ID or label
+
+        Returns:
+            Detailed migration analysis with troubleshooting recommendations
+        """
+        actual_id = await get_database_id(database_id)
+        return await database_analyzer.analyze_database_migration_status(actual_id)
 
     @mcp.tool
     async def start_migration(
@@ -799,7 +800,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
 
     # Kafka-specific Tools
     @mcp.tool
-    async def list_kafka_topics(database_id: str) -> List[dict[str, Any]]:
+    async def list_kafka_topics(database_id: str) -> list[dict[str, Any]]:
         """List Kafka topics (Kafka databases only).
 
         Args:
@@ -909,7 +910,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
 
     # Helper Setup Tools
     @mcp.tool
-    async def list_plans() -> List[dict[str, Any]]:
+    async def list_plans() -> list[dict[str, Any]]:
         """List all available managed database plans.
 
         Returns:
@@ -922,7 +923,7 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         region: str,
         plan: str,
         label: str,
-        root_password: str | None = None,  # noqa: ARG001
+        root_password: str | None = None,
         app_user: str = "appuser",
         app_password: str | None = None,
         app_database: str = "appdb",
@@ -941,45 +942,15 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         Returns:
             Complete setup information including connection details
         """
-        # Create the database
-        db_result = await vultr_client.create_managed_database(
-            database_engine="mysql",
-            database_engine_version="8",
+        return await database_analyzer.setup_mysql_database(
             region=region,
             plan=plan,
             label=label,
-            mysql_require_primary_key=True,
-            mysql_slow_query_log=True,
+            root_password=root_password,
+            app_user=app_user,
+            app_password=app_password,
+            app_database=app_database,
         )
-
-        database_id = db_result["database"]["id"]
-
-        # Wait for database to be ready (simplified - in real implementation, poll status)
-        # Create application user
-        user_result = await vultr_client.create_database_user(
-            database_id=database_id,
-            username=app_user,
-            password=app_password,
-            encryption="caching_sha2_password",
-        )
-
-        # Create application database
-        db_create_result = await vultr_client.create_logical_database(
-            database_id=database_id, name=app_database
-        )
-
-        return {
-            "database": db_result,
-            "user": user_result,
-            "logical_database": db_create_result,
-            "connection_info": {
-                "host": db_result["database"]["host"],
-                "port": db_result["database"]["port"],
-                "username": app_user,
-                "database": app_database,
-                "ssl_required": True,
-            },
-        }
 
     @mcp.tool
     async def setup_postgresql_database(
@@ -1005,38 +976,14 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
         Returns:
             Complete setup information including connection details
         """
-        # Create the database
-        db_result = await vultr_client.create_managed_database(
-            database_engine="pg",
-            database_engine_version=version,
+        return await database_analyzer.setup_postgresql_database(
             region=region,
             plan=plan,
             label=label,
+            version=version,
+            app_user=app_user,
+            app_password=app_password,
+            app_database=app_database,
         )
-
-        database_id = db_result["database"]["id"]
-
-        # Create application user
-        user_result = await vultr_client.create_database_user(
-            database_id=database_id, username=app_user, password=app_password
-        )
-
-        # Create application database
-        db_create_result = await vultr_client.create_logical_database(
-            database_id=database_id, name=app_database
-        )
-
-        return {
-            "database": db_result,
-            "user": user_result,
-            "logical_database": db_create_result,
-            "connection_info": {
-                "host": db_result["database"]["host"],
-                "port": db_result["database"]["port"],
-                "username": app_user,
-                "database": app_database,
-                "ssl_required": True,
-            },
-        }
 
     return mcp

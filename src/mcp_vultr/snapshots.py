@@ -4,9 +4,11 @@ Vultr Snapshots FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr snapshots.
 """
 
-from typing import Any, List
+from typing import Any
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
+
+from .notification_manager import NotificationManager
 
 
 def create_snapshots_mcp(vultr_client) -> FastMCP:
@@ -54,9 +56,13 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
 
     # Snapshot resources
     @mcp.resource("snapshots://list")
-    async def list_snapshots_resource() -> List[dict[str, Any]]:
+    async def list_snapshots_resource() -> list[dict[str, Any]]:
         """List all snapshots in your Vultr account."""
-        return await vultr_client.list_snapshots()
+        try:
+            return await vultr_client.list_snapshots()
+        except Exception:
+            # If the API returns an error when no snapshots exist, return empty list
+            return []
 
     @mcp.resource("snapshots://{snapshot_id}")
     async def get_snapshot_resource(snapshot_id: str) -> dict[str, Any]:
@@ -69,47 +75,11 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_snapshot(actual_id)
 
     # Snapshot tools
-    @mcp.tool
-    async def list() -> List[dict[str, Any]]:
-        """List all snapshots in your Vultr account.
-
-        Returns:
-            List of snapshot objects with details including:
-            - id: Snapshot ID
-            - date_created: Creation date
-            - description: Snapshot description
-            - size: Size in bytes
-            - compressed_size: Compressed size in bytes
-            - status: Snapshot status
-            - os_id: Operating system ID
-            - app_id: Application ID
-        """
-        return await vultr_client.list_snapshots()
-
-    @mcp.tool
-    async def get(snapshot_id: str) -> dict[str, Any]:
-        """Get information about a specific snapshot.
-
-        Args:
-            snapshot_id: The snapshot ID or description (e.g., "backup-2024-01" or UUID)
-
-        Returns:
-            Snapshot information including:
-            - id: Snapshot ID
-            - date_created: Creation date
-            - description: Snapshot description
-            - size: Size in bytes
-            - compressed_size: Compressed size in bytes
-            - status: Snapshot status
-            - os_id: Operating system ID
-            - app_id: Application ID
-        """
-        actual_id = await get_snapshot_id(snapshot_id)
-        return await vultr_client.get_snapshot(actual_id)
+    # Snapshot management tools
 
     @mcp.tool
     async def create(
-        instance_id: str, description: str | None = None
+        instance_id: str, ctx: Context | None = None, description: str | None = None
     ) -> dict[str, Any]:
         """Create a snapshot from an instance.
 
@@ -123,11 +93,19 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
         Note: Creating a snapshot may take several minutes depending on the instance size.
         The snapshot will appear with status 'pending' initially.
         """
-        return await vultr_client.create_snapshot(instance_id, description)
+        result = await vultr_client.create_snapshot(instance_id, description)
+
+        # Notify clients that snapshot list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="create_snapshot", snapshot_id=result.get("id")
+            )
+
+        return result
 
     @mcp.tool
     async def create_from_url(
-        url: str, description: str | None = None
+        url: str, ctx: Context | None = None, description: str | None = None
     ) -> dict[str, Any]:
         """Create a snapshot from a URL.
 
@@ -140,10 +118,20 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
 
         Note: The URL must point to a valid Vultr snapshot file.
         """
-        return await vultr_client.create_snapshot_from_url(url, description)
+        result = await vultr_client.create_snapshot_from_url(url, description)
+
+        # Notify clients that snapshot list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="create_snapshot", snapshot_id=result.get("id")
+            )
+
+        return result
 
     @mcp.tool
-    async def update(snapshot_id: str, description: str) -> dict[str, str]:
+    async def update(
+        snapshot_id: str, description: str, ctx: Context | None = None
+    ) -> dict[str, str]:
         """Update a snapshot description.
 
         Args:
@@ -155,13 +143,20 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_snapshot_id(snapshot_id)
         await vultr_client.update_snapshot(actual_id, description)
+
+        # Notify clients that snapshot list and specific snapshot have changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="update_snapshot", snapshot_id=actual_id
+            )
+
         return {
             "status": "success",
             "message": f"Snapshot {snapshot_id} updated successfully",
         }
 
     @mcp.tool
-    async def delete(snapshot_id: str) -> dict[str, str]:
+    async def delete(snapshot_id: str, ctx: Context | None = None) -> dict[str, str]:
         """Delete a snapshot.
 
         Args:
@@ -174,6 +169,13 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
         """
         actual_id = await get_snapshot_id(snapshot_id)
         await vultr_client.delete_snapshot(actual_id)
+
+        # Notify clients that snapshot list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="delete_snapshot", snapshot_id=actual_id
+            )
+
         return {
             "status": "success",
             "message": f"Snapshot {snapshot_id} deleted successfully",

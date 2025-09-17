@@ -4,10 +4,11 @@ Vultr Block Storage FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr block storage volumes.
 """
 
-from typing import Any, List
-from typing import Any, List
+from typing import Any
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
+
+from .notification_manager import NotificationManager
 
 
 def create_block_storage_mcp(vultr_client) -> FastMCP:
@@ -58,9 +59,13 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
 
     # Block Storage resources
     @mcp.resource("block-storage://list")
-    async def list_volumes_resource() -> List[dict[str, Any]]:
+    async def list_volumes_resource() -> list[dict[str, Any]]:
         """List all block storage volumes."""
-        return await vultr_client.list_block_storage()
+        try:
+            return await vultr_client.list_block_storage()
+        except Exception:
+            # If the API returns an error when no block storage volumes exist, return empty list
+            return []
 
     @mcp.resource("block-storage://{volume_identifier}")
     async def get_volume_resource(volume_identifier: str) -> dict[str, Any]:
@@ -73,42 +78,13 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_block_storage(volume_id)
 
     # Block Storage tools
-    @mcp.tool
-    async def list() -> List[dict[str, Any]]:
-        """List all block storage volumes in your account.
-
-        Returns:
-            List of block storage volume objects with details including:
-            - id: Volume ID
-            - label: User-defined label
-            - region: Region where volume is located
-            - size_gb: Storage size in GB
-            - status: Current status (active, pending, etc.)
-            - attached_to_instance: Instance ID if attached (null if detached)
-            - cost_per_month: Monthly cost
-            - date_created: Creation date
-        """
-        return await vultr_client.list_block_storage()
-
-    @mcp.tool
-    async def get(volume_identifier: str) -> dict[str, Any]:
-        """Get detailed information about a specific block storage volume.
-
-        Smart identifier resolution: Use volume label or ID.
-
-        Args:
-            volume_identifier: Volume label or ID to retrieve
-
-        Returns:
-            Detailed volume information including status, attachment, and cost
-        """
-        volume_id = await get_block_storage_id(volume_identifier)
-        return await vultr_client.get_block_storage(volume_id)
+    # Block Storage management tools
 
     @mcp.tool
     async def create(
         region: str,
         size_gb: int,
+        ctx: Context | None = None,
         label: str | None = None,
         block_type: str | None = None,
     ) -> dict[str, Any]:
@@ -117,19 +93,29 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
         Args:
             region: Region code where the volume will be created (e.g., "ewr", "lax", "fra")
             size_gb: Size in GB (10-40000 depending on block_type)
+            ctx: FastMCP context for resource change notifications
             label: Optional label for the volume (recommended for easy identification)
             block_type: Optional block storage type (affects size limits and performance)
 
         Returns:
             Created volume information including ID, cost, and configuration
         """
-        return await vultr_client.create_block_storage(
+        result = await vultr_client.create_block_storage(
             region, size_gb, label, block_type
         )
+
+        # Notify clients that block storage list has changed
+        if ctx is not None:
+            await NotificationManager.notify_storage_changes(
+                ctx=ctx, operation="create_volume", volume_id=result.get("id")
+            )
+
+        return result
 
     @mcp.tool
     async def update(
         volume_identifier: str,
+        ctx: Context | None = None,
         size_gb: int | None = None,
         label: str | None = None,
     ) -> dict[str, str]:
@@ -139,6 +125,7 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
 
         Args:
             volume_identifier: Volume label or ID to update
+            ctx: FastMCP context for resource change notifications
             size_gb: New size in GB (can only increase, not decrease)
             label: New label for the volume
 
@@ -147,6 +134,12 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
         """
         volume_id = await get_block_storage_id(volume_identifier)
         await vultr_client.update_block_storage(volume_id, size_gb, label)
+
+        # Notify clients that block storage list and specific volume have changed
+        if ctx is not None:
+            await NotificationManager.notify_storage_changes(
+                ctx=ctx, operation="update_volume", volume_id=volume_id
+            )
 
         changes = []
         if size_gb is not None:
@@ -161,19 +154,29 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
         }
 
     @mcp.tool
-    async def delete(volume_identifier: str) -> dict[str, str]:
+    async def delete(
+        volume_identifier: str, ctx: Context | None = None
+    ) -> dict[str, str]:
         """Delete a block storage volume.
 
         Smart identifier resolution: Use volume label or ID.
 
         Args:
             volume_identifier: Volume label or ID to delete
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Success confirmation
         """
         volume_id = await get_block_storage_id(volume_identifier)
         await vultr_client.delete_block_storage(volume_id)
+
+        # Notify clients that block storage list has changed
+        if ctx is not None:
+            await NotificationManager.notify_storage_changes(
+                ctx=ctx, operation="delete_volume", volume_id=volume_id
+            )
+
         return {
             "success": True,
             "message": "Block storage volume deleted successfully",
@@ -182,7 +185,10 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
 
     @mcp.tool
     async def attach(
-        volume_identifier: str, instance_identifier: str, live: bool = True
+        volume_identifier: str,
+        instance_identifier: str,
+        ctx: Context | None = None,
+        live: bool = True,
     ) -> dict[str, str]:
         """Attach block storage volume to an instance.
 
@@ -191,6 +197,7 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
         Args:
             volume_identifier: Volume label or ID to attach
             instance_identifier: Instance label, hostname, or ID to attach to
+            ctx: FastMCP context for resource change notifications
             live: Whether to attach without rebooting the instance (default: True)
 
         Returns:
@@ -215,6 +222,13 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
                 raise ValueError(f"Instance '{instance_identifier}' not found")
 
         await vultr_client.attach_block_storage(volume_id, instance_id, live)
+
+        # Notify clients that block storage list and specific volume have changed
+        if ctx is not None:
+            await NotificationManager.notify_storage_changes(
+                ctx=ctx, operation="attach_volume", volume_id=volume_id
+            )
+
         return {
             "success": True,
             "message": f"Volume attached to instance {'without reboot' if live else 'with reboot'}",
@@ -223,13 +237,16 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
         }
 
     @mcp.tool
-    async def detach(volume_identifier: str, live: bool = True) -> dict[str, str]:
+    async def detach(
+        volume_identifier: str, ctx: Context | None = None, live: bool = True
+    ) -> dict[str, str]:
         """Detach block storage volume from its instance.
 
         Smart identifier resolution: Use volume label or ID.
 
         Args:
             volume_identifier: Volume label or ID to detach
+            ctx: FastMCP context for resource change notifications
             live: Whether to detach without rebooting the instance (default: True)
 
         Returns:
@@ -237,6 +254,13 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
         """
         volume_id = await get_block_storage_id(volume_identifier)
         await vultr_client.detach_block_storage(volume_id, live)
+
+        # Notify clients that block storage list and specific volume have changed
+        if ctx is not None:
+            await NotificationManager.notify_storage_changes(
+                ctx=ctx, operation="detach_volume", volume_id=volume_id
+            )
+
         return {
             "success": True,
             "message": f"Volume detached {'without reboot' if live else 'with reboot'}",
@@ -244,7 +268,7 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
         }
 
     @mcp.tool
-    async def list_by_region(region: str) -> List[dict[str, Any]]:
+    async def list_by_region(region: str) -> list[dict[str, Any]]:
         """List block storage volumes in a specific region.
 
         Args:
@@ -257,7 +281,7 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
         return [volume for volume in volumes if volume.get("region") == region]
 
     @mcp.tool
-    async def list_unattached() -> List[dict[str, Any]]:
+    async def list_unattached() -> list[dict[str, Any]]:
         """List all unattached block storage volumes.
 
         Returns:
@@ -269,7 +293,7 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
         ]
 
     @mcp.tool
-    async def list_attached() -> List[dict[str, Any]]:
+    async def list_attached() -> list[dict[str, Any]]:
         """List all attached block storage volumes with instance information.
 
         Returns:

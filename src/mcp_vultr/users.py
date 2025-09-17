@@ -5,10 +5,11 @@ This module contains FastMCP tools and resources for managing Vultr users,
 API keys, permissions, and security settings.
 """
 
-from typing import Any, List
-from typing import Any, List
+from typing import Any
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
+
+from .notification_manager import NotificationManager
 
 
 def create_users_mcp(vultr_client) -> FastMCP:
@@ -56,9 +57,13 @@ def create_users_mcp(vultr_client) -> FastMCP:
 
     # User resources
     @mcp.resource("users://list")
-    async def list_users_resource() -> List[dict[str, Any]]:
+    async def list_users_resource() -> list[dict[str, Any]]:
         """List all users in your Vultr account."""
-        return await vultr_client.list_users()
+        try:
+            return await vultr_client.list_users()
+        except Exception:
+            # If the API returns an error when no users exist, return empty list
+            return []
 
     @mcp.resource("users://{user_id}")
     async def get_user_resource(user_id: str) -> dict[str, Any]:
@@ -71,7 +76,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_user(actual_id)
 
     @mcp.resource("users://{user_id}/ip-whitelist")
-    async def get_user_ip_whitelist_resource(user_id: str) -> List[dict[str, Any]]:
+    async def get_user_ip_whitelist_resource(user_id: str) -> list[dict[str, Any]]:
         """Get IP whitelist for a specific user.
 
         Args:
@@ -81,23 +86,6 @@ def create_users_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_user_ip_whitelist(actual_id)
 
     # User management tools
-    @mcp.tool
-    async def list() -> List[dict[str, Any]]:
-        """List all users in your Vultr account.
-
-        Returns:
-            List of user objects with details including:
-            - id: User ID (UUID)
-            - email: User email address
-            - first_name: User's first name
-            - last_name: User's last name
-            - name: User's full name (deprecated, use first_name + last_name)
-            - api_enabled: Whether API access is enabled
-            - service_user: Whether this is a service user (API-only)
-            - acls: List of permissions granted to the user
-        """
-        return await vultr_client.list_users()
-
     @mcp.tool
     async def get(user_id: str) -> dict[str, Any]:
         """Get detailed information about a specific user.
@@ -117,9 +105,10 @@ def create_users_mcp(vultr_client) -> FastMCP:
         first_name: str,
         last_name: str,
         password: str,
+        ctx: Context | None = None,
         api_enabled: bool = True,
         service_user: bool = False,
-        acls: List[str] | None = None,
+        acls: list[str] | None = None,
     ) -> dict[str, Any]:
         """Create a new user.
 
@@ -128,6 +117,8 @@ def create_users_mcp(vultr_client) -> FastMCP:
             first_name: User's first name
             last_name: User's last name
             password: User's password
+            ctx: FastMCP context for resource change notifications
+            ctx: FastMCP context for resource change notifications
             api_enabled: Enable API access for this user
             service_user: Create as service user (API-only, no portal login)
             acls: List of permissions to grant. Available permissions:
@@ -151,7 +142,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
         if acls is None:
             acls = ["subscriptions_view"]  # Default minimal permissions
 
-        return await vultr_client.create_user(
+        result = await vultr_client.create_user(
             email=email,
             first_name=first_name,
             last_name=last_name,
@@ -161,16 +152,26 @@ def create_users_mcp(vultr_client) -> FastMCP:
             acls=acls,
         )
 
+        # Notify clients that user list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="create_user", user_id=result.get("id")
+            )
+
+        return result
+
     @mcp.tool
     async def update(
         user_id: str,
+        ctx: Context | None = None,
         api_enabled: bool | None = None,
-        acls: List[str] | None = None,
+        acls: list[str] | None = None,
     ) -> dict[str, Any]:
         """Update an existing user's settings.
 
         Args:
             user_id: The user ID (UUID) or email address to update
+            ctx: FastMCP context for resource change notifications
             api_enabled: Enable/disable API access
             acls: List of permissions to grant. Available permissions:
                  - manage_users: Manage other users
@@ -191,27 +192,43 @@ def create_users_mcp(vultr_client) -> FastMCP:
             Updated user information
         """
         actual_id = await get_user_id(user_id)
-        return await vultr_client.update_user(
+        result = await vultr_client.update_user(
             user_id=actual_id, api_enabled=api_enabled, acls=acls
         )
 
+        # Notify clients that user list and specific user have changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="update_user", user_id=actual_id
+            )
+
+        return result
+
     @mcp.tool
-    async def delete(user_id: str) -> dict[str, str]:
+    async def delete(user_id: str, ctx: Context | None = None) -> dict[str, str]:
         """Delete a user.
 
         Args:
             user_id: The user ID (UUID) or email address to delete
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Status message confirming deletion
         """
         actual_id = await get_user_id(user_id)
         await vultr_client.delete_user(actual_id)
+
+        # Notify clients that user list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="delete_user", user_id=actual_id
+            )
+
         return {"status": "success", "message": f"User {user_id} deleted successfully"}
 
     # IP Whitelist management tools
     @mcp.tool
-    async def get_ip_whitelist(user_id: str) -> List[dict[str, Any]]:
+    async def get_ip_whitelist(user_id: str) -> list[dict[str, Any]]:
         """Get the IP whitelist for a user.
 
         Args:
@@ -244,7 +261,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
 
     @mcp.tool
     async def add_ip_whitelist_entry(
-        user_id: str, subnet: str, subnet_size: int
+        user_id: str, subnet: str, subnet_size: int, ctx: Context
     ) -> dict[str, str]:
         """Add an IP address or subnet to a user's whitelist.
 
@@ -252,12 +269,20 @@ def create_users_mcp(vultr_client) -> FastMCP:
             user_id: The user ID (UUID) or email address
             subnet: The IP address or subnet to add (e.g., "8.8.8.0", "192.168.1.100")
             subnet_size: The subnet size (e.g., 24 for /24, 32 for single IP)
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Status message confirming addition
         """
         actual_id = await get_user_id(user_id)
         await vultr_client.add_user_ip_whitelist_entry(actual_id, subnet, subnet_size)
+
+        # Notify clients that user IP whitelist has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="update_user", user_id=actual_id
+            )
+
         return {
             "status": "success",
             "message": f"IP {subnet}/{subnet_size} added to whitelist for user {user_id}",
@@ -265,7 +290,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
 
     @mcp.tool
     async def remove_ip_whitelist_entry(
-        user_id: str, subnet: str, subnet_size: int
+        user_id: str, subnet: str, subnet_size: int, ctx: Context
     ) -> dict[str, str]:
         """Remove an IP address or subnet from a user's whitelist.
 
@@ -273,6 +298,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
             user_id: The user ID (UUID) or email address
             subnet: The IP address or subnet to remove (e.g., "8.8.8.0", "192.168.1.100")
             subnet_size: The subnet size (e.g., 24 for /24, 32 for single IP)
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Status message confirming removal
@@ -281,6 +307,13 @@ def create_users_mcp(vultr_client) -> FastMCP:
         await vultr_client.remove_user_ip_whitelist_entry(
             actual_id, subnet, subnet_size
         )
+
+        # Notify clients that user IP whitelist has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="update_user", user_id=actual_id
+            )
+
         return {
             "status": "success",
             "message": f"IP {subnet}/{subnet_size} removed from whitelist for user {user_id}",
@@ -302,6 +335,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
             first_name: User's first name
             last_name: User's last name
             password: User's password
+            ctx: FastMCP context for resource change notifications
             permissions_level: Permission level - "basic", "developer", "admin", or "readonly"
                 - basic: subscriptions_view, dns, support
                 - readonly: subscriptions_view, support
@@ -379,7 +413,8 @@ def create_users_mcp(vultr_client) -> FastMCP:
         email: str,
         first_name: str,
         last_name: str,
-        permissions: List[str] | None = None,
+        ctx: Context | None = None,
+        permissions: list[str] | None = None,
     ) -> dict[str, Any]:
         """Set up a new service user (API-only access) with specified permissions.
 
@@ -387,6 +422,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
             email: Service user's email address
             first_name: Service user's first name
             last_name: Service user's last name
+            ctx: FastMCP context for resource change notifications
             permissions: List of permissions to grant. If None, grants basic API access.
 
         Returns:
@@ -404,7 +440,7 @@ def create_users_mcp(vultr_client) -> FastMCP:
             for _ in range(16)
         )
 
-        return await vultr_client.create_user(
+        result = await vultr_client.create_user(
             email=email,
             first_name=first_name,
             last_name=last_name,
@@ -413,6 +449,14 @@ def create_users_mcp(vultr_client) -> FastMCP:
             service_user=True,
             acls=permissions,
         )
+
+        # Notify clients that user list has changed
+        if ctx is not None:
+            await NotificationManager.notify_resource_change(
+                ctx=ctx, operation="create_user", user_id=result.get("id")
+            )
+
+        return result
 
     @mcp.tool
     async def analyze_user_permissions(user_id: str) -> dict[str, Any]:

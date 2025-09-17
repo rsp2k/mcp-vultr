@@ -6,7 +6,10 @@ This module contains FastMCP tools and resources for managing Vultr DNS domains 
 
 from typing import Any
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
+
+from .dns_analyzer import DNSAnalyzer
+from .notification_manager import NotificationManager
 
 
 def create_dns_mcp(vultr_client) -> FastMCP:
@@ -20,12 +23,17 @@ def create_dns_mcp(vultr_client) -> FastMCP:
         Configured FastMCP instance with DNS management tools
     """
     mcp = FastMCP(name="vultr-dns")
+    dns_analyzer = DNSAnalyzer(vultr_client)
 
     # DNS Domain resources
     @mcp.resource("domains://list")
     async def list_domains_resource() -> list[dict[str, Any]]:
         """List all DNS domains in your Vultr account."""
-        return await vultr_client.list_domains()
+        try:
+            return await vultr_client.list_domains()
+        except Exception:
+            # If the API returns an error when no domains exist, return empty list
+            return []
 
     @mcp.resource("domains://{domain}")
     async def get_domain_resource(domain: str) -> dict[str, Any]:
@@ -62,47 +70,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
         Args:
             domain: The domain name to analyze
         """
-        try:
-            # Get domain info and records using the vultr client
-            domain_info = await vultr_client.get_domain(domain)
-            records = await vultr_client.list_records(domain)
-            
-            # Analyze the configuration locally (not via API)
-            analysis = {
-                "domain": domain,
-                "creation_date": domain_info.get("date_created"),
-                "dnssec_enabled": domain_info.get("dns_sec") == "enabled",
-                "total_records": len(records),
-                "record_types": {},
-                "recommendations": []
-            }
-            
-            # Count record types
-            for record in records:
-                record_type = record.get("type", "UNKNOWN")
-                analysis["record_types"][record_type] = analysis["record_types"].get(record_type, 0) + 1
-            
-            # Generate recommendations
-            if "A" not in analysis["record_types"] and "AAAA" not in analysis["record_types"]:
-                analysis["recommendations"].append("Consider adding A or AAAA records for web hosting")
-            
-            if "MX" not in analysis["record_types"]:
-                analysis["recommendations"].append("No MX records found - add if email is needed")
-            
-            if not analysis["dnssec_enabled"]:
-                analysis["recommendations"].append("Consider enabling DNSSEC for enhanced security")
-            
-            if "TXT" not in analysis["record_types"]:
-                analysis["recommendations"].append("Consider adding TXT records for domain verification and security policies")
-            
-            return analysis
-            
-        except Exception as e:
-            return {
-                "domain": domain,
-                "error": str(e),
-                "recommendations": ["Unable to analyze domain - check if domain exists in Vultr DNS"]
-            }
+        return await dns_analyzer.analyze_domain(domain)
 
     @mcp.resource("domains://{domain}/zone-file")
     async def export_zone_file_resource(domain: str) -> str:
@@ -114,18 +82,6 @@ def create_dns_mcp(vultr_client) -> FastMCP:
         return await vultr_client.export_zone_file(domain)
 
     # DNS Domain tools
-    @mcp.tool
-    async def list_domains() -> list[dict[str, Any]]:
-        """List all DNS domains in your Vultr account.
-
-        Returns:
-            List of domain objects with details including:
-            - domain: Domain name
-            - date_created: Creation date
-            - dns_sec: DNSSEC status
-        """
-        return await vultr_client.list_domains()
-
     @mcp.tool
     async def get_domain(domain: str) -> dict[str, Any]:
         """Get details for a specific DNS domain.
@@ -140,31 +96,48 @@ def create_dns_mcp(vultr_client) -> FastMCP:
 
     @mcp.tool
     async def create_domain(
-        domain: str, ip: str, dns_sec: str = "disabled"
+        domain: str, ip: str, ctx: Context | None = None, dns_sec: str = "disabled"
     ) -> dict[str, Any]:
         """Create a new DNS domain.
 
         Args:
             domain: The domain name to create
             ip: The default IP address for the domain
+            ctx: FastMCP context for resource change notifications
             dns_sec: Enable DNSSEC (enabled/disabled, default: disabled)
 
         Returns:
             Created domain information
         """
-        return await vultr_client.create_domain(domain, ip, dns_sec)
+        result = await vultr_client.create_domain(domain, ip, dns_sec)
+
+        # Notify clients that domain list has changed
+        if ctx is not None:
+            await NotificationManager.notify_dns_changes(
+                ctx=ctx, operation="create_domain", domain=domain
+            )
+
+        return result
 
     @mcp.tool
-    async def delete_domain(domain: str) -> dict[str, str]:
+    async def delete_domain(domain: str, ctx: Context | None = None) -> dict[str, str]:
         """Delete a DNS domain and all its records.
 
         Args:
             domain: The domain name to delete
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Status message confirming deletion
         """
         await vultr_client.delete_domain(domain)
+
+        # Notify clients that both domain list and domain records have changed
+        if ctx is not None:
+            await NotificationManager.notify_dns_changes(
+                ctx=ctx, operation="delete_domain", domain=domain
+            )
+
         return {"status": "success", "message": f"Domain {domain} deleted successfully"}
 
     # DNS Record tools
@@ -199,6 +172,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
         record_type: str,
         name: str,
         data: str,
+        ctx: Context | None = None,
         ttl: int = 300,
         priority: int | None = None,
     ) -> dict[str, Any]:
@@ -209,20 +183,30 @@ def create_dns_mcp(vultr_client) -> FastMCP:
             record_type: Record type (A, AAAA, CNAME, MX, TXT, NS, SRV)
             name: Record name/subdomain
             data: Record data/value
+            ctx: FastMCP context for resource change notifications
             ttl: Time to live in seconds (default: 300)
             priority: Priority for MX/SRV records
 
         Returns:
             Created record information
         """
-        return await vultr_client.create_record(
+        result = await vultr_client.create_record(
             domain, record_type, name, data, ttl, priority
         )
+
+        # Notify clients that records for this domain have changed
+        if ctx is not None:
+            await NotificationManager.notify_dns_changes(
+                ctx=ctx, operation="create_record", domain=domain
+            )
+
+        return result
 
     @mcp.tool
     async def update_record(
         domain: str,
         record_id: str,
+        ctx: Context | None = None,
         name: str | None = None,
         data: str | None = None,
         ttl: int | None = None,
@@ -233,6 +217,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
         Args:
             domain: The domain name
             record_id: The record ID to update
+            ctx: FastMCP context for resource change notifications
             name: New record name (optional)
             data: New record data (optional)
             ttl: New TTL value (optional)
@@ -241,22 +226,40 @@ def create_dns_mcp(vultr_client) -> FastMCP:
         Returns:
             Updated record information
         """
-        return await vultr_client.update_record(
+        result = await vultr_client.update_record(
             domain, record_id, name, data, ttl, priority
         )
 
+        # Notify clients that records for this domain have changed
+        if ctx is not None:
+            await NotificationManager.notify_dns_changes(
+                ctx=ctx, operation="update_record", domain=domain, record_id=record_id
+            )
+
+        return result
+
     @mcp.tool
-    async def delete_record(domain: str, record_id: str) -> dict[str, str]:
+    async def delete_record(
+        domain: str, record_id: str, ctx: Context | None = None
+    ) -> dict[str, str]:
         """Delete a DNS record.
 
         Args:
             domain: The domain name
             record_id: The record ID to delete
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Status message confirming deletion
         """
         await vultr_client.delete_record(domain, record_id)
+
+        # Notify clients that records for this domain have changed
+        if ctx is not None:
+            await NotificationManager.notify_dns_changes(
+                ctx=ctx, operation="delete_record", domain=domain, record_id=record_id
+            )
+
         return {
             "status": "success",
             "message": f"Record {record_id} deleted successfully",
@@ -296,47 +299,7 @@ def create_dns_mcp(vultr_client) -> FastMCP:
         Returns:
             Analysis results with recommendations for improvements
         """
-        try:
-            # Get domain info and records
-            domain_info = await vultr_client.get_domain(domain)
-            records = await vultr_client.list_records(domain)
-            
-            # Analyze the configuration
-            analysis = {
-                "domain": domain,
-                "creation_date": domain_info.get("date_created"),
-                "dnssec_enabled": domain_info.get("dns_sec") == "enabled",
-                "total_records": len(records),
-                "record_types": {},
-                "recommendations": []
-            }
-            
-            # Count record types
-            for record in records:
-                record_type = record.get("type", "UNKNOWN")
-                analysis["record_types"][record_type] = analysis["record_types"].get(record_type, 0) + 1
-            
-            # Generate recommendations
-            if "A" not in analysis["record_types"] and "AAAA" not in analysis["record_types"]:
-                analysis["recommendations"].append("Consider adding A or AAAA records for web hosting")
-            
-            if "MX" not in analysis["record_types"]:
-                analysis["recommendations"].append("No MX records found - add if email is needed")
-            
-            if not analysis["dnssec_enabled"]:
-                analysis["recommendations"].append("Consider enabling DNSSEC for enhanced security")
-            
-            if "TXT" not in analysis["record_types"]:
-                analysis["recommendations"].append("Consider adding TXT records for domain verification and security policies")
-            
-            return analysis
-            
-        except Exception as e:
-            return {
-                "domain": domain,
-                "error": str(e),
-                "recommendations": ["Unable to analyze domain - check if domain exists in Vultr DNS"]
-            }
+        return await dns_analyzer.analyze_domain(domain)
 
     @mcp.tool
     async def setup_website(

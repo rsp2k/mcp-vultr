@@ -4,9 +4,11 @@ Vultr Instances FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr instances.
 """
 
-from typing import Any, List
+from typing import Any
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
+
+from .notification_manager import NotificationManager
 
 
 def create_instances_mcp(vultr_client) -> FastMCP:
@@ -59,9 +61,13 @@ def create_instances_mcp(vultr_client) -> FastMCP:
 
     # Instance resources
     @mcp.resource("instances://list")
-    async def list_instances_resource() -> List[dict[str, Any]]:
+    async def list_instances_resource() -> list[dict[str, Any]]:
         """List all instances in your Vultr account."""
-        return await vultr_client.list_instances()
+        try:
+            return await vultr_client.list_instances()
+        except Exception:
+            # If the API returns an error when no instances exist, return empty list
+            return []
 
     @mcp.resource("instances://{instance_id}")
     async def get_instance_resource(instance_id: str) -> dict[str, Any]:
@@ -74,42 +80,13 @@ def create_instances_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_instance(actual_id)
 
     # Instance tools
-    @mcp.tool
-    async def list() -> List[dict[str, Any]]:
-        """List all instances in your Vultr account.
-
-        Returns:
-            List of instance objects with details including:
-            - id: Instance ID
-            - label: Instance label
-            - hostname: Instance hostname
-            - region: Region code
-            - plan: Plan ID
-            - os: Operating system
-            - status: Instance status (active, pending, etc.)
-            - main_ip: Primary IPv4 address
-            - v6_main_ip: Primary IPv6 address
-            - date_created: Creation date
-        """
-        return await vultr_client.list_instances()
-
-    @mcp.tool
-    async def get(instance_id: str) -> dict[str, Any]:
-        """Get detailed information about a specific instance.
-
-        Args:
-            instance_id: The instance ID, label, or hostname (e.g., "web-server", "db.example.com", or UUID)
-
-        Returns:
-            Detailed instance information
-        """
-        actual_id = await get_instance_id(instance_id)
-        return await vultr_client.get_instance(actual_id)
+    # Instance management tools
 
     @mcp.tool
     async def create(
         region: str,
         plan: str,
+        ctx: Context | None = None,
         label: str | None = None,
         os_id: int | None = None,
         iso_id: str | None = None,
@@ -117,8 +94,8 @@ def create_instances_mcp(vultr_client) -> FastMCP:
         snapshot_id: str | None = None,
         enable_ipv6: bool = False,
         enable_private_network: bool = False,
-        attach_private_network: List[str] | None = None,
-        ssh_key_ids: List[str] | None = None,
+        attach_private_network: list[str] | None = None,
+        ssh_key_ids: list[str] | None = None,
         backups: bool = False,
         app_id: int | None = None,
         user_data: str | None = None,
@@ -134,6 +111,7 @@ def create_instances_mcp(vultr_client) -> FastMCP:
         Args:
             region: Region code (e.g., 'ewr', 'lax')
             plan: Plan ID (e.g., 'vc2-1c-1gb')
+            ctx: FastMCP context for resource change notifications
             label: Label for the instance
             os_id: Operating System ID (use list_os to get available options)
             iso_id: ISO ID for custom installation
@@ -156,7 +134,7 @@ def create_instances_mcp(vultr_client) -> FastMCP:
         Returns:
             Created instance information
         """
-        return await vultr_client.create_instance(
+        result = await vultr_client.create_instance(
             region=region,
             plan=plan,
             label=label,
@@ -179,9 +157,18 @@ def create_instances_mcp(vultr_client) -> FastMCP:
             reserved_ipv4=reserved_ipv4,
         )
 
+        # Notify clients that instance list has changed
+        if ctx is not None:
+            await NotificationManager.notify_instance_changes(
+                ctx=ctx, operation="create_instance", instance_id=result.get("id")
+            )
+
+        return result
+
     @mcp.tool
     async def update(
         instance_id: str,
+        ctx: Context | None = None,
         label: str | None = None,
         tag: str | None = None,
         plan: str | None = None,
@@ -195,6 +182,7 @@ def create_instances_mcp(vultr_client) -> FastMCP:
 
         Args:
             instance_id: The instance ID to update
+            ctx: FastMCP context for resource change notifications
             label: New label for the instance
             tag: New tag for the instance
             plan: New plan ID (for resizing)
@@ -207,7 +195,7 @@ def create_instances_mcp(vultr_client) -> FastMCP:
         Returns:
             Updated instance information
         """
-        return await vultr_client.update_instance(
+        result = await vultr_client.update_instance(
             instance_id=instance_id,
             label=label,
             tag=tag,
@@ -219,69 +207,109 @@ def create_instances_mcp(vultr_client) -> FastMCP:
             user_data=user_data,
         )
 
+        # Notify clients that instance list and specific instance have changed
+        if ctx is not None:
+            await NotificationManager.notify_instance_changes(
+                ctx=ctx, operation="update_instance", instance_id=instance_id
+            )
+
+        return result
+
     @mcp.tool
-    async def delete(instance_id: str) -> dict[str, str]:
+    async def delete(instance_id: str, ctx: Context | None = None) -> dict[str, str]:
         """Delete an instance.
 
         Args:
             instance_id: The instance ID, label, or hostname (e.g., "web-server", "db.example.com", or UUID)
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Status message confirming deletion
         """
         actual_id = await get_instance_id(instance_id)
         await vultr_client.delete_instance(actual_id)
+
+        # Notify clients that instance list has changed
+        if ctx is not None:
+            await NotificationManager.notify_instance_changes(
+                ctx=ctx, operation="delete_instance", instance_id=actual_id
+            )
+
         return {
             "status": "success",
             "message": f"Instance {instance_id} deleted successfully",
         }
 
     @mcp.tool
-    async def start(instance_id: str) -> dict[str, str]:
+    async def start(instance_id: str, ctx: Context | None = None) -> dict[str, str]:
         """Start a stopped instance.
 
         Args:
             instance_id: The instance ID, label, or hostname (e.g., "web-server", "db.example.com", or UUID)
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Status message confirming start
         """
         actual_id = await get_instance_id(instance_id)
         await vultr_client.start_instance(actual_id)
+
+        # Notify clients that instance list and specific instance have changed
+        if ctx is not None:
+            await NotificationManager.notify_instance_changes(
+                ctx=ctx, operation="start_instance", instance_id=actual_id
+            )
+
         return {
             "status": "success",
             "message": f"Instance {instance_id} started successfully",
         }
 
     @mcp.tool
-    async def stop(instance_id: str) -> dict[str, str]:
+    async def stop(instance_id: str, ctx: Context | None = None) -> dict[str, str]:
         """Stop a running instance.
 
         Args:
             instance_id: The instance ID, label, or hostname (e.g., "web-server", "db.example.com", or UUID)
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Status message confirming stop
         """
         actual_id = await get_instance_id(instance_id)
         await vultr_client.stop_instance(actual_id)
+
+        # Notify clients that instance list and specific instance have changed
+        if ctx is not None:
+            await NotificationManager.notify_instance_changes(
+                ctx=ctx, operation="stop_instance", instance_id=actual_id
+            )
+
         return {
             "status": "success",
             "message": f"Instance {instance_id} stopped successfully",
         }
 
     @mcp.tool
-    async def reboot(instance_id: str) -> dict[str, str]:
+    async def reboot(instance_id: str, ctx: Context | None = None) -> dict[str, str]:
         """Reboot an instance.
 
         Args:
             instance_id: The instance ID, label, or hostname (e.g., "web-server", "db.example.com", or UUID)
+            ctx: FastMCP context for resource change notifications
 
         Returns:
             Status message confirming reboot
         """
         actual_id = await get_instance_id(instance_id)
         await vultr_client.reboot_instance(actual_id)
+
+        # Notify clients that instance list and specific instance have changed
+        if ctx is not None:
+            await NotificationManager.notify_instance_changes(
+                ctx=ctx, operation="reboot_instance", instance_id=actual_id
+            )
+
         return {
             "status": "success",
             "message": f"Instance {instance_id} rebooted successfully",
@@ -289,19 +317,28 @@ def create_instances_mcp(vultr_client) -> FastMCP:
 
     @mcp.tool
     async def reinstall(
-        instance_id: str, hostname: str | None = None
+        instance_id: str, ctx: Context | None = None, hostname: str | None = None
     ) -> dict[str, Any]:
         """Reinstall an instance's operating system.
 
         Args:
             instance_id: The instance ID, label, or hostname (e.g., "web-server", "db.example.com", or UUID)
+            ctx: FastMCP context for resource change notifications
             hostname: New hostname for the instance (optional)
 
         Returns:
             Reinstall status information
         """
         actual_id = await get_instance_id(instance_id)
-        return await vultr_client.reinstall_instance(actual_id, hostname)
+        result = await vultr_client.reinstall_instance(actual_id, hostname)
+
+        # Notify clients that instance list and specific instance have changed
+        if ctx is not None:
+            await NotificationManager.notify_instance_changes(
+                ctx=ctx, operation="reinstall_instance", instance_id=actual_id
+            )
+
+        return result
 
     # Bandwidth information
     @mcp.resource("instances://{instance_id}/bandwidth")
@@ -329,7 +366,7 @@ def create_instances_mcp(vultr_client) -> FastMCP:
 
     # IPv4 management
     @mcp.tool
-    async def list_ipv4(instance_id: str) -> List[dict[str, Any]]:
+    async def list_ipv4(instance_id: str) -> list[dict[str, Any]]:
         """List IPv4 addresses for an instance.
 
         Args:
@@ -372,7 +409,7 @@ def create_instances_mcp(vultr_client) -> FastMCP:
 
     # IPv6 management
     @mcp.resource("instances://{instance_id}/ipv6")
-    async def list_ipv6_resource(instance_id: str) -> List[dict[str, Any]]:
+    async def list_ipv6_resource(instance_id: str) -> list[dict[str, Any]]:
         """List IPv6 addresses for an instance.
 
         Args:
@@ -382,7 +419,7 @@ def create_instances_mcp(vultr_client) -> FastMCP:
         return await vultr_client.list_instance_ipv6(actual_id)
 
     @mcp.tool
-    async def list_ipv6(instance_id: str) -> List[dict[str, Any]]:
+    async def list_ipv6(instance_id: str) -> list[dict[str, Any]]:
         """List IPv6 addresses for an instance.
 
         Args:

@@ -80,23 +80,25 @@ def confirm_action(message: str) -> bool:
     return click.confirm(message)
 
 
-def show_helpful_suggestions(command_context: str, missing_params: list[str] = None) -> None:
+def show_helpful_suggestions(
+    command_context: str, missing_params: list[str] = None
+) -> None:
     """Show helpful suggestions when CLI commands are missing parameters."""
     from rich.panel import Panel
     from rich.text import Text
-    
+
     suggestions = Text()
-    
+
     if command_context == "plans_list_no_type":
         suggestions.append("💡 Available Plan Types:\n", style="bold blue")
         suggestions.append("  • vc2     - Regular Performance instances\n")
-        suggestions.append("  • vhf     - High Frequency instances\n") 
+        suggestions.append("  • vhf     - High Frequency instances\n")
         suggestions.append("  • voc     - Optimized Cloud instances\n")
         suggestions.append("  • vbm     - Bare Metal instances\n")
         suggestions.append("  • vcg     - Cloud GPU instances\n\n")
         suggestions.append("Example: ", style="bold")
         suggestions.append("vultr-cli plans list --type vc2", style="green")
-        
+
     elif command_context == "regions_common":
         suggestions.append("🌍 Popular Regions:\n", style="bold blue")
         suggestions.append("  • ewr     - New York (NJ)\n")
@@ -107,19 +109,30 @@ def show_helpful_suggestions(command_context: str, missing_params: list[str] = N
         suggestions.append("  • ams     - Amsterdam\n")
         suggestions.append("  • lhr     - London\n")
         suggestions.append("  • nrt     - Tokyo\n\n")
-        suggestions.append("💡 Use 'vultr-cli regions list' to see all available regions")
-        
+        suggestions.append(
+            "💡 Use 'vultr-cli regions list' to see all available regions"
+        )
+
     elif command_context == "bare_metal_create_help":
-        suggestions.append("🔧 To create a bare metal instance, you'll need:\n\n", style="bold blue")
+        suggestions.append(
+            "🔧 To create a bare metal instance, you'll need:\n\n", style="bold blue"
+        )
         suggestions.append("Required Parameters:\n", style="bold")
         suggestions.append("  • plan      - Bare metal plan ID\n")
         suggestions.append("  • region    - Region ID\n")
         suggestions.append("  • os        - Operating system ID\n\n")
         suggestions.append("Helpful Commands:\n", style="bold")
-        suggestions.append("  • vultr-cli plans list --type vbm    # List bare metal plans\n", style="green")
-        suggestions.append("  • vultr-cli regions list             # List regions\n", style="green")
-        suggestions.append("  • vultr-cli operating-systems list   # List OS options\n", style="green")
-    
+        suggestions.append(
+            "  • vultr-cli plans list --type vbm    # List bare metal plans\n",
+            style="green",
+        )
+        suggestions.append(
+            "  • vultr-cli regions list             # List regions\n", style="green"
+        )
+        suggestions.append(
+            "  • vultr-cli operating-systems list   # List OS options\n", style="green"
+        )
+
     if suggestions.plain:
         panel = Panel(suggestions, title="💡 Helpful Information", border_style="blue")
         console.print(panel)

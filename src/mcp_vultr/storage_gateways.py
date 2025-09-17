@@ -5,8 +5,7 @@ This module contains FastMCP tools and resources for managing Vultr storage gate
 Storage Gateways allow access to Vultr File System via the NFS v4.2 protocol.
 """
 
-from typing import Any, List
-from typing import Any, List
+from typing import Any
 
 from fastmcp import FastMCP
 
@@ -59,9 +58,13 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
 
     # Storage Gateway resources
     @mcp.resource("storage-gateways://list")
-    async def list_gateways_resource() -> List[dict[str, Any]]:
+    async def list_gateways_resource() -> list[dict[str, Any]]:
         """List all storage gateways."""
-        return await vultr_client.list_storage_gateways()
+        try:
+            return await vultr_client.list_storage_gateways()
+        except Exception:
+            # If the API returns an error when no storage gateways exist, return empty list
+            return []
 
     @mcp.resource("storage-gateways://{gateway_identifier}")
     async def get_gateway_resource(gateway_identifier: str) -> dict[str, Any]:
@@ -83,40 +86,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         await get_storage_gateway_id(gateway_identifier)
         return await get_gateway_status(gateway_identifier)
 
-    # Storage Gateway tools
-    @mcp.tool
-    async def list() -> List[dict[str, Any]]:
-        """List all storage gateways in your account.
-
-        Returns:
-            List of storage gateway objects with details including:
-            - id: Gateway ID
-            - label: User-defined label
-            - type: Gateway type (e.g., nfs4)
-            - region: Region where gateway is located
-            - status: Current status (active, pending, etc.)
-            - health: Health status indicator
-            - network_config: Network configuration
-            - export_config: Export configurations
-            - pending_charges: Current charges
-            - date_created: Creation date
-        """
-        return await vultr_client.list_storage_gateways()
-
-    @mcp.tool
-    async def get(gateway_identifier: str) -> dict[str, Any]:
-        """Get detailed information about a specific storage gateway.
-
-        Smart identifier resolution: Use gateway label or ID.
-
-        Args:
-            gateway_identifier: Gateway label or ID to retrieve
-
-        Returns:
-            Detailed gateway information including configuration and status
-        """
-        gateway_id = await get_storage_gateway_id(gateway_identifier)
-        return await vultr_client.get_storage_gateway(gateway_id)
+    # Storage Gateway management tools
 
     @mcp.tool
     async def create(
@@ -125,7 +95,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         region: str,
         export_config: dict[str, Any],
         network_config: dict[str, Any],
-        tags: List[str] | None = None,
+        tags: list[str] | None = None,
     ) -> dict[str, Any]:
         """Create a new storage gateway.
 
@@ -158,7 +128,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
     async def update(
         gateway_identifier: str,
         label: str | None = None,
-        tags: List[str] | None = None,
+        tags: list[str] | None = None,
     ) -> dict[str, str]:
         """Update storage gateway configuration.
 
@@ -252,7 +222,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         }
 
     @mcp.tool
-    async def list_by_region(region: str) -> List[dict[str, Any]]:
+    async def list_by_region(region: str) -> list[dict[str, Any]]:
         """List storage gateways in a specific region.
 
         Args:
@@ -265,7 +235,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         return [gateway for gateway in gateways if gateway.get("region") == region]
 
     @mcp.tool
-    async def list_by_type(gateway_type: str) -> List[dict[str, Any]]:
+    async def list_by_type(gateway_type: str) -> list[dict[str, Any]]:
         """List storage gateways by type.
 
         Args:
@@ -278,7 +248,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         return [gateway for gateway in gateways if gateway.get("type") == gateway_type]
 
     @mcp.tool
-    async def list_by_status(status: str) -> List[dict[str, Any]]:
+    async def list_by_status(status: str) -> list[dict[str, Any]]:
         """List storage gateways by status.
 
         Args:
