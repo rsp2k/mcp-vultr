@@ -35,6 +35,17 @@ from .server import (
     create_mcp_server,
     run_server,
 )
+from .oauth_auth import (
+    OAuthConfig,
+    Permission,
+    UserContext,
+    VultrOAuthMiddleware,
+    require_permission,
+)
+from .oauth_server import (
+    create_oauth_enhanced_vultr_server,
+    run_oauth_server,
+)
 
 __all__ = [
     "VultrDNSServer",
@@ -46,6 +57,14 @@ __all__ = [
     "VultrRateLimitError",
     "VultrResourceNotFoundError",
     "VultrValidationError",
+    # OAuth/OIDC authentication
+    "OAuthConfig",
+    "Permission",
+    "UserContext",
+    "VultrOAuthMiddleware",
+    "require_permission",
+    "create_oauth_enhanced_vultr_server",
+    "run_oauth_server",
     "__version__",
     "__version_info__",
 ]

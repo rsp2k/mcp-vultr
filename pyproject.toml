@@ -53,6 +53,8 @@ dependencies = [
     "psutil>=6.0.0",
     "textual>=0.45.0",
     "rich>=13.0.0",
+    # OAuth/OIDC authentication dependencies
+    "pyjwt[crypto]>=2.8.0",
 ]
 
 [project.optional-dependencies]
@@ -97,6 +99,7 @@ Changelog = "https://git.supported.systems/MCP/mcp-vultr/blob/main/CHANGELOG.md"
 
 [project.scripts]
 mcp-vultr = "mcp_vultr.fastmcp_server:run_server"
+mcp-vultr-oauth = "mcp_vultr.oauth_server:run_oauth_server"
 vultr-cli = "mcp_vultr.cli_main:cli"
 
 [tool.setuptools.packages.find]

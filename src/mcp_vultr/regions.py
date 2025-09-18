@@ -4,8 +4,7 @@ Vultr Regions FastMCP Module.
 This module contains FastMCP tools and resources for retrieving Vultr region information.
 """
 
-import builtins
-from typing import Any
+from typing import Any, List
 
 from fastmcp import FastMCP
 
@@ -24,7 +23,7 @@ def create_regions_mcp(vultr_client) -> FastMCP:
 
     # Region resources
     @mcp.resource("regions://list")
-    async def list_regions_resource() -> list[dict[str, Any]]:
+    async def list_regions_resource() -> List[dict[str, Any]]:
         """List all available Vultr regions."""
         return await vultr_client.list_regions()
 
@@ -39,7 +38,7 @@ def create_regions_mcp(vultr_client) -> FastMCP:
 
     # Region tools
     @mcp.tool
-    async def list() -> list[dict[str, Any]]:
+    async def list() -> List[dict[str, Any]]:
         """List all available Vultr regions.
 
         Returns:
@@ -69,7 +68,7 @@ def create_regions_mcp(vultr_client) -> FastMCP:
         return await vultr_client.list_availability(region_id)
 
     @mcp.tool
-    async def find_regions_with_plan(plan_id: str) -> builtins.list[dict[str, Any]]:
+    async def find_regions_with_plan(plan_id: str) -> List[dict[str, Any]]:
         """Find all regions where a specific plan is available.
 
         Args:
@@ -93,7 +92,7 @@ def create_regions_mcp(vultr_client) -> FastMCP:
         return available_regions
 
     @mcp.tool
-    async def list_by_continent(continent: str) -> builtins.list[dict[str, Any]]:
+    async def list_by_continent(continent: str) -> List[dict[str, Any]]:
         """List all regions in a specific continent.
 
         Args:
@@ -110,7 +109,7 @@ def create_regions_mcp(vultr_client) -> FastMCP:
         ]
 
     @mcp.tool
-    async def list_with_ddos_protection() -> builtins.list[dict[str, Any]]:
+    async def list_with_ddos_protection() -> List[dict[str, Any]]:
         """List all regions that support DDoS protection.
 
         Returns:

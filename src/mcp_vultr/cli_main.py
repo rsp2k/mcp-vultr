@@ -99,11 +99,13 @@ def register_commands():
 
     # Import and register compute commands
     from .cli.compute import bare_metal, operating_systems, plans, startup_scripts
+    from .cli.service_collections import collections_cli
 
     cli.add_command(operating_systems)
     cli.add_command(plans)
     cli.add_command(startup_scripts)
     cli.add_command(bare_metal)
+    cli.add_command(collections_cli)
 
     # Add placeholder groups for remaining services
     # These will be implemented in future iterations

@@ -37,17 +37,46 @@ from .ssh_keys import create_ssh_keys_mcp
 from .startup_scripts import create_startup_scripts_mcp
 from .storage_gateways import create_storage_gateways_mcp
 from .subaccount import create_subaccount_mcp
+from .service_collections import create_service_collections_mcp, ServiceCollectionStore
 from .users import create_users_mcp
 from .vpcs import create_vpcs_mcp
+from .oauth_auth import create_oauth_enhanced_server, OAuthConfig, VultrOAuthMiddleware
 
 
 def create_vultr_mcp_server(api_key: str | None = None) -> FastMCP:
     """
-    Create a FastMCP server for Vultr DNS management.
-
+    Create a standard Vultr MCP server without OAuth authentication.
+    
     Args:
         api_key: Vultr API key. If not provided, will read from VULTR_API_KEY env var.
+        
+    Returns:
+        Configured FastMCP server instance
+    """
+    return _create_vultr_server_internal(api_key, enable_oauth=False)
 
+
+def create_oauth_vultr_mcp_server(api_key: str | None = None) -> FastMCP:
+    """
+    Create an OAuth-enhanced Vultr MCP server with Service Collection support.
+    
+    Args:
+        api_key: Vultr API key. If not provided, will read from VULTR_API_KEY env var.
+        
+    Returns:
+        OAuth-enhanced FastMCP server instance
+    """
+    return _create_vultr_server_internal(api_key, enable_oauth=True)
+
+
+def _create_vultr_server_internal(api_key: str | None = None, enable_oauth: bool = False) -> FastMCP:
+    """
+    Internal server creation function that supports both OAuth and standard modes.
+    
+    Args:
+        api_key: Vultr API key. If not provided, will read from VULTR_API_KEY env var.
+        enable_oauth: Whether to enable OAuth authentication and Service Collection validation
+        
     Returns:
         Configured FastMCP server instance
     """
@@ -59,8 +88,12 @@ def create_vultr_mcp_server(api_key: str | None = None) -> FastMCP:
             "VULTR_API_KEY must be provided either as parameter or environment variable"
         )
 
-    # Create main FastMCP server with version info
-    mcp = FastMCP(name=f"mcp-vultr v{__version__}")
+    # Create main FastMCP server with OAuth support if enabled
+    if enable_oauth:
+        mcp = create_oauth_enhanced_server(api_key)
+        mcp.name = f"mcp-vultr-oauth v{__version__}"
+    else:
+        mcp = FastMCP(name=f"mcp-vultr v{__version__}")
 
     # Initialize Vultr client
     vultr_client = VultrDNSServer(api_key)
@@ -147,6 +180,11 @@ def create_vultr_mcp_server(api_key: str | None = None) -> FastMCP:
     users_mcp = create_users_mcp(vultr_client)
     mcp.mount(users_mcp)
 
+    # Service Collections - Enterprise infrastructure organization
+    service_collections_store = ServiceCollectionStore()
+    service_collections_mcp = create_service_collections_mcp(vultr_client, service_collections_store)
+    mcp.mount(service_collections_mcp)
+
     return mcp
 
 
@@ -172,7 +210,7 @@ def _detect_transport() -> str:
     return "stdio"
 
 
-def run_server(api_key: str | None = None, transport: str | None = None) -> None:
+def run_server(api_key: str | None = None, transport: str | None = None, enable_oauth: bool = None) -> None:
     """
     Create and run a Vultr DNS FastMCP server with intelligent transport selection.
 
@@ -180,11 +218,21 @@ def run_server(api_key: str | None = None, transport: str | None = None) -> None
         api_key: Vultr API key. If not provided, will read from VULTR_API_KEY env var.
         transport: Transport protocol ("stdio", "sse", "streamable-http").
                   If not provided, will auto-detect based on environment.
+        enable_oauth: Whether to enable OAuth authentication. If None, auto-detect from env.
     """
+    # Auto-detect OAuth mode if not specified
+    if enable_oauth is None:
+        oauth_config = OAuthConfig.from_env()
+        enable_oauth = oauth_config.enabled
+    
     # Print version info for debugging/verification
-    print(f"🚀 Starting mcp-vultr v{__version__}")
+    server_type = "OAuth-enabled" if enable_oauth else "standard"
+    print(f"🚀 Starting mcp-vultr v{__version__} ({server_type})")
 
-    mcp = create_vultr_mcp_server(api_key)
+    if enable_oauth:
+        mcp = create_oauth_vultr_mcp_server(api_key)
+    else:
+        mcp = create_vultr_mcp_server(api_key)
 
     # Use provided transport or auto-detect
     selected_transport = transport or _detect_transport()
