@@ -1,0 +1,17 @@
+:9999 {
+	# Route /api/* to backend
+	handle /api/* {
+		reverse_proxy localhost:8000
+	}
+
+	# Route everything else to frontend
+	handle {
+		reverse_proxy localhost:4321
+	}
+
+	# Enable request logging
+	log {
+		output stdout
+		level DEBUG
+	}
+}

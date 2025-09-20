@@ -1,0 +1,296 @@
+---
+export interface Props {
+  title: string;
+  description?: string;
+  requireAuth?: boolean;
+}
+
+const { title, description = "Service Collection Management Dashboard", requireAuth = true } = Astro.props;
+
+// Get current pathname for navigation active state
+const currentPath = Astro.url.pathname;
+
+// Helper function to determine if a navigation item is active
+function getNavClasses(path: string): string {
+  const isActive = currentPath === path || (path !== '/' && currentPath.startsWith(path));
+  return isActive
+    ? "border-primary-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+    : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium";
+}
+
+// Helper function for mobile navigation classes
+function getMobileNavClasses(path: string): string {
+  const isActive = currentPath === path || (path !== '/' && currentPath.startsWith(path));
+  return isActive
+    ? "bg-primary-50 border-primary-500 text-primary-700 block pl-3 pr-4 py-2 border-l-4 text-base font-medium"
+    : "border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800 block pl-3 pr-4 py-2 border-l-4 text-base font-medium";
+}
+---
+
+<!doctype html>
+<html lang="en" class="h-full bg-gray-50">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="description" content={description} />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+    
+    <!-- Use system fonts for faster loading -->
+    
+    <!-- Global styles -->
+    <style is:global>
+      @tailwind base;
+      @tailwind components;
+      @tailwind utilities;
+      
+      @layer base {
+        html {
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+        
+        body {
+          font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+        }
+        
+        .font-mono {
+          font-family: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', 'Segoe UI Mono', 'Roboto Mono', 'Ubuntu Mono', monospace;
+        }
+      }
+      
+      @layer components {
+        .btn-primary {
+          @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500;
+        }
+        
+        .btn-secondary {
+          @apply inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500;
+        }
+        
+        .form-input {
+          @apply appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm;
+        }
+        
+        .form-select {
+          @apply block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md;
+        }
+      }
+    </style>
+  </head>
+  <body class="h-full" x-data="{
+    async init() {
+      console.log('🏗️ Layout initializing...');
+      if (window.Alpine?.store) {
+        console.log('🔐 Initializing auth store...');
+        await Alpine.store('auth').init();
+        console.log('✅ Auth store initialized');
+      }
+    }
+  }">
+    {requireAuth && (
+      <div x-data x-init="
+        async function() {
+          console.log('🔒 Starting auth check...');
+          // Wait for auth store to be fully initialized
+          await new Promise(resolve => {
+            if ($store.auth.authConfig !== null) {
+              resolve();
+            } else {
+              const interval = setInterval(() => {
+                if ($store.auth.authConfig !== null) {
+                  clearInterval(interval);
+                  resolve();
+                }
+              }, 50);
+            }
+          });
+
+          console.log('🔍 Running auth check after initialization...');
+          const isAuth = await $store.auth.checkAuth();
+          console.log('🔍 Auth check result:', isAuth);
+          if (!isAuth) {
+            console.log('❌ Not authenticated, redirecting to login');
+            window.location.href = '/login';
+          }
+        }
+      "></div>
+    )}
+    
+    <!-- Main Application Container -->
+    <div class="min-h-full">
+      <!-- Navigation -->
+      <nav class="bg-white shadow-sm border-b border-gray-200" x-data="{ mobileMenuOpen: false }">
+        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div class="flex justify-between h-16">
+            <!-- Left side - Logo and main nav -->
+            <div class="flex">
+              <div class="flex-shrink-0 flex items-center">
+                <a href="/dashboard" class="flex items-center space-x-3">
+                  <img src="https://avatars.githubusercontent.com/u/8527264?s=200&v=4" 
+                       alt="Vultr" 
+                       class="h-8 w-8 rounded">
+                  <span class="text-xl font-bold text-gray-900">Service Collections</span>
+                </a>
+              </div>
+              <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+                <a href="/dashboard" class={getNavClasses("/dashboard")}>
+                  Dashboard
+                </a>
+                <a href="/collections" class={getNavClasses("/collections")}>
+                  Collections
+                </a>
+                <a href="/workflows" class={getNavClasses("/workflows")}>
+                  Workflows
+                </a>
+              </div>
+            </div>
+            
+            <!-- Right side - User menu -->
+            <div class="hidden sm:ml-6 sm:flex sm:items-center">
+              <!-- Notifications -->
+              <button type="button" class="bg-white p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                <span class="sr-only">View notifications</span>
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                </svg>
+              </button>
+              
+              <!-- Profile dropdown -->
+              <div class="ml-3 relative" x-data="dropdown()">
+                <div>
+                  <button type="button" 
+                          class="bg-white flex text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500" 
+                          @click="toggle()"
+                          x-bind:aria-expanded="isOpen">
+                    <span class="sr-only">Open user menu</span>
+                    <div class="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
+                      <span class="text-sm font-medium text-primary-600" x-text="$store.auth.user?.first_name?.[0] || 'U'"></span>
+                    </div>
+                  </button>
+                </div>
+                
+                <div x-show="isOpen" 
+                     x-transition:enter="transition ease-out duration-200"
+                     x-transition:enter-start="transform opacity-0 scale-95"
+                     x-transition:enter-end="transform opacity-100 scale-100"
+                     x-transition:leave="transition ease-in duration-75"
+                     x-transition:leave-start="transform opacity-100 scale-100"
+                     x-transition:leave-end="transform opacity-0 scale-95"
+                     class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-50"
+                     @click.away="close()">
+                  <div class="px-4 py-2 text-sm text-gray-700 border-b border-gray-100">
+                    <div class="font-medium" x-text="$store.auth.user?.full_name"></div>
+                    <div class="text-gray-500" x-text="$store.auth.user?.email"></div>
+                  </div>
+                  <a href="/profile" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Profile</a>
+                  <a href="/settings" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Settings</a>
+                  <button @click="$store.auth.logout()" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Sign out</button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Mobile menu button -->
+            <div class="-mr-2 flex items-center sm:hidden">
+              <button type="button" 
+                      class="bg-white inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
+                      @click="mobileMenuOpen = !mobileMenuOpen">
+                <span class="sr-only">Open main menu</span>
+                <svg class="h-6 w-6" x-show="!mobileMenuOpen" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                </svg>
+                <svg class="h-6 w-6" x-show="mobileMenuOpen" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Mobile menu -->
+        <div class="sm:hidden" x-show="mobileMenuOpen">
+          <div class="pt-2 pb-3 space-y-1">
+            <a href="/dashboard" class={getMobileNavClasses("/dashboard")}>Dashboard</a>
+            <a href="/collections" class={getMobileNavClasses("/collections")}>Collections</a>
+            <a href="/workflows" class={getMobileNavClasses("/workflows")}>Workflows</a>
+          </div>
+          <div class="pt-4 pb-3 border-t border-gray-200">
+            <div class="flex items-center px-4">
+              <div class="flex-shrink-0">
+                <div class="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
+                  <span class="text-sm font-medium text-primary-600" x-text="$store.auth.user?.first_name?.[0] || 'U'"></span>
+                </div>
+              </div>
+              <div class="ml-3">
+                <div class="text-base font-medium text-gray-800" x-text="$store.auth.user?.full_name"></div>
+                <div class="text-sm font-medium text-gray-500" x-text="$store.auth.user?.email"></div>
+              </div>
+            </div>
+            <div class="mt-3 space-y-1">
+              <a href="/profile" class="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">Profile</a>
+              <a href="/settings" class="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">Settings</a>
+              <button @click="$store.auth.logout()" class="block w-full text-left px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">Sign out</button>
+            </div>
+          </div>
+        </div>
+      </nav>
+      
+      <!-- Page content -->
+      <main class="flex-1">
+        <slot />
+      </main>
+    </div>
+    
+    <!-- Global notification system -->
+    <div x-data="notification()" 
+         x-show="visible" 
+         x-transition:enter="transform ease-out duration-300 transition"
+         x-transition:enter-start="translate-y-2 opacity-0 sm:translate-y-0 sm:translate-x-2"
+         x-transition:enter-end="translate-y-0 opacity-100 sm:translate-x-0"
+         x-transition:leave="transition ease-in duration-100"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="fixed inset-0 flex items-end justify-center px-4 py-6 pointer-events-none sm:p-6 sm:items-start sm:justify-end z-50">
+      <div class="max-w-sm w-full bg-white shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden">
+        <div class="p-4">
+          <div class="flex items-start">
+            <div class="flex-shrink-0">
+              <svg x-show="type === 'success'" class="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <svg x-show="type === 'error'" class="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+              </svg>
+              <svg x-show="type === 'warning'" class="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+              <svg x-show="type === 'info'" class="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+              </svg>
+            </div>
+            <div class="ml-3 w-0 flex-1 pt-0.5">
+              <p class="text-sm font-medium text-gray-900" x-text="message"></p>
+            </div>
+            <div class="ml-4 flex-shrink-0 flex">
+              <button class="bg-white rounded-md inline-flex text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500" @click="hide()">
+                <span class="sr-only">Close</span>
+                <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+
+<style>
+  html {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+  
+  .font-mono {
+    font-family: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', 'Segoe UI Mono', 'Roboto Mono', 'Ubuntu Mono', monospace;
+  }
+</style>

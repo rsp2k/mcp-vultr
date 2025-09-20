@@ -1,0 +1,306 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Dashboard - Service Collections">
+  <div class="py-10" 
+       x-data="{
+         init() {
+           $store.dashboard.fetchOverview();
+         }
+       }">
+    <header>
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <h1 class="text-3xl font-bold leading-tight text-gray-900">Dashboard</h1>
+        <p class="mt-2 text-sm text-gray-600">
+          Overview of your Service Collections and recent activity
+        </p>
+      </div>
+    </header>
+    
+    <main>
+      <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+        <!-- Overview Cards -->
+        <div class="mt-8">
+          <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4" x-data x-show="$store.dashboard.overview">
+            <!-- Total Collections -->
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+              <div class="p-5">
+                <div class="flex items-center">
+                  <div class="flex-shrink-0">
+                    <svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                    </svg>
+                  </div>
+                  <div class="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt class="text-sm font-medium text-gray-500 truncate">Total Collections</dt>
+                      <dd class="text-lg font-medium text-gray-900" x-text="$store.dashboard.overview?.summary?.total_collections || 0"></dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+              <div class="bg-gray-50 px-5 py-3">
+                <div class="text-sm">
+                  <a href="/collections" class="font-medium text-primary-700 hover:text-primary-900">View all</a>
+                </div>
+              </div>
+            </div>
+
+            <!-- Active Operations -->
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+              <div class="p-5">
+                <div class="flex items-center">
+                  <div class="flex-shrink-0">
+                    <svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <div class="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt class="text-sm font-medium text-gray-500 truncate">Active Operations</dt>
+                      <dd class="text-lg font-medium text-gray-900" x-text="($store.dashboard.overview?.summary?.operations_by_status?.executing || 0) + ($store.dashboard.overview?.summary?.operations_by_status?.pending_approval || 0)"></dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+              <div class="bg-gray-50 px-5 py-3">
+                <div class="text-sm">
+                  <a href="/workflows" class="font-medium text-primary-700 hover:text-primary-900">View all</a>
+                </div>
+              </div>
+            </div>
+
+            <!-- Monthly Cost -->
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+              <div class="p-5">
+                <div class="flex items-center">
+                  <div class="flex-shrink-0">
+                    <svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div class="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt class="text-sm font-medium text-gray-500 truncate">Est. Monthly Cost</dt>
+                      <dd class="text-lg font-medium text-gray-900">
+                        $<span x-text="($store.dashboard.overview?.summary?.estimated_monthly_cost || 0).toFixed(2)"></span>
+                      </dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+              <div class="bg-gray-50 px-5 py-3">
+                <div class="text-sm">
+                  <a href="/billing" class="font-medium text-primary-700 hover:text-primary-900">View details</a>
+                </div>
+              </div>
+            </div>
+
+            <!-- Success Rate -->
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+              <div class="p-5">
+                <div class="flex items-center">
+                  <div class="flex-shrink-0">
+                    <svg class="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div class="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt class="text-sm font-medium text-gray-500 truncate">Success Rate</dt>
+                      <dd class="text-lg font-medium text-gray-900">
+                        <span x-text="calculateSuccessRate()">--</span>%
+                      </dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+              <div class="bg-gray-50 px-5 py-3">
+                <div class="text-sm">
+                  <span class="text-gray-500">Last 30 days</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="mt-8">
+          <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+              <h3 class="text-lg leading-6 font-medium text-gray-900">Quick Actions</h3>
+              <div class="mt-5">
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <button type="button" 
+                          class="relative block w-full border-2 border-gray-300 border-dashed rounded-lg p-6 text-center hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                          @click="window.location.href = '/collections/new'">
+                    <svg class="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    <span class="mt-2 block text-sm font-medium text-gray-900">Create Collection</span>
+                    <span class="mt-1 block text-xs text-gray-500">Start a new Service Collection</span>
+                  </button>
+
+                  <button type="button" 
+                          class="relative block w-full border-2 border-gray-300 border-dashed rounded-lg p-6 text-center hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                          @click="window.location.href = '/workflows'">
+                    <svg class="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+                    </svg>
+                    <span class="mt-2 block text-sm font-medium text-gray-900">View Workflows</span>
+                    <span class="mt-1 block text-xs text-gray-500">Monitor pending operations</span>
+                  </button>
+
+                  <button type="button" 
+                          class="relative block w-full border-2 border-gray-300 border-dashed rounded-lg p-6 text-center hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                          @click="window.location.href = '/resources'">
+                    <svg class="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3V6a3 3 0 013-3h13.5a3 3 0 013 3v5.25a3 3 0 01-3 3m-16.5 0a3 3 0 013 3v5.25a3 3 0 013-3m13.5-3a3 3 0 013 3v5.25a3 3 0 01-3 3H6.75a3 3 0 01-3-3v-5.25a3 3 0 013-3m16.5 0h-16.5" />
+                    </svg>
+                    <span class="mt-2 block text-sm font-medium text-gray-900">Manage Resources</span>
+                    <span class="mt-1 block text-xs text-gray-500">View Vultr resources</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
+          <!-- Recent Operations -->
+          <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+              <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Recent Operations</h3>
+              <div class="flow-root">
+                <ul role="list" class="-mb-8" x-data x-show="$store.dashboard.overview?.recent_operations?.length > 0">
+                  <template x-for="(operation, index) in $store.dashboard.overview?.recent_operations?.slice(0, 5) || []" :key="operation.id">
+                    <li>
+                      <div class="relative pb-8" x-show="index < 4">
+                        <span class="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200" x-show="index < 4"></span>
+                        <div class="relative flex space-x-3">
+                          <div>
+                            <span class="h-8 w-8 rounded-full flex items-center justify-center"
+                                  :class="{
+                                    'bg-green-500': operation.status === 'completed',
+                                    'bg-blue-500': operation.status === 'executing',
+                                    'bg-yellow-500': operation.status === 'pending_approval',
+                                    'bg-red-500': operation.status === 'failed',
+                                    'bg-gray-500': !['completed', 'executing', 'pending_approval', 'failed'].includes(operation.status)
+                                  }">
+                              <svg class="h-5 w-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M10 2L3 7v11h4v-6h6v6h4V7l-7-5z"/>
+                              </svg>
+                            </span>
+                          </div>
+                          <div class="min-w-0 flex-1 pt-1.5 flex justify-between space-x-4">
+                            <div>
+                              <p class="text-sm text-gray-500">
+                                <span class="font-medium text-gray-900" x-text="operation.operation_type.replace('_', ' ')"></span>
+                                <span x-text="operation.resource_type"></span>
+                              </p>
+                              <p class="text-xs text-gray-400" x-text="new Date(operation.created_at).toLocaleString()"></p>
+                            </div>
+                            <div class="text-right text-sm whitespace-nowrap text-gray-500">
+                              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                                    :class="{
+                                      'bg-green-100 text-green-800': operation.status === 'completed',
+                                      'bg-blue-100 text-blue-800': operation.status === 'executing',
+                                      'bg-yellow-100 text-yellow-800': operation.status === 'pending_approval',
+                                      'bg-red-100 text-red-800': operation.status === 'failed',
+                                      'bg-gray-100 text-gray-800': !['completed', 'executing', 'pending_approval', 'failed'].includes(operation.status)
+                                    }"
+                                    x-text="operation.status.replace('_', ' ')">
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  </template>
+                </ul>
+                <div x-show="!$store.dashboard.overview?.recent_operations?.length" class="text-center py-4 text-gray-500">
+                  No recent operations
+                </div>
+              </div>
+              <div class="mt-6">
+                <a href="/workflows" class="w-full flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                  View all operations
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Activity -->
+          <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+              <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Recent Activity</h3>
+              <div class="flow-root">
+                <ul role="list" class="-mb-8" x-data x-show="$store.dashboard.overview?.recent_activities?.length > 0">
+                  <template x-for="(activity, index) in $store.dashboard.overview?.recent_activities?.slice(0, 5) || []" :key="activity.id">
+                    <li>
+                      <div class="relative pb-8" x-show="index < 4">
+                        <span class="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200" x-show="index < 4"></span>
+                        <div class="relative flex space-x-3">
+                          <div>
+                            <span class="h-8 w-8 rounded-full bg-gray-400 flex items-center justify-center">
+                              <svg class="h-5 w-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
+                              </svg>
+                            </span>
+                          </div>
+                          <div class="min-w-0 flex-1 pt-1.5 flex justify-between space-x-4">
+                            <div>
+                              <p class="text-sm text-gray-900" x-text="activity.message"></p>
+                              <p class="text-xs text-gray-400" x-text="new Date(activity.timestamp).toLocaleString()"></p>
+                            </div>
+                            <div class="text-right text-sm whitespace-nowrap text-gray-500">
+                              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                                    :class="{
+                                      'bg-green-100 text-green-800': activity.severity === 'info',
+                                      'bg-yellow-100 text-yellow-800': activity.severity === 'warning',
+                                      'bg-red-100 text-red-800': activity.severity === 'error'
+                                    }"
+                                    x-text="activity.severity">
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  </template>
+                </ul>
+                <div x-show="!$store.dashboard.overview?.recent_activities?.length" class="text-center py-4 text-gray-500">
+                  No recent activity
+                </div>
+              </div>
+              <div class="mt-6">
+                <a href="/audit" class="w-full flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                  View full audit log
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</Layout>
+
+<script>
+  function calculateSuccessRate() {
+    const overview = Alpine.store('dashboard').overview;
+    if (!overview?.summary?.operations_by_status) return '--';
+    
+    const statuses = overview.summary.operations_by_status;
+    const total = Object.values(statuses).reduce((sum, count) => sum + count, 0);
+    const successful = statuses.completed || 0;
+    
+    return total > 0 ? Math.round((successful / total) * 100) : 0;
+  }
+  
+  // Make function globally available
+  window.calculateSuccessRate = calculateSuccessRate;
+</script>

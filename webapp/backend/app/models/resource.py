@@ -1,0 +1,114 @@
+"""Resource management models."""
+
+from datetime import datetime
+from typing import Dict, Any, Optional
+from uuid import uuid4
+import enum
+
+from sqlalchemy import Column, String, DateTime, Text, Boolean, JSON, ForeignKey, Enum
+from sqlalchemy.dialects.postgresql import UUID
+
+from app.core.database import Base
+
+
+class ResourceType(enum.Enum):
+    """Types of Vultr resources."""
+    INSTANCE = "instance"
+    DOMAIN = "domain"
+    DNS_RECORD = "dns_record"
+    FIREWALL_GROUP = "firewall_group"
+    FIREWALL_RULE = "firewall_rule"
+    SSH_KEY = "ssh_key"
+    SNAPSHOT = "snapshot"
+    BLOCK_STORAGE = "block_storage"
+    LOAD_BALANCER = "load_balancer"
+    VPC = "vpc"
+    OBJECT_STORAGE = "object_storage"
+
+
+class ResourceStatus(enum.Enum):
+    """Status of managed resources."""
+    PLANNED = "planned"
+    CREATING = "creating"
+    ACTIVE = "active"
+    ERROR = "error"
+    DELETING = "deleting"
+    DELETED = "deleted"
+
+
+class PlannedResource(Base):
+    """Resources that are planned but not yet created."""
+    __tablename__ = "planned_resources"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    service_collection_id = Column(UUID(as_uuid=True), ForeignKey("service_collections.id"), nullable=False)
+    
+    # Resource definition
+    resource_type = Column(Enum(ResourceType), nullable=False)
+    resource_name = Column(String(255), nullable=False)
+    resource_config = Column(JSON, nullable=False)
+    
+    # Dependencies
+    depends_on = Column(JSON, default=list)  # List of resource names this depends on
+    
+    # Cost estimation
+    estimated_monthly_cost = Column(String(20))
+    estimated_setup_cost = Column(String(20))
+    
+    # Planning metadata
+    planned_by = Column(String(255), nullable=False)
+    approved_by = Column(String(255))
+    approval_required = Column(Boolean, default=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    approved_at = Column(DateTime)
+
+
+class ManagedResource(Base):
+    """Resources that are actively managed by Service Collections."""
+    __tablename__ = "managed_resources"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    service_collection_id = Column(UUID(as_uuid=True), ForeignKey("service_collections.id"), nullable=False)
+    
+    # Resource identification
+    vultr_resource_id = Column(String(255), nullable=False, unique=True)
+    resource_type = Column(Enum(ResourceType), nullable=False)
+    resource_name = Column(String(255), nullable=False)
+    
+    # Resource state
+    status = Column(Enum(ResourceStatus), nullable=False, default=ResourceStatus.ACTIVE)
+    configuration = Column(JSON, default=dict)
+    resource_metadata = Column(JSON, default=dict)  # Renamed from 'metadata' to avoid SQLAlchemy conflict
+    
+    # Cost tracking
+    monthly_cost = Column(String(20))
+    last_cost_update = Column(DateTime)
+    
+    # Management metadata
+    managed_by = Column(String(255), nullable=False)  # Service user or individual
+    import_source = Column(String(50))  # How resource was added (created, imported, etc.)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_sync = Column(DateTime)  # Last sync with Vultr API
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API responses."""
+        return {
+            "id": str(self.id),
+            "service_collection_id": str(self.service_collection_id),
+            "vultr_resource_id": self.vultr_resource_id,
+            "resource_type": self.resource_type.value,
+            "resource_name": self.resource_name,
+            "status": self.status.value,
+            "configuration": self.configuration,
+            "metadata": self.resource_metadata,
+            "monthly_cost": self.monthly_cost,
+            "last_cost_update": self.last_cost_update.isoformat() if self.last_cost_update else None,
+            "managed_by": self.managed_by,
+            "import_source": self.import_source,
+            "created_at": self.created_at.isoformat(),
+            "last_sync": self.last_sync.isoformat() if self.last_sync else None
+        }

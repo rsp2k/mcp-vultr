@@ -1,0 +1,126 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  # FastAPI Backend
+  vultr-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: ${DEV_MODE:+development}
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      OAUTH_ENABLED: ${OAUTH_ENABLED}
+      OAUTH_ISSUER_URL: ${OAUTH_ISSUER_URL}
+      OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID}
+      OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      GITHUB_REDIRECT_URI: ${GITHUB_REDIRECT_URI}
+      AUTH_MODE: ${AUTH_MODE}
+      DOMAIN: ${DOMAIN}
+      VULTR_API_KEY: ${VULTR_API_KEY}
+      PROCRASTINATE_DATABASE_URL: ${PROCRASTINATE_DATABASE_URL}
+    volumes:
+      - ${DEV_MODE:+./backend:/app}
+      - ${DEV_MODE:+./shared:/app/shared}
+    command: ${DEV_MODE:+uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload}
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+      - caddy
+
+  # Procrastinate Worker
+  worker:
+    profiles:
+      - with-worker
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: ${DEV_MODE:+development}
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      VULTR_API_KEY: ${VULTR_API_KEY}
+      PROCRASTINATE_DATABASE_URL: ${PROCRASTINATE_DATABASE_URL}
+    volumes:
+      - ${DEV_MODE:+./backend:/app}
+      - ${DEV_MODE:+./shared:/app/shared}
+    command: procrastinate worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  # Astro Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: ${DEV_MODE:+development}
+    environment:
+      PUBLIC_API_URL: https://api.${DOMAIN}
+      PUBLIC_OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID}
+      PUBLIC_OAUTH_ISSUER_URL: ${OAUTH_ISSUER_URL}
+      PUBLIC_DOMAIN: ${DOMAIN}
+      ASTRO_TELEMETRY_DISABLED: 1
+    volumes:
+      - ${DEV_MODE:+./frontend:/app}
+      - ${DEV_MODE:+./shared:/app/shared}
+      - ${DEV_MODE:+/app/node_modules}
+    command: ${DEV_MODE:+npm run dev -- --host 0.0.0.0}
+    expose:
+      - "4321"
+    labels:
+      caddy: ${DOMAIN}
+      caddy.0_reverse_proxy: "/api/* vultr-backend:8000"
+      caddy.1_reverse_proxy: "{{upstreams 4321}}"
+    networks:
+      - app-network
+      - caddy
+
+  # Development Tools
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    profiles:
+      - dev
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@${DOMAIN}
+      PGLADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    labels:
+      caddy: admin.${DOMAIN}
+      caddy.reverse_proxy: "{{upstreams 80}}"
+    depends_on:
+      - postgres
+    networks:
+      - app-network
+      - caddy
+
+volumes:
+  postgres_data:
+
+networks:
+  app-network:
+    driver: bridge
+  caddy:
+    external: true

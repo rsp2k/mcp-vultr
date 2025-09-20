@@ -1,0 +1,273 @@
+# Service Collection Webapp - Caddy Configuration
+# Provides automatic HTTPS with Let's Encrypt and reverse proxy routing
+
+{
+    # Global options
+    email admin@{$DOMAIN}
+    
+    # Enable automatic HTTPS
+    auto_https on
+    
+    # Security headers
+    header /* {
+        # Security headers
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        
+        # Remove server information
+        -Server
+        -X-Powered-By
+    }
+    
+    # Rate limiting
+    rate_limit {
+        zone dynamic {
+            key {remote_host}
+            window 1m
+            events 100
+        }
+        zone api {
+            key {remote_host}
+            window 1m  
+            events 30
+        }
+    }
+}
+
+# Main webapp domain
+{$DOMAIN} {
+    # Rate limiting for general requests
+    rate_limit dynamic
+    
+    # Health check endpoint (bypass auth)
+    handle /health {
+        reverse_proxy frontend:80 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+    
+    # API routes to backend
+    handle /api/* {
+        # Rate limiting for API
+        rate_limit api
+        
+        reverse_proxy backend:8000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            
+            # Timeout configuration
+            timeout 30s
+            
+            # Health check
+            health_uri /health
+            health_interval 30s
+            health_timeout 5s
+        }
+    }
+    
+    # WebSocket support for real-time updates
+    handle /ws/* {
+        reverse_proxy backend:8000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up Connection "Upgrade"
+            header_up Upgrade "websocket"
+        }
+    }
+    
+    # Static assets with caching
+    handle /assets/* {
+        reverse_proxy frontend:80 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+        
+        # Cache static assets
+        header {
+            Cache-Control "public, max-age=31536000, immutable"
+            Expires "1 year"
+        }
+    }
+    
+    # All other requests to frontend (SPA routing)
+    handle {
+        reverse_proxy frontend:80 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+    
+    # Logging
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 100MB
+            roll_keep 5
+            roll_keep_for 720h
+        }
+        format json
+        level INFO
+    }
+    
+    # Error handling
+    handle_errors {
+        @4xx expression {http.error.status_code} >= 400 && {http.error.status_code} < 500
+        @5xx expression {http.error.status_code} >= 500
+        
+        handle @4xx {
+            respond "Client Error: {http.error.status_code}" {http.error.status_code}
+        }
+        
+        handle @5xx {
+            respond "Server Error: {http.error.status_code}" {http.error.status_code}
+        }
+    }
+}
+
+# API subdomain (optional alternative access)
+api.{$DOMAIN} {
+    # All requests to backend API
+    reverse_proxy backend:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        
+        # Health check
+        health_uri /health
+        health_interval 30s
+        health_timeout 5s
+    }
+    
+    # API-specific security headers
+    header {
+        # CORS headers for API access
+        Access-Control-Allow-Origin "{$DOMAIN} https://{$DOMAIN}"
+        Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Authorization, Content-Type, X-Requested-With"
+        Access-Control-Allow-Credentials "true"
+        
+        # API security
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+    }
+    
+    # Handle preflight requests
+    handle OPTIONS {
+        respond 200
+    }
+    
+    # Logging for API subdomain
+    log {
+        output file /var/log/caddy/api-access.log {
+            roll_size 100MB
+            roll_keep 5
+            roll_keep_for 720h
+        }
+        format json
+        level INFO
+    }
+}
+
+# Admin subdomain for PgAdmin
+admin.{$DOMAIN} {
+    # Admin panel access (restricted)
+    @admin_whitelist {
+        remote_ip 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+    }
+    
+    handle @admin_whitelist {
+        reverse_proxy pgadmin:80 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+    
+    handle {
+        respond "Access Denied" 403
+    }
+    
+    # Additional security for admin
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        X-XSS-Protection "1; mode=block"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    }
+}
+
+# Metrics subdomain (for monitoring)
+metrics.{$DOMAIN} {
+    # Prometheus metrics endpoint
+    @metrics_whitelist {
+        remote_ip 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+    }
+    
+    handle @metrics_whitelist {
+        # Expose Caddy metrics
+        handle /caddy/metrics {
+            metrics /metrics
+        }
+        
+        # Backend metrics
+        handle /api/metrics {
+            reverse_proxy backend:8000 {
+                header_up Host {host}
+                header_up X-Real-IP {remote_host}
+                header_up X-Forwarded-For {remote_host}
+                header_up X-Forwarded-Proto {scheme}
+            }
+        }
+        
+        respond "Metrics endpoint" 200
+    }
+    
+    handle {
+        respond "Access Denied" 403
+    }
+}
+
+# Development domain (if needed)
+dev.{$DOMAIN} {
+    # Development version with more permissive settings
+    
+    handle /api/* {
+        reverse_proxy backend:8000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+    
+    handle {
+        reverse_proxy frontend:80 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+    
+    # Development headers (less strict)
+    header {
+        X-Development "true"
+        Access-Control-Allow-Origin "*"
+    }
+}

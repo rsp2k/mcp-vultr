@@ -1,0 +1,34 @@
+# Simple Dockerfile for development
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies including PostgreSQL client libraries
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    libpq-dev \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv
+RUN pip install uv
+
+# Copy dependency files
+COPY pyproject.toml ./
+
+# Install dependencies
+RUN uv sync --extra dev --no-install-project
+
+# Copy source code
+COPY . .
+
+# Install project in development mode
+RUN uv pip install -e .
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Default command for development
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

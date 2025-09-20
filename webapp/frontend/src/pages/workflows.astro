@@ -1,0 +1,582 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Workflows - Service Collections">
+  <div class="py-10" x-data="workflowsPage()" x-init="init()">
+    <header>
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="md:flex md:items-center md:justify-between">
+          <div class="flex-1 min-w-0">
+            <h1 class="text-3xl font-bold leading-tight text-gray-900">Workflow Operations</h1>
+            <p class="mt-2 text-sm text-gray-600">
+              Monitor and manage infrastructure operations and approvals
+            </p>
+          </div>
+          <div class="mt-4 flex md:mt-0 md:ml-4">
+            <button @click="refreshData()" 
+                    class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+              <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+        <!-- Status Overview -->
+        <div class="mt-8">
+          <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+              <div class="p-5">
+                <div class="flex items-center">
+                  <div class="flex-shrink-0">
+                    <div class="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center">
+                      <span class="text-sm font-medium text-gray-600">Q</span>
+                    </div>
+                  </div>
+                  <div class="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt class="text-sm font-medium text-gray-500 truncate">Queued</dt>
+                      <dd class="text-lg font-medium text-gray-900">3</dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+              <div class="p-5">
+                <div class="flex items-center">
+                  <div class="flex-shrink-0">
+                    <div class="h-8 w-8 rounded-full bg-yellow-100 flex items-center justify-center">
+                      <span class="text-sm font-medium text-yellow-600">P</span>
+                    </div>
+                  </div>
+                  <div class="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt class="text-sm font-medium text-gray-500 truncate">Pending</dt>
+                      <dd class="text-lg font-medium text-gray-900">2</dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+              <div class="p-5">
+                <div class="flex items-center">
+                  <div class="flex-shrink-0">
+                    <div class="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+                      <span class="text-sm font-medium text-blue-600">E</span>
+                    </div>
+                  </div>
+                  <div class="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt class="text-sm font-medium text-gray-500 truncate">Executing</dt>
+                      <dd class="text-lg font-medium text-gray-900">1</dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+              <div class="p-5">
+                <div class="flex items-center">
+                  <div class="flex-shrink-0">
+                    <div class="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
+                      <span class="text-sm font-medium text-green-600">C</span>
+                    </div>
+                  </div>
+                  <div class="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt class="text-sm font-medium text-gray-500 truncate">Completed</dt>
+                      <dd class="text-lg font-medium text-gray-900">47</dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+              <div class="p-5">
+                <div class="flex items-center">
+                  <div class="flex-shrink-0">
+                    <div class="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center">
+                      <span class="text-sm font-medium text-red-600">F</span>
+                    </div>
+                  </div>
+                  <div class="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt class="text-sm font-medium text-gray-500 truncate">Failed</dt>
+                      <dd class="text-lg font-medium text-gray-900">2</dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="mt-8 bg-white shadow rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-4">
+              <div>
+                <label for="status-filter" class="block text-sm font-medium text-gray-700">Status</label>
+                <select id="status-filter" name="status-filter" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md">
+                  <option value="">All Statuses</option>
+                  <option value="queued">Queued</option>
+                  <option value="pending_approval">Pending Approval</option>
+                  <option value="executing">Executing</option>
+                  <option value="completed">Completed</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </div>
+              
+              <div>
+                <label for="operation-filter" class="block text-sm font-medium text-gray-700">Operation Type</label>
+                <select id="operation-filter" name="operation-filter" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md">
+                  <option value="">All Operations</option>
+                  <option value="create_instance">Create Instance</option>
+                  <option value="delete_instance">Delete Instance</option>
+                  <option value="create_domain">Create Domain</option>
+                  <option value="create_dns_record">Create DNS Record</option>
+                </select>
+              </div>
+              
+              <div>
+                <label for="collection-filter" class="block text-sm font-medium text-gray-700">Collection</label>
+                <select id="collection-filter" name="collection-filter" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md">
+                  <option value="">All Collections</option>
+                  <option value="prod-web">Production Web</option>
+                  <option value="staging-api">Staging API</option>
+                </select>
+              </div>
+              
+              <div>
+                <label for="time-filter" class="block text-sm font-medium text-gray-700">Time Range</label>
+                <select id="time-filter" name="time-filter" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md">
+                  <option value="24h">Last 24 hours</option>
+                  <option value="7d">Last 7 days</option>
+                  <option value="30d">Last 30 days</option>
+                  <option value="all">All time</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Operations List -->
+        <div class="mt-8 bg-white shadow overflow-hidden sm:rounded-md">
+          <ul role="list" class="divide-y divide-gray-200">
+            <!-- Sample operations for demo -->
+            <li>
+              <div class="px-4 py-4 flex items-center justify-between">
+                <div class="flex items-center">
+                  <div class="flex-shrink-0 h-10 w-10">
+                    <div class="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                      <svg class="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3V6a3 3 0 013-3h13.5a3 3 0 013 3v5.25a3 3 0 01-3 3m-16.5 0a3 3 0 013 3v5.25a3 3 0 013-3m13.5-3a3 3 0 013 3v5.25a3 3 0 01-3 3H6.75a3 3 0 01-3-3v-5.25a3 3 0 013-3m16.5 0h-16.5" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div class="ml-4">
+                    <div class="flex items-center">
+                      <p class="text-sm font-medium text-gray-900">Create Vultr Instance</p>
+                      <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        Executing
+                      </span>
+                    </div>
+                    <div class="mt-1">
+                      <p class="text-sm text-gray-600">
+                        Production Web → web-server-3 (vc2-1c-1gb)
+                      </p>
+                      <p class="text-xs text-gray-500">Started 2 minutes ago</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <button type="button" class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                    View Details
+                  </button>
+                  <button type="button" class="inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </li>
+
+            <li>
+              <div class="px-4 py-4 flex items-center justify-between">
+                <div class="flex items-center">
+                  <div class="flex-shrink-0 h-10 w-10">
+                    <div class="h-10 w-10 rounded-full bg-yellow-100 flex items-center justify-center">
+                      <svg class="h-5 w-5 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div class="ml-4">
+                    <div class="flex items-center">
+                      <p class="text-sm font-medium text-gray-900">Delete DNS Domain</p>
+                      <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                        Pending Approval
+                      </span>
+                    </div>
+                    <div class="mt-1">
+                      <p class="text-sm text-gray-600">
+                        Production Web → old-api.example.com
+                      </p>
+                      <p class="text-xs text-gray-500">Requested by admin@example.com • 1 hour ago</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <button type="button" class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                    Review
+                  </button>
+                  <button type="button" class="inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-green-700 bg-green-100 hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                    Approve
+                  </button>
+                  <button type="button" class="inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                    Reject
+                  </button>
+                </div>
+              </div>
+            </li>
+
+            <li>
+              <div class="px-4 py-4 flex items-center justify-between">
+                <div class="flex items-center">
+                  <div class="flex-shrink-0 h-10 w-10">
+                    <div class="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
+                      <svg class="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div class="ml-4">
+                    <div class="flex items-center">
+                      <p class="text-sm font-medium text-gray-900">Create DNS Record</p>
+                      <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        Completed
+                      </span>
+                    </div>
+                    <div class="mt-1">
+                      <p class="text-sm text-gray-600">
+                        Staging API → api-staging.example.com (A → 192.168.1.100)
+                      </p>
+                      <p class="text-xs text-gray-500">Completed 30 minutes ago • Duration: 2.3s</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <button type="button" class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                    View Details
+                  </button>
+                </div>
+              </div>
+            </li>
+
+            <li>
+              <div class="px-4 py-4 flex items-center justify-between">
+                <div class="flex items-center">
+                  <div class="flex-shrink-0 h-10 w-10">
+                    <div class="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
+                      <svg class="h-5 w-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div class="ml-4">
+                    <div class="flex items-center">
+                      <p class="text-sm font-medium text-gray-900">Update Instance Plan</p>
+                      <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        Failed
+                      </span>
+                    </div>
+                    <div class="mt-1">
+                      <p class="text-sm text-gray-600">
+                        Development → dev-server-1 (vc2-1c-1gb → vc2-2c-4gb)
+                      </p>
+                      <p class="text-xs text-red-500">Error: Insufficient account balance • 2 hours ago</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <button type="button" class="inline-flex items-center px-2.5 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                    View Error
+                  </button>
+                  <button type="button" class="inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Retry
+                  </button>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Pagination -->
+        <div class="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 mt-8 rounded-b-lg">
+          <div class="flex-1 flex justify-between sm:hidden">
+            <a href="#" class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+              Previous
+            </a>
+            <a href="#" class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+              Next
+            </a>
+          </div>
+          <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+            <div>
+              <p class="text-sm text-gray-700">
+                Showing
+                <span class="font-medium">1</span>
+                to
+                <span class="font-medium">4</span>
+                of
+                <span class="font-medium">55</span>
+                results
+              </p>
+            </div>
+            <div>
+              <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                <a href="#" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                  <span class="sr-only">Previous</span>
+                  <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+                  </svg>
+                </a>
+                <a href="#" class="bg-primary-50 border-primary-500 text-primary-600 relative inline-flex items-center px-4 py-2 border text-sm font-medium">
+                  1
+                </a>
+                <a href="#" class="bg-white border-gray-300 text-gray-500 hover:bg-gray-50 relative inline-flex items-center px-4 py-2 border text-sm font-medium">
+                  2
+                </a>
+                <a href="#" class="bg-white border-gray-300 text-gray-500 hover:bg-gray-50 relative inline-flex items-center px-4 py-2 border text-sm font-medium">
+                  3
+                </a>
+                <a href="#" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                  <span class="sr-only">Next</span>
+                  <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                  </svg>
+                </a>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</Layout>
+
+<script>
+function workflowsPage() {
+  return {
+    operations: [],
+    approvals: [],
+    stats: {
+      queued: 0,
+      pending_approval: 0,
+      approved: 0,
+      executing: 0,
+      completed: 0
+    },
+    loading: false,
+    error: null,
+    selectedOperation: null,
+    showApprovalModal: false,
+    approvalDecision: {
+      approve: true,
+      reason: ''
+    },
+
+    async init() {
+      await this.loadData();
+    },
+
+    async loadData() {
+      this.loading = true;
+      this.error = null;
+      
+      try {
+        await Promise.all([
+          this.loadOperations(),
+          this.loadApprovals(),
+          this.loadStats()
+        ]);
+      } catch (error) {
+        console.error('Error loading workflow data:', error);
+        this.error = 'Failed to load workflow data';
+        this.$store.notifications.show('Error loading workflow data', 'error');
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async loadOperations() {
+      const response = await fetch('/api/workflows/operations', {
+        headers: {
+          'Authorization': `Bearer ${this.$store.auth.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to load operations');
+      }
+
+      this.operations = await response.json();
+    },
+
+    async loadApprovals() {
+      const response = await fetch('/api/workflows/approvals', {
+        headers: {
+          'Authorization': `Bearer ${this.$store.auth.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to load approvals');
+      }
+
+      this.approvals = await response.json();
+    },
+
+    async loadStats() {
+      // Calculate stats from operations
+      this.stats = {
+        queued: this.operations.filter(op => op.status === 'queued').length,
+        pending_approval: this.operations.filter(op => op.status === 'pending_approval').length,
+        approved: this.operations.filter(op => op.status === 'approved').length,
+        executing: this.operations.filter(op => op.status === 'executing').length,
+        completed: this.operations.filter(op => op.status === 'completed').length
+      };
+    },
+
+    async refreshData() {
+      await this.loadData();
+      this.$store.notifications.show('Workflow data refreshed', 'success');
+    },
+
+    getStatusColor(status) {
+      const colors = {
+        'queued': 'bg-gray-100 text-gray-800',
+        'pending_approval': 'bg-yellow-100 text-yellow-800',
+        'approved': 'bg-blue-100 text-blue-800',
+        'executing': 'bg-purple-100 text-purple-800',
+        'completed': 'bg-green-100 text-green-800',
+        'failed': 'bg-red-100 text-red-800',
+        'cancelled': 'bg-gray-100 text-gray-800'
+      };
+      return colors[status] || 'bg-gray-100 text-gray-800';
+    },
+
+    getPriorityColor(priority) {
+      const colors = {
+        'low': 'text-gray-500',
+        'normal': 'text-blue-500',
+        'high': 'text-orange-500',
+        'urgent': 'text-red-500'
+      };
+      return colors[priority] || 'text-gray-500';
+    },
+
+    formatDate(dateString) {
+      return new Date(dateString).toLocaleString();
+    },
+
+    formatTimeAgo(dateString) {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+      if (diffDays > 0) return `${diffDays}d ago`;
+      if (diffHours > 0) return `${diffHours}h ago`;
+      if (diffMinutes > 0) return `${diffMinutes}m ago`;
+      return 'Just now';
+    },
+
+    viewOperation(operation) {
+      this.selectedOperation = operation;
+      // Could open a modal or navigate to detail page
+    },
+
+    async executeOperation(operationId) {
+      try {
+        const response = await fetch(`/api/workflows/operations/${operationId}/execute`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.$store.auth.token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Failed to execute operation');
+        }
+
+        this.$store.notifications.show('Operation queued for execution', 'success');
+        await this.loadData();
+      } catch (error) {
+        console.error('Error executing operation:', error);
+        this.$store.notifications.show(error.message, 'error');
+      }
+    },
+
+    openApprovalModal(approval) {
+      this.selectedApproval = approval;
+      this.showApprovalModal = true;
+      this.approvalDecision = {
+        approve: true,
+        reason: ''
+      };
+    },
+
+    closeApprovalModal() {
+      this.showApprovalModal = false;
+      this.selectedApproval = null;
+    },
+
+    async submitApproval() {
+      try {
+        const response = await fetch(`/api/workflows/approvals/${this.selectedApproval.id}/decide`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.$store.auth.token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(this.approvalDecision)
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Failed to submit approval');
+        }
+
+        this.$store.notifications.show(
+          `Operation ${this.approvalDecision.approve ? 'approved' : 'rejected'}`, 
+          'success'
+        );
+        
+        this.closeApprovalModal();
+        await this.loadData();
+      } catch (error) {
+        console.error('Error submitting approval:', error);
+        this.$store.notifications.show(error.message, 'error');
+      }
+    }
+  }
+}
+</script>

@@ -1,0 +1,26 @@
+{
+  "name": "service-collection-frontend",
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "astro dev --host 0.0.0.0 --port 4321",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/tailwind": "^5.1.2",
+    "@astrojs/alpinejs": "^0.4.0",
+    "astro": "^4.15.11",
+    "alpinejs": "^3.14.1",
+    "tailwindcss": "^3.4.13",
+    "@tailwindcss/forms": "^0.5.9",
+    "@tailwindcss/typography": "^0.5.15"
+  },
+  "devDependencies": {
+    "@types/alpinejs": "^3.13.10",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47"
+  }
+}
