@@ -16,7 +16,7 @@ import Layout from '../layouts/Layout.astro';
           <div class="mt-4 flex md:mt-0 md:ml-4">
             <button type="button" 
                     class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                    @click="createCollectionModal.open()">
+                    @click="$dispatch('open-create-modal')">
               <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
@@ -137,7 +137,7 @@ import Layout from '../layouts/Layout.astro';
               <div class="mt-6">
                 <button type="button" 
                         class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                        @click="createCollectionModal.open()">
+                        @click="$dispatch('open-create-modal')">
                   <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                   </svg>
@@ -200,7 +200,9 @@ import Layout from '../layouts/Layout.astro';
   </div>
 
   <!-- Create Collection Modal -->
-  <div x-data="modal()" x-ref="createCollectionModal" x-init="createCollectionModal = this">
+  <div x-data="modal()"
+       x-on:open-create-modal.window="open()"
+       x-on:close-create-modal.window="close()">
     <div x-show="isOpen" 
          class="fixed inset-0 z-50 overflow-y-auto" 
          aria-labelledby="modal-title" 
@@ -245,7 +247,7 @@ import Layout from '../layouts/Layout.astro';
                     });
                     
                     if (result.success) {
-                      createCollectionModal.close();
+                      $dispatch('close-create-modal');
                       this.name = '';
                       this.description = '';
                       this.environment = 'development';
@@ -335,8 +337,3 @@ import Layout from '../layouts/Layout.astro';
     </div>
   </div>
 </Layout>
-
-<script>
-  // Make the modal accessible globally
-  let createCollectionModal;
-</script>
