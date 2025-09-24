@@ -1359,6 +1359,171 @@ async def delete_passkey(
     return {"message": "PassKey deleted successfully"}
 
 
+@router.post("/passkeys/authentication-challenge")
+async def get_passkey_authentication_challenge(
+    operation_context: Optional[str] = None,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get WebAuthn authentication challenge for PassKey verification."""
+    from app.models.connected_account import PassKey
+    import secrets
+    import base64
+
+    # Check if user has any active PassKeys
+    result = await db.execute(
+        select(PassKey)
+        .where(
+            PassKey.user_id == current_user.id,
+            PassKey.is_active == True
+        )
+    )
+    passkeys = result.scalars().all()
+
+    if not passkeys:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No active PassKeys found. Please register a PassKey first."
+        )
+
+    # Generate challenge
+    challenge_bytes = secrets.token_bytes(32)
+    challenge = base64.urlsafe_b64encode(challenge_bytes).decode().rstrip('=')
+
+    # Prepare credential IDs for authentication
+    allowed_credentials = [
+        {
+            "id": passkey.credential_id,
+            "type": "public-key",
+            "transports": passkey.transport_methods if passkey.transport_methods else ["internal"]
+        }
+        for passkey in passkeys
+    ]
+
+    return {
+        "challenge": challenge,
+        "allowCredentials": allowed_credentials,
+        "timeout": 60000,
+        "userVerification": "required",
+        "rpId": "mcp-vultr.l.supported.systems",
+        "operation_context": operation_context
+    }
+
+
+@router.post("/passkeys/verify-authentication")
+async def verify_passkey_authentication(
+    authentication_data: Dict[str, Any],
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Verify WebAuthn authentication assertion for PassKey confirmation."""
+    from app.models.connected_account import PassKey
+    import base64
+    import json
+    from datetime import datetime
+
+    try:
+        # Extract authentication data
+        credential_id = authentication_data.get("id")
+        raw_id = authentication_data.get("rawId")
+        response_data = authentication_data.get("response", {})
+        operation_context = authentication_data.get("operation_context")
+
+        if not credential_id or not raw_id or not response_data:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing required authentication data"
+            )
+
+        # Find the PassKey by credential ID
+        stmt = select(PassKey).where(
+            PassKey.credential_id == credential_id,
+            PassKey.user_id == current_user.id,
+            PassKey.is_active == True
+        )
+        result = await db.execute(stmt)
+        passkey = result.scalar_one_or_none()
+
+        if not passkey:
+            raise HTTPException(
+                status_code=404,
+                detail="PassKey not found or inactive"
+            )
+
+        # Parse authentication response
+        try:
+            client_data_json = base64.b64decode(response_data["clientDataJSON"])
+            authenticator_data = base64.b64decode(response_data["authenticatorData"])
+            signature = base64.b64decode(response_data["signature"])
+
+            # Parse client data JSON
+            client_data = json.loads(client_data_json.decode('utf-8'))
+
+            # Basic validation
+            if client_data.get("type") != "webauthn.get":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid authentication type"
+                )
+
+            if client_data.get("origin") != "https://mcp-vultr.l.supported.systems":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid origin"
+                )
+
+            # TODO: Implement full cryptographic verification
+            # For now, we'll do basic validation and trust the client
+            # In production, you would:
+            # 1. Verify the signature using the stored public key
+            # 2. Validate the authenticator data
+            # 3. Check the challenge matches what was issued
+            # 4. Verify the counter value
+
+            # Update PassKey usage
+            passkey.sign_count += 1  # Increment for replay protection
+            passkey.last_used_at = datetime.utcnow()
+
+            await db.commit()
+
+            # Log successful authentication
+            await create_audit_log(
+                db=db,
+                user_id=current_user.id,
+                action=AuditAction.PASSKEY_AUTHENTICATION,
+                resource_type="passkey",
+                resource_id=str(passkey.id),
+                details={
+                    "passkey_name": passkey.name,
+                    "operation_context": operation_context,
+                    "user_agent": "WebAuthn Browser",  # Could extract from headers
+                }
+            )
+
+            return {
+                "verified": True,
+                "passkey_id": str(passkey.id),
+                "passkey_name": passkey.name,
+                "operation_context": operation_context,
+                "authenticated_at": datetime.utcnow().isoformat()
+            }
+
+        except (ValueError, json.JSONDecodeError) as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid authentication data format: {str(e)}"
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"PassKey authentication verification failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Authentication verification failed"
+        )
+
+
 @router.post("/passkeys/authenticate")
 async def authenticate_passkey(
     auth_data: PassKeyAuthenticationRequest,

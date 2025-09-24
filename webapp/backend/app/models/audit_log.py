@@ -24,6 +24,13 @@ class AuditAction(enum.Enum):
     PASSWORD_CHANGED = "password_changed"
     API_KEY_CREATED = "api_key_created"
     API_KEY_USED = "api_key_used"
+
+    # PassKey/WebAuthn actions
+    PASSKEY_REGISTERED = "passkey_registered"
+    PASSKEY_AUTHENTICATION = "passkey_authentication"
+    PASSKEY_DELETED = "passkey_deleted"
+    CONNECTED_ACCOUNT_ADDED = "connected_account_added"
+    CONNECTED_ACCOUNT_REMOVED = "connected_account_removed"
     
     # Service Collection actions
     COLLECTION_CREATED = "collection_created"

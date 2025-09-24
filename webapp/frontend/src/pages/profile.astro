@@ -616,6 +616,144 @@ import Layout from '../layouts/Layout.astro';
                     } finally {
                       this.loading = false;
                     }
+                  },
+
+                  async authenticateWithPassKey(operationContext = null) {
+                    try {
+                      this.loading = true;
+                      this.error = null;
+
+                      const auth = Alpine.store('auth');
+
+                      // Check WebAuthn support
+                      if (!window.PublicKeyCredential) {
+                        throw new Error('WebAuthn is not supported in this browser');
+                      }
+
+                      // Get authentication challenge from server
+                      const challengeResponse = await fetch('/api/auth/passkeys/authentication-challenge', {
+                        method: 'POST',
+                        headers: {
+                          ...auth.getAuthHeaders(),
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ operation_context: operationContext }),
+                      });
+
+                      if (!challengeResponse.ok) {
+                        const error = await challengeResponse.json();
+                        throw new Error(error.detail || 'Failed to get authentication challenge');
+                      }
+
+                      const challengeData = await challengeResponse.json();
+
+                      // Convert base64url challenge to ArrayBuffer
+                      const challenge = Uint8Array.from(atob(challengeData.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+
+                      // Convert allowCredentials to proper format
+                      const allowCredentials = challengeData.allowCredentials.map(cred => ({
+                        ...cred,
+                        id: Uint8Array.from(atob(cred.id.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))
+                      }));
+
+                      // Perform WebAuthn authentication
+                      const assertion = await navigator.credentials.get({
+                        publicKey: {
+                          challenge: challenge,
+                          allowCredentials: allowCredentials,
+                          rpId: challengeData.rpId,
+                          timeout: challengeData.timeout || 60000,
+                          userVerification: challengeData.userVerification || 'preferred'
+                        }
+                      });
+
+                      if (!assertion) {
+                        throw new Error('PassKey authentication was cancelled');
+                      }
+
+                      // Convert assertion response to format expected by server
+                      const authenticationData = {
+                        id: assertion.id,
+                        rawId: btoa(String.fromCharCode(...new Uint8Array(assertion.rawId))),
+                        response: {
+                          clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(assertion.response.clientDataJSON))),
+                          authenticatorData: btoa(String.fromCharCode(...new Uint8Array(assertion.response.authenticatorData))),
+                          signature: btoa(String.fromCharCode(...new Uint8Array(assertion.response.signature))),
+                          userHandle: assertion.response.userHandle ? btoa(String.fromCharCode(...new Uint8Array(assertion.response.userHandle))) : null,
+                        },
+                        type: assertion.type,
+                      };
+
+                      // Send assertion to server for verification
+                      const verificationResponse = await fetch('/api/auth/passkeys/verify-authentication', {
+                        method: 'POST',
+                        headers: {
+                          ...auth.getAuthHeaders(),
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                          ...authenticationData,
+                          operation_context: operationContext
+                        }),
+                      });
+
+                      if (!verificationResponse.ok) {
+                        const error = await verificationResponse.json();
+                        throw new Error(error.detail || 'Failed to verify PassKey authentication');
+                      }
+
+                      const result = await verificationResponse.json();
+                      console.log('PassKey authentication successful:', result);
+
+                      return result;
+
+                    } catch (error) {
+                      console.error('Failed to authenticate with PassKey:', error);
+                      this.error = error.message;
+                      throw error;
+                    } finally {
+                      this.loading = false;
+                    }
+                  },
+
+                  async testPassKeyAuth() {
+                    try {
+                      // Import the PassKey utilities dynamically
+                      const { confirmWithPassKey } = await import('/src/js/passkey-utils.js');
+
+                      // Show confirmation dialog with PassKey authentication
+                      const confirmed = await confirmWithPassKey(
+                        'This is a demonstration of PassKey authentication for secure operations. Confirm with your PassKey to proceed.',
+                        'profile_test_authentication'
+                      );
+
+                      if (confirmed) {
+                        // Show success message
+                        const successDiv = document.createElement('div');
+                        successDiv.className = 'fixed top-4 right-4 z-50 max-w-sm w-full bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded shadow-lg';
+                        successDiv.innerHTML = `
+                          <div class="flex items-center">
+                            <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <strong>PassKey authentication successful!</strong>
+                          </div>
+                          <p class="text-sm mt-1">Your identity has been verified with your PassKey.</p>
+                        `;
+                        document.body.appendChild(successDiv);
+
+                        // Remove success message after 5 seconds
+                        setTimeout(() => {
+                          if (successDiv.parentNode) {
+                            successDiv.parentNode.removeChild(successDiv);
+                          }
+                        }, 5000);
+                      }
+
+                    } catch (error) {
+                      console.error('PassKey authentication test failed:', error);
+                      this.error = `Test failed: ${error.message}`;
+                    }
                   }
                 }"
                 x-init="loadConnectedAccounts()">
@@ -779,6 +917,25 @@ import Layout from '../layouts/Layout.astro';
                             </div>
                           </div>
                         </template>
+                      </div>
+
+                      <!-- Test PassKey Authentication Button -->
+                      <div x-show="passkeys.length > 0" class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div class="flex items-center justify-between">
+                          <div>
+                            <h5 class="text-sm font-medium text-blue-900">Test PassKey Authentication</h5>
+                            <p class="text-sm text-blue-700">Demonstrate secure confirmation functionality</p>
+                          </div>
+                          <button type="button"
+                                  @click="testPassKeyAuth()"
+                                  :disabled="loading"
+                                  class="inline-flex items-center px-3 py-2 border border-blue-300 shadow-sm text-sm leading-4 font-medium rounded-md text-blue-700 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.623 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                            </svg>
+                            Test Authentication
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
