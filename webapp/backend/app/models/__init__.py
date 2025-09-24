@@ -5,34 +5,47 @@ from app.models.workflow import WorkflowOperation, ApprovalRequest, OperationSta
 from app.models.resource import PlannedResource, ManagedResource, ResourceType, ResourceStatus
 from app.models.user import User, UserRole, UserStatus
 from app.models.audit_log import AuditLogEntry, AuditAction, AuditSeverity
+from app.models.connected_account import (
+    ConnectedAccount, PassKey, AuthenticationSession,
+    ProviderType, PassKeyAuthenticatorType
+)
 
 __all__ = [
     # Core models
     "ServiceCollection",
     "WorkflowOperation",
-    "ApprovalRequest", 
+    "ApprovalRequest",
     "PlannedResource",
     "ManagedResource",
     "User",
     "AuditLogEntry",
-    
+
+    # Authentication models
+    "ConnectedAccount",
+    "PassKey",
+    "AuthenticationSession",
+
     # Enums for Service Collections
     "CollectionEnvironment",
     "CollectionStatus",
-    
+
     # Enums for Workflows
-    "OperationStatus", 
+    "OperationStatus",
     "OperationType",
     "ApprovalStatus",
-    
+
     # Enums for Resources
     "ResourceType",
     "ResourceStatus",
-    
+
     # Enums for Users
     "UserRole",
     "UserStatus",
-    
+
+    # Enums for Authentication
+    "ProviderType",
+    "PassKeyAuthenticatorType",
+
     # Enums for Audit Logging
     "AuditAction",
     "AuditSeverity"

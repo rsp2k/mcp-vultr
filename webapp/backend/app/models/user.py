@@ -57,6 +57,7 @@ class User(Base):
     last_name = Column(String(100), nullable=False)
     display_name = Column(String(200), nullable=True)
     avatar_url = Column(String(500), nullable=True)
+    phone = Column(String(20), nullable=True)
     
     # Account settings
     role = Column(Enum(UserRole), nullable=False, default=UserRole.VIEWER)
@@ -108,6 +109,25 @@ class User(Base):
         back_populates="assigned_to"
     )
     
+    # Authentication relationships
+    connected_accounts = relationship(
+        "ConnectedAccount",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+    passkeys = relationship(
+        "PassKey",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+    authentication_sessions = relationship(
+        "AuthenticationSession",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
     # Note: WorkflowApproval and WorkflowTemplate relationships
     # commented out until these models are implemented
     # approvals_given = relationship(

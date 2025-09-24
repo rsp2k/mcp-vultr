@@ -1,6 +1,7 @@
 import type { Alpine } from 'alpinejs'
 
 export default (Alpine: Alpine) => {
+
   // Global Alpine.js configuration and stores
 
   // Authentication store

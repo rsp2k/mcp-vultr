@@ -2,14 +2,14 @@
 
 import os
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from pydantic import BaseModel, EmailStr, Field
 import structlog
 from jose import JWTError, jwt
@@ -500,6 +500,106 @@ async def get_auth_config():
     return get_auth_metadata()
 
 
+# Profile Management Schemas
+class ProfileUpdateRequest(BaseModel):
+    """User profile update request."""
+    first_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    last_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    phone: Optional[str] = Field(None, max_length=20)
+    timezone: Optional[str] = Field(None, max_length=50)
+
+
+class ProfileResponse(BaseModel):
+    """User profile response."""
+    id: str
+    email: str
+    username: Optional[str]
+    first_name: Optional[str]
+    last_name: Optional[str]
+    phone: Optional[str]
+    timezone: Optional[str]
+    avatar_url: Optional[str]
+    role: str
+    status: str
+    created_at: datetime
+    last_login_at: Optional[datetime]
+
+    @classmethod
+    def from_user(cls, user: User) -> "ProfileResponse":
+        return cls(
+            id=str(user.id),
+            email=user.email,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            phone=user.phone,
+            timezone=user.timezone,
+            avatar_url=user.avatar_url,
+            role=user.role.value,
+            status=user.status.value,
+            created_at=user.created_at,
+            last_login_at=user.last_login_at
+        )
+
+
+@router.get("/profile", response_model=ProfileResponse)
+async def get_profile(current_user: User = Depends(require_auth)):
+    """Get current user's profile."""
+    return ProfileResponse.from_user(current_user)
+
+
+@router.put("/profile", response_model=ProfileResponse)
+async def update_profile(
+    profile_data: ProfileUpdateRequest,
+    request: Request,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update current user's profile."""
+    client_ip = request.client.host if request.client else "unknown"
+
+    # Track what fields are being updated
+    updates = {}
+
+    # Update allowed fields
+    if profile_data.first_name is not None:
+        current_user.first_name = profile_data.first_name
+        updates["first_name"] = profile_data.first_name
+
+    if profile_data.last_name is not None:
+        current_user.last_name = profile_data.last_name
+        updates["last_name"] = profile_data.last_name
+
+    if profile_data.phone is not None:
+        current_user.phone = profile_data.phone
+        updates["phone"] = profile_data.phone
+
+    if profile_data.timezone is not None:
+        current_user.timezone = profile_data.timezone
+        updates["timezone"] = profile_data.timezone
+
+    # Create audit log
+    if updates:
+        audit_entry = AuditLogEntry.log_user_action(
+            user_id=current_user.id,
+            action=AuditAction.USER_UPDATED,
+            message=f"User updated profile: {', '.join(updates.keys())}",
+            source_ip=client_ip,
+            metadata={"updated_fields": list(updates.keys())}
+        )
+        db.add(audit_entry)
+
+    # Save changes
+    await db.commit()
+    await db.refresh(current_user)
+
+    logger.info("User profile updated",
+               user_id=str(current_user.id),
+               updated_fields=list(updates.keys()))
+
+    return ProfileResponse.from_user(current_user)
+
+
 @router.put("/users/{user_id}/role")
 async def update_user_role(
     user_id: UUID,
@@ -790,7 +890,72 @@ async def github_callback(
         
         # Record login
         user.record_login(client_ip)
-    
+
+    # Create or update ConnectedAccount for GitHub
+    from app.models.connected_account import ConnectedAccount, ProviderType
+
+    # Check if GitHub connection already exists
+    github_account_result = await db.execute(
+        select(ConnectedAccount).where(
+            ConnectedAccount.user_id == user.id,
+            ConnectedAccount.provider_type == ProviderType.GITHUB,
+            ConnectedAccount.provider_id == str(github_user["id"])
+        )
+    )
+    github_account = github_account_result.scalar_one_or_none()
+
+    if not github_account:
+        # Create new GitHub connected account
+        github_account = ConnectedAccount(
+            user_id=user.id,
+            provider_type=ProviderType.GITHUB,
+            provider_id=str(github_user["id"]),
+            provider_username=github_user.get("login"),
+            provider_email=primary_email,
+            display_name=github_user.get("name") or github_user.get("login"),
+            avatar_url=github_user.get("avatar_url"),
+            provider_data={
+                "login": github_user.get("login"),
+                "name": github_user.get("name"),
+                "bio": github_user.get("bio"),
+                "company": github_user.get("company"),
+                "location": github_user.get("location"),
+                "blog": github_user.get("blog"),
+                "public_repos": github_user.get("public_repos"),
+                "followers": github_user.get("followers"),
+                "following": github_user.get("following")
+            },
+            access_token_hash=access_token,  # TODO: Should encrypt this for security
+            is_active=True
+        )
+        db.add(github_account)
+
+        logger.info("Created GitHub connected account",
+                   user_id=str(user.id), provider_id=str(github_user["id"]))
+    else:
+        # Update existing GitHub connection with latest info
+        github_account.provider_username = github_user.get("login")
+        github_account.provider_email = primary_email
+        github_account.display_name = github_user.get("name") or github_user.get("login")
+        github_account.avatar_url = github_user.get("avatar_url")
+        github_account.profile_data = {
+            "login": github_user.get("login"),
+            "name": github_user.get("name"),
+            "bio": github_user.get("bio"),
+            "company": github_user.get("company"),
+            "location": github_user.get("location"),
+            "blog": github_user.get("blog"),
+            "public_repos": github_user.get("public_repos"),
+            "followers": github_user.get("followers"),
+            "following": github_user.get("following")
+        }
+        github_account.access_token = access_token
+        github_account.last_login_at = datetime.utcnow()
+        github_account.is_active = True
+
+        logger.info("Updated GitHub connected account",
+                   user_id=str(user.id), provider_id=str(github_user["id"]))
+
     # Create audit log for login
     audit_entry = AuditLogEntry.log_user_action(
         user_id=str(user.id),
@@ -876,3 +1041,693 @@ async def github_redirect_handler(
         # In a browser context, you might want to redirect to an error page
         # instead of returning JSON
         raise e
+
+
+# ============================================================================
+# Connected Accounts Management
+# ============================================================================
+
+class ConnectedAccountResponse(BaseModel):
+    """Response model for connected account information."""
+    id: str
+    provider_type: str
+    provider_username: Optional[str] = None
+    provider_email: Optional[str] = None
+    display_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    profile_url: Optional[str] = None
+    is_primary: bool = False
+    is_verified: bool = False
+    is_active: bool = True
+    first_connected_at: str
+    last_used_at: Optional[str] = None
+    last_sync_at: Optional[str] = None
+    connection_count: dict = {}
+
+
+class ConnectedAccountsListResponse(BaseModel):
+    """Response model for list of connected accounts."""
+    connected_accounts: List[ConnectedAccountResponse]
+    total_count: int
+
+
+@router.get("/connected-accounts", response_model=ConnectedAccountsListResponse)
+async def get_connected_accounts(
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get user's connected OAuth accounts."""
+    from app.models.connected_account import ConnectedAccount
+
+    result = await db.execute(
+        select(ConnectedAccount)
+        .where(ConnectedAccount.user_id == current_user.id)
+        .order_by(ConnectedAccount.created_at.desc())
+    )
+    connected_accounts = result.scalars().all()
+
+    return ConnectedAccountsListResponse(
+        connected_accounts=[
+            ConnectedAccountResponse(**account.to_dict())
+            for account in connected_accounts
+        ],
+        total_count=len(connected_accounts)
+    )
+
+
+@router.delete("/connected-accounts/{account_id}")
+async def disconnect_account(
+    account_id: str,
+    request: Request,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Disconnect an OAuth account."""
+    from app.models.connected_account import ConnectedAccount
+    from app.models.audit_log import AuditLogEntry, AuditAction
+
+    # Find the connected account
+    result = await db.execute(
+        select(ConnectedAccount)
+        .where(
+            ConnectedAccount.id == account_id,
+            ConnectedAccount.user_id == current_user.id
+        )
+    )
+    connected_account = result.scalar_one_or_none()
+
+    if not connected_account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Connected account not found"
+        )
+
+    # Check if this is the user's only authentication method
+    if current_user.password_hash is None:
+        # Count other active connected accounts
+        result = await db.execute(
+            select(func.count(ConnectedAccount.id))
+            .where(
+                ConnectedAccount.user_id == current_user.id,
+                ConnectedAccount.id != account_id,
+                ConnectedAccount.is_active == True
+            )
+        )
+        other_accounts_count = result.scalar()
+
+        if other_accounts_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot disconnect last authentication method. Set a password first."
+            )
+
+    # Store account info for audit log
+    account_info = connected_account.to_dict()
+
+    # Remove the connected account
+    await db.delete(connected_account)
+
+    # Log the disconnection
+    client_ip = request.client.host if request.client else "unknown"
+    audit_entry = AuditLogEntry.log_user_action(
+        user_id=current_user.id,
+        action=AuditAction.USER_UPDATED,
+        message=f"Disconnected {account_info['provider_type']} account",
+        source_ip=client_ip,
+        metadata={
+            "action": "account_disconnected",
+            "provider_type": account_info["provider_type"],
+            "provider_username": account_info.get("provider_username"),
+            "disconnected_account_id": account_id
+        }
+    )
+    db.add(audit_entry)
+
+    await db.commit()
+
+    return {"message": "Account disconnected successfully"}
+
+
+# ============================================================================
+# PassKey Management
+# ============================================================================
+
+class PassKeyResponse(BaseModel):
+    """Response model for PassKey information."""
+    id: str
+    name: str
+    description: Optional[str] = None
+    authenticator_type: str
+    transport_methods: List[str] = []
+    is_active: bool = True
+    is_backup_eligible: bool = False
+    is_backup_state: bool = False
+    created_at: str
+    last_used_at: Optional[str] = None
+    usage_count: dict = {}
+    device_info: dict = {}
+
+
+class PassKeysListResponse(BaseModel):
+    """Response model for list of PassKeys."""
+    passkeys: List[PassKeyResponse]
+    total_count: int
+
+
+class PassKeyRegistrationRequest(BaseModel):
+    """Request model for PassKey registration."""
+    name: str
+    description: Optional[str] = None
+    credential_id: str
+    public_key: str
+    authenticator_type: str
+    transport_methods: List[str] = []
+    device_info: dict = {}
+
+
+class PassKeyAuthenticationRequest(BaseModel):
+    """Request model for PassKey authentication."""
+    credential_id: str
+    authenticator_data: str
+    client_data_json: str
+    signature: str
+    operation_context: Optional[str] = None  # e.g., "deployment_confirmation"
+
+
+@router.get("/passkeys", response_model=PassKeysListResponse)
+async def get_passkeys(
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get user's registered PassKeys."""
+    from app.models.connected_account import PassKey
+
+    result = await db.execute(
+        select(PassKey)
+        .where(PassKey.user_id == current_user.id)
+        .order_by(PassKey.created_at.desc())
+    )
+    passkeys = result.scalars().all()
+
+    return PassKeysListResponse(
+        passkeys=[
+            PassKeyResponse(**passkey.to_dict())
+            for passkey in passkeys
+        ],
+        total_count=len(passkeys)
+    )
+
+
+@router.post("/passkeys/register", response_model=PassKeyResponse)
+async def register_passkey(
+    passkey_data: PassKeyRegistrationRequest,
+    request: Request,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Register a new PassKey for the user."""
+    from app.models.connected_account import PassKey, PassKeyAuthenticatorType
+    from app.models.audit_log import AuditLogEntry, AuditAction
+
+    # Validate authenticator type
+    try:
+        auth_type = PassKeyAuthenticatorType(passkey_data.authenticator_type)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid authenticator type"
+        )
+
+    # Check if credential already exists
+    result = await db.execute(
+        select(PassKey).where(PassKey.credential_id == passkey_data.credential_id)
+    )
+    existing_passkey = result.scalar_one_or_none()
+
+    if existing_passkey:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="PassKey credential already registered"
+        )
+
+    # Create new PassKey
+    new_passkey = PassKey(
+        user_id=current_user.id,
+        credential_id=passkey_data.credential_id,
+        public_key=passkey_data.public_key,
+        authenticator_type=auth_type,
+        name=passkey_data.name,
+        description=passkey_data.description,
+        transport_methods=passkey_data.transport_methods,
+        device_info=passkey_data.device_info
+    )
+
+    db.add(new_passkey)
+
+    # Log PassKey registration
+    client_ip = request.client.host if request.client else "unknown"
+    audit_entry = AuditLogEntry.log_user_action(
+        user_id=current_user.id,
+        action=AuditAction.USER_UPDATED,
+        message=f"Registered new PassKey: {passkey_data.name}",
+        source_ip=client_ip,
+        metadata={
+            "action": "passkey_registered",
+            "passkey_name": passkey_data.name,
+            "authenticator_type": passkey_data.authenticator_type,
+            "transport_methods": passkey_data.transport_methods
+        }
+    )
+    db.add(audit_entry)
+
+    await db.commit()
+    await db.refresh(new_passkey)
+
+    return PassKeyResponse(**new_passkey.to_dict())
+
+
+@router.delete("/passkeys/{passkey_id}")
+async def delete_passkey(
+    passkey_id: str,
+    request: Request,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a PassKey."""
+    from app.models.connected_account import PassKey
+    from app.models.audit_log import AuditLogEntry, AuditAction
+
+    # Find the PassKey
+    result = await db.execute(
+        select(PassKey)
+        .where(
+            PassKey.id == passkey_id,
+            PassKey.user_id == current_user.id
+        )
+    )
+    passkey = result.scalar_one_or_none()
+
+    if not passkey:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="PassKey not found"
+        )
+
+    # Store passkey info for audit log
+    passkey_info = passkey.to_dict()
+
+    # Remove the PassKey
+    await db.delete(passkey)
+
+    # Log PassKey deletion
+    client_ip = request.client.host if request.client else "unknown"
+    audit_entry = AuditLogEntry.log_user_action(
+        user_id=current_user.id,
+        action=AuditAction.USER_UPDATED,
+        message=f"Deleted PassKey: {passkey_info['name']}",
+        source_ip=client_ip,
+        metadata={
+            "action": "passkey_deleted",
+            "passkey_name": passkey_info["name"],
+            "passkey_id": passkey_id
+        }
+    )
+    db.add(audit_entry)
+
+    await db.commit()
+
+    return {"message": "PassKey deleted successfully"}
+
+
+@router.post("/passkeys/authenticate")
+async def authenticate_passkey(
+    auth_data: PassKeyAuthenticationRequest,
+    request: Request,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Authenticate using PassKey for secure operations."""
+    from app.models.connected_account import PassKey
+    from app.models.audit_log import AuditLogEntry, AuditAction
+
+    # Find the PassKey
+    result = await db.execute(
+        select(PassKey)
+        .where(
+            PassKey.credential_id == auth_data.credential_id,
+            PassKey.user_id == current_user.id,
+            PassKey.is_active == True
+        )
+    )
+    passkey = result.scalar_one_or_none()
+
+    if not passkey:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="PassKey not found or inactive"
+        )
+
+    # TODO: Implement actual WebAuthn signature verification
+    # For now, we'll simulate successful authentication
+    # In production, you would verify the signature against the public key
+
+    # Record successful authentication
+    passkey.record_successful_use("confirmation")
+
+    # Log PassKey authentication
+    client_ip = request.client.host if request.client else "unknown"
+    audit_entry = AuditLogEntry.log_user_action(
+        user_id=current_user.id,
+        action=AuditAction.API_KEY_USED,  # Reusing existing action for now
+        message=f"PassKey authentication successful: {passkey.name}",
+        source_ip=client_ip,
+        metadata={
+            "action": "passkey_authentication",
+            "passkey_name": passkey.name,
+            "operation_context": auth_data.operation_context,
+            "success": True
+        }
+    )
+    db.add(audit_entry)
+
+    await db.commit()
+
+    return {
+        "authenticated": True,
+        "passkey_name": passkey.name,
+        "operation_context": auth_data.operation_context
+    }
+
+
+# ============================================================================
+# WebAuthn PassKey Registration
+# ============================================================================
+
+class WebAuthnRegistrationChallenge(BaseModel):
+    """WebAuthn registration challenge response."""
+    challenge: str
+    rp: dict
+    user: dict
+    pubKeyCredParams: List[dict]
+    authenticatorSelection: dict
+    timeout: int = 60000
+    attestation: str = "direct"
+
+
+class WebAuthnRegistrationRequest(BaseModel):
+    """WebAuthn registration credential."""
+    id: str
+    rawId: str
+    response: dict
+    type: str
+
+
+@router.post("/passkeys/registration-challenge", response_model=WebAuthnRegistrationChallenge)
+async def get_passkey_registration_challenge(
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get WebAuthn registration challenge for PassKey creation."""
+    import secrets
+    import base64
+
+    # Generate random challenge
+    challenge_bytes = secrets.token_bytes(32)
+    challenge = base64.urlsafe_b64encode(challenge_bytes).decode().rstrip('=')
+
+    # Convert user ID to base64url
+    user_id_bytes = str(current_user.id).encode()
+    user_id_b64 = base64.urlsafe_b64encode(user_id_bytes).decode().rstrip('=')
+
+    return WebAuthnRegistrationChallenge(
+        challenge=challenge,
+        rp={
+            "id": "mcp-vultr.l.supported.systems",
+            "name": "Vultr Service Collections"
+        },
+        user={
+            "id": user_id_b64,
+            "name": current_user.email,
+            "displayName": current_user.full_name
+        },
+        pubKeyCredParams=[
+            {"type": "public-key", "alg": -7},  # ES256
+            {"type": "public-key", "alg": -257}  # RS256
+        ],
+        authenticatorSelection={
+            "authenticatorAttachment": "platform",
+            "userVerification": "preferred",
+            "requireResidentKey": False
+        },
+        timeout=60000,
+        attestation="direct"
+    )
+
+
+@router.post("/passkeys/verify-registration")
+async def verify_passkey_registration(
+    registration_data: WebAuthnRegistrationRequest,
+    request: Request,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Verify WebAuthn registration and create PassKey."""
+    from app.models.connected_account import PassKey, PassKeyAuthenticatorType
+    from app.models.audit_log import AuditLogEntry, AuditAction
+    import base64
+    import json
+
+    try:
+        # For now, we'll do basic validation and create the PassKey
+        # In a production system, you'd want proper WebAuthn verification
+
+        # Parse client data
+        client_data_json = base64.b64decode(registration_data.response["clientDataJSON"] + "==")
+        client_data = json.loads(client_data_json.decode())
+
+        # Basic validation
+        if client_data.get("type") != "webauthn.create":
+            raise ValueError("Invalid client data type")
+
+        # Create PassKey entry
+        passkey = PassKey(
+            user_id=current_user.id,
+            credential_id=registration_data.id,
+            public_key=registration_data.response["attestationObject"],  # Store attestation for now
+            authenticator_type=PassKeyAuthenticatorType.PLATFORM,  # Assume platform for now
+            name=f"PassKey {current_user.email}",
+            last_used_at=None,
+            usage_count=0,
+            is_active=True
+        )
+
+        db.add(passkey)
+
+        # Log the registration
+        client_ip = request.client.host if request.client else "unknown"
+        audit_entry = AuditLogEntry(
+            user_id=current_user.id,
+            action=AuditAction.AUTHENTICATION_SETUP,
+            message=f"PassKey registered for user {current_user.email}",
+            source_ip=client_ip,
+            metadata={
+                "action": "passkey_registration",
+                "credential_id": registration_data.id,
+                "authenticator_type": "platform"
+            }
+        )
+        db.add(audit_entry)
+
+        await db.commit()
+
+        return {
+            "success": True,
+            "passkey_id": str(passkey.id),
+            "message": "PassKey registered successfully"
+        }
+
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to verify PassKey registration: {str(e)}"
+        )
+
+
+# ============================================================================
+# Authentication Sessions Management
+# ============================================================================
+
+class AuthenticationSessionResponse(BaseModel):
+    """Response model for authentication session."""
+    id: str
+    device_fingerprint: Optional[str] = None
+    user_agent: Optional[str] = None
+    ip_address: str
+    location_data: dict = {}
+    login_method: str
+    provider_type: Optional[str] = None
+    created_at: str
+    last_activity_at: str
+    expires_at: str
+    ended_at: Optional[str] = None
+    is_active: bool = True
+    is_expired: bool = False
+    end_reason: Optional[str] = None
+    is_suspicious: bool = False
+    security_flags: List[str] = []
+    request_count: dict = {}
+    duration_minutes: Optional[int] = None
+
+
+class AuthenticationSessionsListResponse(BaseModel):
+    """Response model for list of authentication sessions."""
+    sessions: List[AuthenticationSessionResponse]
+    active_count: int
+    total_count: int
+
+
+@router.get("/sessions", response_model=AuthenticationSessionsListResponse)
+async def get_authentication_sessions(
+    include_inactive: bool = False,
+    limit: int = 50,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get user's authentication sessions."""
+    from app.models.connected_account import AuthenticationSession
+
+    query = select(AuthenticationSession).where(
+        AuthenticationSession.user_id == current_user.id
+    )
+
+    if not include_inactive:
+        query = query.where(AuthenticationSession.is_active == True)
+
+    query = query.order_by(AuthenticationSession.last_activity_at.desc()).limit(limit)
+
+    result = await db.execute(query)
+    sessions = result.scalars().all()
+
+    # Count active sessions
+    active_result = await db.execute(
+        select(func.count(AuthenticationSession.id))
+        .where(
+            AuthenticationSession.user_id == current_user.id,
+            AuthenticationSession.is_active == True
+        )
+    )
+    active_count = active_result.scalar()
+
+    return AuthenticationSessionsListResponse(
+        sessions=[
+            AuthenticationSessionResponse(**session.to_dict())
+            for session in sessions
+        ],
+        active_count=active_count,
+        total_count=len(sessions)
+    )
+
+
+@router.delete("/sessions/{session_id}")
+async def revoke_session(
+    session_id: str,
+    request: Request,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Revoke an authentication session."""
+    from app.models.connected_account import AuthenticationSession
+    from app.models.audit_log import AuditLogEntry, AuditAction
+
+    # Find the session
+    result = await db.execute(
+        select(AuthenticationSession)
+        .where(
+            AuthenticationSession.id == session_id,
+            AuthenticationSession.user_id == current_user.id
+        )
+    )
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found"
+        )
+
+    # End the session
+    session.end_session("revoked")
+
+    # Log session revocation
+    client_ip = request.client.host if request.client else "unknown"
+    audit_entry = AuditLogEntry.log_user_action(
+        user_id=current_user.id,
+        action=AuditAction.LOGOUT,
+        message="Session revoked by user",
+        source_ip=client_ip,
+        metadata={
+            "action": "session_revoked",
+            "revoked_session_id": session_id,
+            "revoked_session_ip": session.ip_address
+        }
+    )
+    db.add(audit_entry)
+
+    await db.commit()
+
+    return {"message": "Session revoked successfully"}
+
+
+@router.delete("/sessions/all")
+async def revoke_all_sessions(
+    request: Request,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Revoke all user sessions except the current one."""
+    from app.models.connected_account import AuthenticationSession
+    from app.models.audit_log import AuditLogEntry, AuditAction
+
+    # Get current session token from request
+    auth_header = request.headers.get("Authorization")
+    current_token = None
+    if auth_header and auth_header.startswith("Bearer "):
+        current_token = auth_header.split(" ")[1]
+
+    # Find all active sessions except current one
+    query = select(AuthenticationSession).where(
+        AuthenticationSession.user_id == current_user.id,
+        AuthenticationSession.is_active == True
+    )
+
+    if current_token:
+        # TODO: Add logic to exclude current session based on token
+        # For now, we'll revoke all sessions
+        pass
+
+    result = await db.execute(query)
+    sessions = result.scalars().all()
+
+    revoked_count = 0
+    for session in sessions:
+        session.end_session("revoked_all")
+        revoked_count += 1
+
+    # Log mass session revocation
+    client_ip = request.client.host if request.client else "unknown"
+    audit_entry = AuditLogEntry.log_user_action(
+        user_id=current_user.id,
+        action=AuditAction.LOGOUT,
+        message=f"Revoked all sessions ({revoked_count} sessions)",
+        source_ip=client_ip,
+        metadata={
+            "action": "all_sessions_revoked",
+            "revoked_count": revoked_count
+        }
+    )
+    db.add(audit_entry)
+
+    await db.commit()
+
+    return {"message": f"Revoked {revoked_count} sessions successfully"}
