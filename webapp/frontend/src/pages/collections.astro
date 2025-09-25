@@ -85,12 +85,23 @@ import Layout from '../layouts/Layout.astro';
         </div>
 
         <!-- Collections Grid -->
-        <div class="mt-8" 
-             x-data="{ 
-               init() { 
-                 $store.collections.fetchCollections(); 
-               } 
-             }">
+        <div class="mt-8"
+             x-data="{
+               init() {
+                 this.fetchCollectionsForCurrentProject();
+               },
+
+               fetchCollectionsForCurrentProject() {
+                 const currentProject = $store.projects.currentProject;
+                 if (currentProject) {
+                   $store.collections.fetchCollections({ project_id: currentProject.id });
+                 } else {
+                   // If no project selected, fetch all collections
+                   $store.collections.fetchCollections();
+                 }
+               }
+             }"
+             x-on:project-changed.window="fetchCollectionsForCurrentProject()">
           
           <!-- Loading State -->
           <div x-show="$store.collections.loading" class="text-center py-12">
@@ -239,11 +250,19 @@ import Layout from '../layouts/Layout.astro';
                   async handleSubmit(e) {
                     e.preventDefault();
                     this.loading = true;
-                    
+
+                    const currentProject = $store.projects.currentProject;
+                    if (!currentProject) {
+                      $store.notification.show('Please select a project first', 'error');
+                      this.loading = false;
+                      return;
+                    }
+
                     const result = await $store.collections.createCollection({
                       name: this.name,
                       description: this.description,
-                      environment: this.environment
+                      environment: this.environment,
+                      project_id: currentProject.id
                     });
                     
                     if (result.success) {

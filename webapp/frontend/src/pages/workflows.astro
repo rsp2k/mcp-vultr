@@ -414,7 +414,7 @@ function workflowsPage() {
       } catch (error) {
         console.error('Error loading workflow data:', error);
         this.error = 'Failed to load workflow data';
-        this.$store.notifications.show('Error loading workflow data', 'error');
+        this.$store.notification.show('error', 'Error loading workflow data');
       } finally {
         this.loading = false;
       }
@@ -423,7 +423,7 @@ function workflowsPage() {
     async loadOperations() {
       const response = await fetch('/api/workflows/operations', {
         headers: {
-          'Authorization': `Bearer ${this.$store.auth.token}`,
+          ...this.$store.auth.getAuthHeaders(),
           'Content-Type': 'application/json'
         }
       });
@@ -438,7 +438,7 @@ function workflowsPage() {
     async loadApprovals() {
       const response = await fetch('/api/workflows/approvals', {
         headers: {
-          'Authorization': `Bearer ${this.$store.auth.token}`,
+          ...this.$store.auth.getAuthHeaders(),
           'Content-Type': 'application/json'
         }
       });
@@ -463,7 +463,7 @@ function workflowsPage() {
 
     async refreshData() {
       await this.loadData();
-      this.$store.notifications.show('Workflow data refreshed', 'success');
+      this.$store.notification.show('success', 'Workflow data refreshed');
     },
 
     getStatusColor(status) {
@@ -517,7 +517,7 @@ function workflowsPage() {
         const response = await fetch(`/api/workflows/operations/${operationId}/execute`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${this.$store.auth.token}`,
+            ...this.$store.auth.getAuthHeaders(),
             'Content-Type': 'application/json'
           }
         });
@@ -527,11 +527,11 @@ function workflowsPage() {
           throw new Error(error.message || 'Failed to execute operation');
         }
 
-        this.$store.notifications.show('Operation queued for execution', 'success');
+        this.$store.notification.show('success', 'Operation queued for execution');
         await this.loadData();
       } catch (error) {
         console.error('Error executing operation:', error);
-        this.$store.notifications.show(error.message, 'error');
+        this.$store.notification.show('error', error.message);
       }
     },
 
@@ -554,7 +554,7 @@ function workflowsPage() {
         const response = await fetch(`/api/workflows/approvals/${this.selectedApproval.id}/decide`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${this.$store.auth.token}`,
+            ...this.$store.auth.getAuthHeaders(),
             'Content-Type': 'application/json'
           },
           body: JSON.stringify(this.approvalDecision)
@@ -565,16 +565,16 @@ function workflowsPage() {
           throw new Error(error.message || 'Failed to submit approval');
         }
 
-        this.$store.notifications.show(
-          `Operation ${this.approvalDecision.approve ? 'approved' : 'rejected'}`, 
-          'success'
+        this.$store.notification.show(
+          'success',
+          `Operation ${this.approvalDecision.approve ? 'approved' : 'rejected'}`
         );
         
         this.closeApprovalModal();
         await this.loadData();
       } catch (error) {
         console.error('Error submitting approval:', error);
-        this.$store.notifications.show(error.message, 'error');
+        this.$store.notification.show('error', error.message);
       }
     }
   }

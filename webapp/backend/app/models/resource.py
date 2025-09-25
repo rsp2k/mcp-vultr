@@ -5,8 +5,9 @@ from typing import Dict, Any, Optional
 from uuid import uuid4
 import enum
 
-from sqlalchemy import Column, String, DateTime, Text, Boolean, JSON, ForeignKey, Enum
+from sqlalchemy import Column, String, DateTime, Text, Boolean, JSON, ForeignKey, Enum, Index
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 
@@ -39,8 +40,9 @@ class ResourceStatus(enum.Enum):
 class PlannedResource(Base):
     """Resources that are planned but not yet created."""
     __tablename__ = "planned_resources"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
     service_collection_id = Column(UUID(as_uuid=True), ForeignKey("service_collections.id"), nullable=False)
     
     # Resource definition
@@ -64,12 +66,25 @@ class PlannedResource(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     approved_at = Column(DateTime)
 
+    # Relationships
+    project = relationship("Project", back_populates="planned_resources")
+    service_collection = relationship("ServiceCollection", back_populates="planned_resources")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_planned_resources_project_id', 'project_id'),
+        Index('idx_planned_resources_collection_id', 'service_collection_id'),
+        Index('idx_planned_resources_type', 'resource_type'),
+        Index('idx_planned_resources_name', 'resource_name'),
+    )
+
 
 class ManagedResource(Base):
     """Resources that are actively managed by Service Collections."""
     __tablename__ = "managed_resources"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
     service_collection_id = Column(UUID(as_uuid=True), ForeignKey("service_collections.id"), nullable=False)
     
     # Resource identification
@@ -93,11 +108,26 @@ class ManagedResource(Base):
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     last_sync = Column(DateTime)  # Last sync with Vultr API
-    
+
+    # Relationships
+    project = relationship("Project", back_populates="managed_resources")
+    service_collection = relationship("ServiceCollection", back_populates="managed_resources")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_managed_resources_project_id', 'project_id'),
+        Index('idx_managed_resources_collection_id', 'service_collection_id'),
+        Index('idx_managed_resources_type', 'resource_type'),
+        Index('idx_managed_resources_vultr_id', 'vultr_resource_id'),
+        Index('idx_managed_resources_status', 'status'),
+        Index('idx_managed_resources_name', 'resource_name'),
+    )
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "id": str(self.id),
+            "project_id": str(self.project_id),
             "service_collection_id": str(self.service_collection_id),
             "vultr_resource_id": self.vultr_resource_id,
             "resource_type": self.resource_type.value,

@@ -14,6 +14,7 @@ from sqlalchemy.orm import relationship
 import bcrypt
 
 from app.core.database import Base
+from app.models.project import project_members
 
 
 class UserRole(enum.Enum):
@@ -126,6 +127,21 @@ class User(Base):
         "AuthenticationSession",
         back_populates="user",
         cascade="all, delete-orphan"
+    )
+
+    # Project relationships
+    owned_projects = relationship(
+        "Project",
+        foreign_keys="Project.owner_id",
+        back_populates="owner"
+    )
+
+    projects = relationship(
+        "Project",
+        secondary=project_members,
+        back_populates="members",
+        primaryjoin="User.id == project_members.c.user_id",
+        secondaryjoin="Project.id == project_members.c.project_id"
     )
 
     # Note: WorkflowApproval and WorkflowTemplate relationships

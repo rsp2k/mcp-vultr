@@ -744,6 +744,52 @@ async def github_authorize(
     )
 
 
+@router.get("/github/login")
+async def github_login_redirect(request: Request):
+    """Direct GitHub OAuth login redirect (GET endpoint for browser navigation)."""
+    # Allow GitHub OAuth even in JWT mode if GitHub credentials are configured
+    if not auth_provider.config.github_client_id or not auth_provider.config.github_client_secret:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GitHub authentication is not configured"
+        )
+
+    # Generate secure state parameter
+    state = secrets.token_urlsafe(32)
+
+    # Use default redirect URI from config
+    redirect_uri = auth_provider.config.github_redirect_uri
+    if not redirect_uri:
+        # Fallback to current host
+        base_url = str(request.base_url).rstrip("/")
+        redirect_uri = f"{base_url}/api/auth/github/callback"
+
+    # Store state with metadata
+    _oauth_states[state] = {
+        "timestamp": datetime.utcnow(),
+        "redirect_uri": redirect_uri,
+        "client_ip": request.client.host if request and request.client else "unknown"
+    }
+
+    # Build GitHub authorization URL
+    github_auth_params = {
+        "client_id": auth_provider.config.github_client_id,
+        "redirect_uri": redirect_uri,
+        "scope": "user:email read:user",
+        "state": state,
+        "response_type": "code"
+    }
+
+    authorization_url = f"https://github.com/login/oauth/authorize?{urlencode(github_auth_params)}"
+
+    logger.info("GitHub OAuth login redirect",
+               state=state, redirect_uri=redirect_uri)
+
+    # Directly redirect to GitHub
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url=authorization_url, status_code=302)
+
+
 @router.post("/github/callback")
 async def github_callback(
     callback_data: GitHubCallbackRequest,

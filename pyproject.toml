@@ -41,7 +41,7 @@ classifiers = [
     "Environment :: Console",
     "Framework :: AsyncIO"
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=0.1.0",
     "httpx>=0.24.0",

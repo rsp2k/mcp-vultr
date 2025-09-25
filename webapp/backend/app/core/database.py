@@ -3,7 +3,7 @@
 import asyncio
 from typing import AsyncGenerator
 
-from sqlalchemy import event
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -95,18 +95,33 @@ async def init_db() -> None:
         workflow,
         resource,
         user,
-        audit_log
+        audit_log,
+        project
     )
-    
-    # Create tables in development
-    if settings.environment == "development":
+
+
+    # Check if alembic_version table exists to determine if migrations are set up
+    try:
         async with engine.begin() as conn:
-            # Drop and recreate tables in development
-            await conn.run_sync(Base.metadata.drop_all)
-            await conn.run_sync(Base.metadata.create_all)
-            logger.info("✅ Database tables created")
+            result = await conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
+            current_migration = result.scalar()
+            if current_migration:
+                logger.info(f"✅ Database schema managed by Alembic (current: {current_migration})")
+            else:
+                logger.warning("⚠️ Alembic version table exists but no migration recorded")
+    except Exception as e:
+        # Alembic version table doesn't exist
+        if "relation \"alembic_version\" does not exist" in str(e):
+            logger.error("❌ Database migrations not initialized!")
+            logger.error("🔧 Please run: docker compose exec vultr-backend uv run alembic upgrade head")
+            logger.error("📚 Or for initial setup: docker compose exec vultr-backend uv run alembic stamp head")
+            # Don't raise - let the app start but warn about missing migrations
+        else:
+            logger.error(f"❌ Database connection error: {str(e)}")
+            raise
     
     logger.info("✅ Database connection initialized")
+
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:

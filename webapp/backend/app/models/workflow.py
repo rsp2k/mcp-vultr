@@ -6,8 +6,8 @@ from uuid import uuid4
 import enum
 
 from sqlalchemy import (
-    Column, String, DateTime, Text, Boolean, JSON, 
-    ForeignKey, Integer, Enum
+    Column, String, DateTime, Text, Boolean, JSON,
+    ForeignKey, Integer, Enum, Index
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -64,12 +64,13 @@ class WorkflowOperation(Base):
     
     # Primary identification
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    
+
     # Operation details
     operation_type = Column(Enum(OperationType), nullable=False)
     status = Column(Enum(OperationStatus), nullable=False, default=OperationStatus.QUEUED)
-    
+
     # Relationships
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
     service_collection_id = Column(UUID(as_uuid=True), ForeignKey("service_collections.id"), nullable=False)
     
     # Request details
@@ -105,6 +106,7 @@ class WorkflowOperation(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     
     # Relationships
+    project = relationship("Project", back_populates="workflow_operations")
     service_collection = relationship("ServiceCollection", back_populates="workflow_operations")
     approval_requests = relationship(
         "ApprovalRequest",
@@ -115,6 +117,17 @@ class WorkflowOperation(Base):
     # User relationships
     requested_by = relationship("User", foreign_keys=[requested_by_id], back_populates="requested_operations")
     assigned_to = relationship("User", foreign_keys=[assigned_to_id], back_populates="assigned_operations")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_workflow_operations_project_id', 'project_id'),
+        Index('idx_workflow_operations_collection_id', 'service_collection_id'),
+        Index('idx_workflow_operations_status', 'status'),
+        Index('idx_workflow_operations_type', 'operation_type'),
+        Index('idx_workflow_operations_requested_by', 'requested_by_id'),
+        Index('idx_workflow_operations_assigned_to', 'assigned_to_id'),
+        Index('idx_workflow_operations_scheduled', 'scheduled_at'),
+    )
     
     def requires_approval(self) -> bool:
         """Check if this operation requires approval."""
@@ -135,6 +148,7 @@ class WorkflowOperation(Base):
             "id": str(self.id),
             "operation_type": self.operation_type.value,
             "status": self.status.value,
+            "project_id": str(self.project_id),
             "service_collection_id": str(self.service_collection_id),
             "requested_by_id": str(self.requested_by_id),
             "assigned_to_id": str(self.assigned_to_id) if self.assigned_to_id else None,

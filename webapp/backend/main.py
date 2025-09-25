@@ -3,6 +3,8 @@ Service Collection Webapp - FastAPI Backend
 
 This FastAPI application provides the backend for the Service Collection management
 webapp, including workflow orchestration, approval systems, and Vultr API integration.
+
+Hot reload test: Changes to this file should trigger container restart.
 """
 
 import logging
@@ -23,6 +25,7 @@ from app.api.auth import router as auth_router
 from app.api.collections import router as collections_router
 from app.api.dashboard import router as dashboard_router
 from app.api.workflows import router as workflows_router
+from app.api.projects import router as projects_router
 from app.core.exceptions import ServiceCollectionException
 
 # Configure structured logging
@@ -197,6 +200,7 @@ def create_app() -> FastAPI:
     
     # API routers
     app.include_router(auth_router, prefix="/api")
+    app.include_router(projects_router, prefix="/api")
     app.include_router(collections_router, prefix="/api")
     app.include_router(dashboard_router, prefix="/api")
     app.include_router(workflows_router, prefix="/api")

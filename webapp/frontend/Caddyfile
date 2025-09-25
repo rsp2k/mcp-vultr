@@ -1,0 +1,48 @@
+:80 {
+	# Serve static files from /srv
+	root * /srv
+
+	# Enable file browsing for static assets
+	file_server
+
+	# Security headers
+	header {
+		X-Frame-Options "SAMEORIGIN"
+		X-XSS-Protection "1; mode=block"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer-when-downgrade"
+		Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'"
+	}
+
+	# Cache static assets with long expiry
+	@static {
+		path *.jpg *.jpeg *.png *.gif *.ico *.css *.js *.svg *.woff *.woff2 *.ttf *.eot
+	}
+	header @static {
+		Cache-Control "public, max-age=31536000, immutable"
+	}
+
+	# API proxy to backend (handled by caddy-docker-proxy)
+	# This is just for documentation - the actual proxying is done by labels
+
+	# SPA fallback - try file, then directory, then fallback to index.html
+	try_files {path} {path}/ /index.html
+
+	# Health check endpoint
+	respond /health 200 {
+		body "healthy"
+		close
+	}
+
+	# Compression
+	encode {
+		gzip
+		minimum_length 1024
+	}
+
+	# Logging
+	log {
+		output stdout
+		format json
+	}
+}

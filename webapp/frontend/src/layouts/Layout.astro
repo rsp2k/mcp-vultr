@@ -77,43 +77,9 @@ function getMobileNavClasses(path: string): string {
       }
     </style>
   </head>
-  <body class="h-full" x-data="{
-    async init() {
-      console.log('🏗️ Layout initializing...');
-      if (window.Alpine?.store) {
-        console.log('🔐 Initializing auth store...');
-        await Alpine.store('auth').init();
-        console.log('✅ Auth store initialized');
-      }
-    }
-  }">
+  <body class="h-full">
     {requireAuth && (
-      <div x-data x-init="
-        async function() {
-          console.log('🔒 Starting auth check...');
-          // Wait for auth store to be fully initialized
-          await new Promise(resolve => {
-            if ($store.auth.authConfig !== null) {
-              resolve();
-            } else {
-              const interval = setInterval(() => {
-                if ($store.auth.authConfig !== null) {
-                  clearInterval(interval);
-                  resolve();
-                }
-              }, 50);
-            }
-          });
-
-          console.log('🔍 Running auth check after initialization...');
-          const isAuth = await $store.auth.checkAuth();
-          console.log('🔍 Auth check result:', isAuth);
-          if (!isAuth) {
-            console.log('❌ Not authenticated, redirecting to login');
-            window.location.href = '/login';
-          }
-        }
-      "></div>
+      <div x-data="authGuard()" x-init="checkAuth()"></div>
     )}
     
     <!-- Main Application Container -->
@@ -132,9 +98,88 @@ function getMobileNavClasses(path: string): string {
                   <span class="text-xl font-bold text-gray-900">Service Collections</span>
                 </a>
               </div>
+
+              <!-- Project Selector -->
+              <div class="hidden sm:ml-6 sm:flex sm:items-center" x-data="dropdown()">
+                <div class="relative">
+                  <button type="button"
+                          class="bg-white border border-gray-200 rounded-md px-4 py-2 inline-flex items-center text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                          @click="toggle()"
+                          x-bind:aria-expanded="isOpen">
+                    <div class="flex items-center space-x-2">
+                      <div class="h-2 w-2 rounded-full"
+                           :class="$store.projects.currentProject?.color ? `bg-[${$store.projects.currentProject.color}]` : 'bg-gray-400'"
+                           x-show="$store.projects.currentProject"></div>
+                      <span x-text="$store.projects.currentProject?.name || 'No Project'"></span>
+                    </div>
+                    <svg class="ml-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                  </button>
+
+                  <div x-show="isOpen"
+                       x-transition:enter="transition ease-out duration-100"
+                       x-transition:enter-start="transform opacity-0 scale-95"
+                       x-transition:enter-end="transform opacity-100 scale-100"
+                       x-transition:leave="transition ease-in duration-75"
+                       x-transition:leave-start="transform opacity-100 scale-100"
+                       x-transition:leave-end="transform opacity-0 scale-95"
+                       class="origin-top-left absolute left-0 mt-2 w-72 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-50"
+                       @click.away="close()">
+                    <div class="py-1">
+                      <div class="px-4 py-2 text-xs font-semibold text-gray-900 uppercase tracking-wide border-b border-gray-100">
+                        Switch Project
+                      </div>
+                      <div class="max-h-64 overflow-y-auto">
+                        <template x-for="project in $store.projects.items" :key="project.id">
+                          <button type="button"
+                                  class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3"
+                                  :class="{ 'bg-primary-50': $store.projects.currentProject?.id === project.id }"
+                                  @click="$store.projects.setCurrentProject(project); close()">
+                            <div class="h-2 w-2 rounded-full flex-shrink-0"
+                                 :class="`bg-[${project.color || '#6B7280'}]`"></div>
+                            <div class="flex-1 min-w-0">
+                              <div class="font-medium" x-text="project.name"></div>
+                              <div class="text-xs text-gray-500 truncate" x-text="project.description"></div>
+                            </div>
+                            <div class="flex-shrink-0">
+                              <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
+                                    :class="{
+                                      'bg-green-100 text-green-800': project.status === 'active',
+                                      'bg-yellow-100 text-yellow-800': project.status === 'suspended',
+                                      'bg-gray-100 text-gray-800': project.status === 'archived'
+                                    }"
+                                    x-text="project.status"></span>
+                            </div>
+                          </button>
+                        </template>
+                      </div>
+                      <div class="border-t border-gray-100">
+                        <button type="button"
+                                class="w-full text-left px-4 py-3 text-sm text-primary-600 hover:bg-primary-50 font-medium flex items-center space-x-2"
+                                @click="window.location.href = '/projects?create=true'; close()">
+                          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                          </svg>
+                          <span>Create Project</span>
+                        </button>
+                        <a href="/projects"
+                           class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 font-medium"
+                           @click="close()">
+                          Manage Projects
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
                 <a href="/dashboard" class={getNavClasses("/dashboard")}>
                   Dashboard
+                </a>
+                <a href="/projects" class={getNavClasses("/projects")}>
+                  Projects
                 </a>
                 <a href="/collections" class={getNavClasses("/collections")}>
                   Collections
@@ -217,6 +262,7 @@ function getMobileNavClasses(path: string): string {
         <div class="sm:hidden" x-show="mobileMenuOpen">
           <div class="pt-2 pb-3 space-y-1">
             <a href="/dashboard" class={getMobileNavClasses("/dashboard")}>Dashboard</a>
+            <a href="/projects" class={getMobileNavClasses("/projects")}>Projects</a>
             <a href="/collections" class={getMobileNavClasses("/collections")}>Collections</a>
             <a href="/workflows" class={getMobileNavClasses("/workflows")}>Workflows</a>
           </div>
@@ -327,6 +373,29 @@ function getMobileNavClasses(path: string): string {
         });
       }
 
+      // Auth Guard Component
+      window.authGuard = function() {
+        return {
+          async checkAuth() {
+            console.log('🔒 Starting auth check...');
+
+            // Wait for auth store to be fully initialized
+            while (!window.Alpine?.store || !Alpine.store('auth') || Alpine.store('auth').authConfig === null) {
+              await new Promise(resolve => setTimeout(resolve, 50));
+            }
+
+            console.log('🔍 Running auth check after initialization...');
+            const isAuth = await Alpine.store('auth').checkAuth();
+            console.log('🔍 Auth check result:', isAuth);
+
+            if (!isAuth) {
+              console.log('❌ Not authenticated, redirecting to login');
+              window.location.href = '/login';
+            }
+          }
+        };
+      };
+
       // Global utility functions for UI components
       window.notification = function() {
         return {
@@ -428,423 +497,30 @@ function getMobileNavClasses(path: string): string {
         };
       };
 
-      // Register stores immediately when Alpine starts
+      // Initialize authentication after Alpine and stores are ready
       document.addEventListener('alpine:init', async () => {
-        console.log('🎯 Alpine init event - registering stores...');
+        console.log('🎯 Alpine init event - initializing auth...');
 
-        // Authentication Store
-        Alpine.store('auth', {
-          user: null,
-          token: localStorage.getItem('auth_token'),
-          authConfig: null,
-          loading: false,
+        // Initialize authentication (stores are loaded via Astro integration entrypoint)
+        if (Alpine.store('auth')) {
+          await Alpine.store('auth').init();
+          console.log('✅ Authentication initialized');
+        } else {
+          console.warn('⚠️ Auth store not available');
+        }
 
-          // Method to get authentication headers - needed by PassKey utilities
-          getAuthHeaders() {
-            const token = this.token || localStorage.getItem('auth_token');
-            return {
-              'Content-Type': 'application/json',
-              'Authorization': token ? `Bearer ${token}` : ''
-            };
-          },
+        // Initialize projects store and fetch projects
+        if (Alpine.store('projects')) {
+          Alpine.store('projects').init();
+          await Alpine.store('projects').fetchProjects();
+          console.log('✅ Projects store initialized and projects fetched');
+        }
 
-          async init() {
-            console.log('🔐 Initializing auth store...');
-
-            // Get auth configuration
-            try {
-              const response = await fetch('/api/auth/config');
-              if (response.ok) {
-                this.authConfig = await response.json();
-              } else {
-                console.warn('Failed to load auth config');
-                this.authConfig = {};
-              }
-            } catch (error) {
-              console.error('Error loading auth config:', error);
-              this.authConfig = {};
-            }
-
-            // Check if we have a token and validate it
-            if (this.token) {
-              await this.checkAuth();
-            }
-          },
-
-          async checkAuth() {
-            if (!this.token) {
-              return false;
-            }
-
-            try {
-              const response = await fetch('/api/auth/me', {
-                headers: this.getAuthHeaders()
-              });
-
-              if (response.ok) {
-                this.user = await response.json();
-                return true;
-              } else {
-                // Token is invalid, clear it
-                this.logout();
-                return false;
-              }
-            } catch (error) {
-              console.error('Auth check failed:', error);
-              this.logout();
-              return false;
-            }
-          },
-
-          async login(email, password) {
-            this.loading = true;
-
-            try {
-              const response = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ email, password })
-              });
-
-              const result = await response.json();
-
-              if (response.ok) {
-                this.token = result.access_token;
-                this.user = result.user;
-                localStorage.setItem('auth_token', this.token);
-
-                return { success: true };
-              } else {
-                return { success: false, error: result.detail || 'Login failed' };
-              }
-            } catch (error) {
-              console.error('Login error:', error);
-              return { success: false, error: 'Network error occurred' };
-            } finally {
-              this.loading = false;
-            }
-          },
-
-          async loginWithGitHub() {
-            try {
-              // Redirect to GitHub OAuth
-              window.location.href = '/api/auth/github/login';
-              return { success: true };
-            } catch (error) {
-              console.error('GitHub OAuth error:', error);
-              return { success: false, error: 'Failed to initiate GitHub login' };
-            }
-          },
-
-          logout() {
-            this.user = null;
-            this.token = null;
-            localStorage.removeItem('auth_token');
-            window.location.href = '/login';
-          }
-        });
-
-        // Collections Store
-        Alpine.store('collections', {
-          items: [],
-          loading: false,
-          error: null,
-          total: 0,
-
-          async fetchCollections(filters = {}) {
-            this.loading = true;
-            this.error = null;
-
-            try {
-              // Build query parameters
-              const params = new URLSearchParams();
-              if (filters.environment) params.append('environment', filters.environment);
-              if (filters.status) params.append('status', filters.status);
-              if (filters.limit) params.append('limit', filters.limit.toString());
-              if (filters.offset) params.append('offset', filters.offset.toString());
-
-              const response = await fetch(`/api/collections?${params.toString()}`, {
-                headers: Alpine.store('auth').getAuthHeaders()
-              });
-
-              if (response.ok) {
-                const data = await response.json();
-                this.items = data.collections || [];
-                this.total = data.total || 0;
-              } else {
-                const errorData = await response.json();
-                this.error = errorData.detail || 'Failed to load collections';
-                this.items = [];
-              }
-            } catch (error) {
-              console.error('Error fetching collections:', error);
-              this.error = 'Network error occurred';
-              this.items = [];
-            } finally {
-              this.loading = false;
-            }
-          },
-
-          async createCollection(data) {
-            try {
-              // First check if user has PassKeys for confirmation
-              const userHasPassKeys = await hasPassKeys();
-
-              if (userHasPassKeys) {
-                // Require PassKey confirmation for production environments
-                if (data.environment === 'production') {
-                  const confirmed = await confirmWithPassKey(
-                    `Create production Service Collection "${data.name}"?`,
-                    'collection_creation_production'
-                  );
-
-                  if (!confirmed) {
-                    return { success: false, error: 'Creation cancelled' };
-                  }
-                }
-              }
-
-              const response = await fetch('/api/collections', {
-                method: 'POST',
-                headers: Alpine.store('auth').getAuthHeaders(),
-                body: JSON.stringify(data)
-              });
-
-              if (response.ok) {
-                const newCollection = await response.json();
-                this.items.unshift(newCollection);
-                this.total += 1;
-
-                // Show success notification
-                if (window.Alpine && Alpine.store('notification')) {
-                  Alpine.store('notification').show('success', `Collection "${data.name}" created successfully`);
-                }
-
-                return { success: true, data: newCollection };
-              } else {
-                const errorData = await response.json();
-                const error = errorData.detail || 'Failed to create collection';
-
-                // Show error notification
-                if (window.Alpine && Alpine.store('notification')) {
-                  Alpine.store('notification').show('error', error);
-                }
-
-                return { success: false, error };
-              }
-            } catch (error) {
-              console.error('Error creating collection:', error);
-              const errorMsg = 'Network error occurred';
-
-              if (window.Alpine && Alpine.store('notification')) {
-                Alpine.store('notification').show('error', errorMsg);
-              }
-
-              return { success: false, error: errorMsg };
-            }
-          },
-
-          async updateCollection(id, data) {
-            try {
-              // Require PassKey confirmation for production collections
-              const collection = this.items.find(item => item.id === id);
-              if (collection && collection.environment === 'production') {
-                const userHasPassKeys = await hasPassKeys();
-                if (userHasPassKeys) {
-                  const confirmed = await confirmWithPassKey(
-                    `Update production Service Collection "${collection.name}"?`,
-                    'collection_update_production'
-                  );
-
-                  if (!confirmed) {
-                    return { success: false, error: 'Update cancelled' };
-                  }
-                }
-              }
-
-              const response = await fetch(`/api/collections/${id}`, {
-                method: 'PUT',
-                headers: Alpine.store('auth').getAuthHeaders(),
-                body: JSON.stringify(data)
-              });
-
-              if (response.ok) {
-                const updatedCollection = await response.json();
-                const index = this.items.findIndex(item => item.id === id);
-                if (index !== -1) {
-                  this.items[index] = updatedCollection;
-                }
-
-                if (window.Alpine && Alpine.store('notification')) {
-                  Alpine.store('notification').show('success', 'Collection updated successfully');
-                }
-
-                return { success: true, data: updatedCollection };
-              } else {
-                const errorData = await response.json();
-                const error = errorData.detail || 'Failed to update collection';
-
-                if (window.Alpine && Alpine.store('notification')) {
-                  Alpine.store('notification').show('error', error);
-                }
-
-                return { success: false, error };
-              }
-            } catch (error) {
-              console.error('Error updating collection:', error);
-              const errorMsg = 'Network error occurred';
-
-              if (window.Alpine && Alpine.store('notification')) {
-                Alpine.store('notification').show('error', errorMsg);
-              }
-
-              return { success: false, error: errorMsg };
-            }
-          },
-
-          async deleteCollection(id) {
-            try {
-              const collection = this.items.find(item => item.id === id);
-              if (!collection) {
-                return { success: false, error: 'Collection not found' };
-              }
-
-              // Always require PassKey confirmation for deletion
-              const userHasPassKeys = await hasPassKeys();
-              if (userHasPassKeys) {
-                const confirmed = await confirmWithPassKey(
-                  `Permanently delete Service Collection "${collection.name}"?\n\nThis action cannot be undone.`,
-                  'collection_deletion'
-                );
-
-                if (!confirmed) {
-                  return { success: false, error: 'Deletion cancelled' };
-                }
-              } else {
-                // Fallback to regular confirm dialog if no PassKeys
-                const confirmed = confirm(`Permanently delete Service Collection "${collection.name}"?\n\nThis action cannot be undone.`);
-                if (!confirmed) {
-                  return { success: false, error: 'Deletion cancelled' };
-                }
-              }
-
-              const response = await fetch(`/api/collections/${id}`, {
-                method: 'DELETE',
-                headers: Alpine.store('auth').getAuthHeaders()
-              });
-
-              if (response.ok) {
-                this.items = this.items.filter(item => item.id !== id);
-                this.total -= 1;
-
-                if (window.Alpine && Alpine.store('notification')) {
-                  Alpine.store('notification').show('success', `Collection "${collection.name}" deleted successfully`);
-                }
-
-                return { success: true };
-              } else {
-                const errorData = await response.json();
-                const error = errorData.detail || 'Failed to delete collection';
-
-                if (window.Alpine && Alpine.store('notification')) {
-                  Alpine.store('notification').show('error', error);
-                }
-
-                return { success: false, error };
-              }
-            } catch (error) {
-              console.error('Error deleting collection:', error);
-              const errorMsg = 'Network error occurred';
-
-              if (window.Alpine && Alpine.store('notification')) {
-                Alpine.store('notification').show('error', errorMsg);
-              }
-
-              return { success: false, error: errorMsg };
-            }
-          }
-        });
-
-        // Dashboard Store
-        Alpine.store('dashboard', {
-          overview: null,
-          loading: false,
-          error: null,
-
-          async fetchOverview() {
-            this.loading = true;
-            this.error = null;
-
-            try {
-              const response = await fetch('/api/dashboard/overview', {
-                headers: Alpine.store('auth').getAuthHeaders()
-              });
-
-              if (response.ok) {
-                this.overview = await response.json();
-              } else {
-                // Create mock data if endpoint doesn't exist yet
-                this.overview = {
-                  summary: {
-                    total_collections: 0,
-                    active_operations: 0,
-                    monthly_cost: 0,
-                    this_month_activity: 0
-                  },
-                  recent_collections: [],
-                  recent_activities: []
-                };
-              }
-            } catch (error) {
-              console.error('Error fetching dashboard overview:', error);
-              this.error = 'Failed to load dashboard overview';
-
-              // Provide fallback data
-              this.overview = {
-                summary: {
-                  total_collections: 0,
-                  active_operations: 0,
-                  monthly_cost: 0,
-                  this_month_activity: 0
-                },
-                recent_collections: [],
-                recent_activities: []
-              };
-            } finally {
-              this.loading = false;
-            }
-          }
-        });
-
-        // Global notification store
-        Alpine.store('notification', {
-          visible: false,
-          type: 'info',
-          message: '',
-
-          show(type, message, duration = 5000) {
-            this.type = type;
-            this.message = message;
-            this.visible = true;
-
-            setTimeout(() => {
-              this.hide();
-            }, duration);
-          },
-
-          hide() {
-            this.visible = false;
-          }
-        });
-
-        console.log('✅ Alpine.js stores registered successfully');
+        console.log('✅ Alpine.js initialization complete');
       });
     </script>
 
-    <!-- Alpine.js Framework -->
-    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <!-- Alpine.js is loaded via Astro integration (@astrojs/alpinejs) -->
   </body>
 </html>
 
@@ -852,7 +528,7 @@ function getMobileNavClasses(path: string): string {
   html {
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
-  
+
   .font-mono {
     font-family: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', 'Segoe UI Mono', 'Roboto Mono', 'Ubuntu Mono', monospace;
   }

@@ -4,6 +4,7 @@ from app.models.service_collection import ServiceCollection, CollectionEnvironme
 from app.models.workflow import WorkflowOperation, ApprovalRequest, OperationStatus, OperationType, ApprovalStatus
 from app.models.resource import PlannedResource, ManagedResource, ResourceType, ResourceStatus
 from app.models.user import User, UserRole, UserStatus
+from app.models.project import Project, ProjectInvitation, AuditLog, ProjectStatus, ProjectRole
 from app.models.audit_log import AuditLogEntry, AuditAction, AuditSeverity
 from app.models.connected_account import (
     ConnectedAccount, PassKey, AuthenticationSession,
@@ -19,6 +20,11 @@ __all__ = [
     "ManagedResource",
     "User",
     "AuditLogEntry",
+
+    # Project models
+    "Project",
+    "ProjectInvitation",
+    "AuditLog",
 
     # Authentication models
     "ConnectedAccount",
@@ -41,6 +47,10 @@ __all__ = [
     # Enums for Users
     "UserRole",
     "UserStatus",
+
+    # Enums for Projects
+    "ProjectStatus",
+    "ProjectRole",
 
     # Enums for Authentication
     "ProviderType",

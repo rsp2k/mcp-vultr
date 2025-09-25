@@ -51,7 +51,8 @@ class ServiceCollection(Base):
     environment = Column(Enum(CollectionEnvironment), nullable=False, default=CollectionEnvironment.DEVELOPMENT)
     status = Column(Enum(CollectionStatus), nullable=False, default=CollectionStatus.DRAFT)
     
-    # Ownership and permissions
+    # Project and ownership
+    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id'), nullable=False)
     created_by = Column(String(255), nullable=False)  # User email/username
     owner_email = Column(String(255), nullable=False)
     
@@ -83,15 +84,30 @@ class ServiceCollection(Base):
     archived_at = Column(DateTime, nullable=True)
     
     # Relationships
+    project = relationship("Project", back_populates="service_collections")
+
     workflow_operations = relationship(
-        "WorkflowOperation", 
+        "WorkflowOperation",
         back_populates="service_collection",
         cascade="all, delete-orphan"
     )
-    
+
+    # Resource relationships
+    planned_resources = relationship(
+        "PlannedResource",
+        back_populates="service_collection",
+        cascade="all, delete-orphan"
+    )
+
+    managed_resources = relationship(
+        "ManagedResource",
+        back_populates="service_collection",
+        cascade="all, delete-orphan"
+    )
+
     audit_logs = relationship(
         "AuditLogEntry",
-        back_populates="service_collection", 
+        back_populates="service_collection",
         cascade="all, delete-orphan"
     )
     

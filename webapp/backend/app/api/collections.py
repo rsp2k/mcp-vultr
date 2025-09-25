@@ -11,18 +11,28 @@ from pydantic import BaseModel, Field
 
 from app.core.database import get_db
 from app.api.auth import require_auth
+from app.middleware.rbac import (
+    require_project_viewer,
+    require_project_developer,
+    require_project_manager,
+    CollectionAccessControl,
+    ProjectAccessControl
+)
 from app.models import (
     ServiceCollection, CollectionEnvironment, CollectionStatus,
-    User, AuditLogEntry, AuditAction
+    User, AuditLogEntry, AuditAction, Project, ProjectRole
 )
 
 router = APIRouter(prefix="/collections", tags=["service-collections"])
+
+
 
 
 class ServiceCollectionCreate(BaseModel):
     """Service Collection creation request."""
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=1000)
+    project_id: UUID = Field(..., description="ID of the project this collection belongs to")
     environment: CollectionEnvironment = CollectionEnvironment.DEVELOPMENT
     vultr_service_user: Optional[str] = Field(None, max_length=255)
     allowed_regions: List[str] = Field(default_factory=list)
@@ -59,28 +69,37 @@ async def create_service_collection(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new Service Collection."""
-    # Check for duplicate name for this user in this environment
+    # Check project access - user needs DEVELOPER role to create collections
+    project = await ProjectAccessControl.check_project_access(
+        collection_data.project_id,
+        current_user,
+        db,
+        required_role=ProjectRole.DEVELOPER
+    )
+
+    # Check for duplicate name within this project and environment
     result = await db.execute(
         select(ServiceCollection).where(
             and_(
                 ServiceCollection.name == collection_data.name,
                 ServiceCollection.environment == collection_data.environment,
-                ServiceCollection.owner_email == current_user.email
+                ServiceCollection.project_id == collection_data.project_id
             )
         )
     )
     existing = result.scalar_one_or_none()
-    
+
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Collection '{collection_data.name}' already exists in {collection_data.environment.value} environment"
+            detail=f"Collection '{collection_data.name}' already exists in {collection_data.environment.value} environment for this project"
         )
-    
+
     # Create new Service Collection
     new_collection = ServiceCollection(
         name=collection_data.name,
         description=collection_data.description,
+        project_id=collection_data.project_id,
         environment=collection_data.environment,
         created_by=current_user.email,
         owner_email=current_user.email,
@@ -93,29 +112,30 @@ async def create_service_collection(
         tags=collection_data.tags,
         status=CollectionStatus.DRAFT
     )
-    
+
     db.add(new_collection)
     await db.flush()  # Get the collection ID
-    
+
     # Add creator as owner in membership
     current_user.add_collection_membership(str(new_collection.id), "owner")
-    
+
     # Create audit log
     audit_entry = AuditLogEntry.log_collection_action(
         collection_id=str(new_collection.id),
         action=AuditAction.COLLECTION_CREATED,
-        message=f"Service Collection '{new_collection.name}' created in {new_collection.environment.value}",
+        message=f"Service Collection '{new_collection.name}' created in {new_collection.environment.value} for project '{project.name}'",
         user_id=str(current_user.id),
         after_data=new_collection.to_dict()
     )
     db.add(audit_entry)
     await db.commit()
-    
+
     return new_collection.to_dict()
 
 
 @router.get("", response_model=Dict[str, Any])
 async def list_service_collections(
+    project_id: Optional[UUID] = Query(None, description="Filter by project ID"),
     environment: Optional[CollectionEnvironment] = Query(None),
     status: Optional[CollectionStatus] = Query(None),
     limit: int = Query(50, ge=1, le=100),
@@ -123,48 +143,61 @@ async def list_service_collections(
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """List Service Collections accessible to current user."""
-    # Build query conditions
+    """List Service Collections accessible to current user within project context."""
+    # Build base conditions - only show collections from projects user has access to
     conditions = []
-    
-    # Users can see collections where they are members or owner
-    if not current_user.is_admin:
-        # Get collection IDs where user is a member
-        collection_ids = list(current_user.service_collection_memberships.keys())
-        if collection_ids:
-            conditions.append(
-                or_(
-                    ServiceCollection.owner_email == current_user.email,
-                    ServiceCollection.id.in_([UUID(cid) for cid in collection_ids])
-                )
+
+    # Get all projects user has access to using RBAC helper
+    accessible_projects = await ProjectAccessControl.get_user_accessible_projects(
+        current_user, db, ProjectRole.VIEWER
+    )
+    accessible_project_ids = [p.id for p in accessible_projects]
+
+    if not accessible_project_ids:
+        # User has no project access, return empty result
+        return {
+            "collections": [],
+            "total": 0,
+            "limit": limit,
+            "offset": offset
+        }
+
+    # Filter by accessible projects
+    conditions.append(ServiceCollection.project_id.in_(accessible_project_ids))
+
+    # If specific project_id provided, verify access and filter
+    if project_id:
+        if project_id not in accessible_project_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have access to this project"
             )
-        else:
-            conditions.append(ServiceCollection.owner_email == current_user.email)
-    
-    # Add filters
+        conditions.append(ServiceCollection.project_id == project_id)
+
+    # Add additional filters
     if environment:
         conditions.append(ServiceCollection.environment == environment)
     if status:
         conditions.append(ServiceCollection.status == status)
-    
+
     # Build and execute query
     query = select(ServiceCollection)
     if conditions:
         query = query.where(and_(*conditions))
-    
+
     query = query.order_by(ServiceCollection.created_at.desc()).offset(offset).limit(limit)
-    
+
     result = await db.execute(query)
     collections = result.scalars().all()
-    
+
     # Get total count
     count_query = select(ServiceCollection)
     if conditions:
         count_query = count_query.where(and_(*conditions))
-    
+
     count_result = await db.execute(count_query)
     total = len(count_result.scalars().all())
-    
+
     return {
         "collections": [collection.to_dict() for collection in collections],
         "total": total,
@@ -180,24 +213,15 @@ async def get_service_collection(
     db: AsyncSession = Depends(get_db)
 ):
     """Get Service Collection by ID."""
-    result = await db.execute(
-        select(ServiceCollection).where(ServiceCollection.id == collection_id)
+    # Check both project and collection access using RBAC helper
+    collection, project = await CollectionAccessControl.check_collection_project_access(
+        collection_id,
+        current_user,
+        db,
+        required_project_role=ProjectRole.VIEWER,
+        required_collection_permission="read"
     )
-    collection = result.scalar_one_or_none()
-    
-    if not collection:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Service Collection not found"
-        )
-    
-    # Check access permissions
-    if not collection.can_user_access(current_user.email, "read") and not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission to access this collection"
-        )
-    
+
     return collection.to_dict()
 
 
@@ -209,34 +233,25 @@ async def update_service_collection(
     db: AsyncSession = Depends(get_db)
 ):
     """Update Service Collection."""
-    result = await db.execute(
-        select(ServiceCollection).where(ServiceCollection.id == collection_id)
+    # Check both project and collection access using RBAC helper
+    collection, project = await CollectionAccessControl.check_collection_project_access(
+        collection_id,
+        current_user,
+        db,
+        required_project_role=ProjectRole.DEVELOPER,
+        required_collection_permission="update"
     )
-    collection = result.scalar_one_or_none()
-    
-    if not collection:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Service Collection not found"
-        )
-    
-    # Check access permissions
-    if not collection.can_user_access(current_user.email, "update") and not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission to update this collection"
-        )
-    
+
     before_data = collection.to_dict()
-    
+
     # Update collection fields
     update_fields = update_data.model_dump(exclude_unset=True)
     for field, value in update_fields.items():
         if hasattr(collection, field):
             setattr(collection, field, value)
-    
+
     collection.updated_at = datetime.utcnow()
-    
+
     # Create audit log
     audit_entry = AuditLogEntry.log_collection_action(
         collection_id=str(collection.id),
@@ -248,7 +263,7 @@ async def update_service_collection(
     )
     db.add(audit_entry)
     await db.commit()
-    
+
     return collection.to_dict()
 
 
@@ -259,26 +274,24 @@ async def delete_service_collection(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete Service Collection."""
-    result = await db.execute(
-        select(ServiceCollection).where(ServiceCollection.id == collection_id)
+    # Check both project and collection access using RBAC helper
+    collection, project = await CollectionAccessControl.check_collection_project_access(
+        collection_id,
+        current_user,
+        db,
+        required_project_role=ProjectRole.MANAGER,
+        required_collection_permission="manage"
     )
-    collection = result.scalar_one_or_none()
-    
-    if not collection:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Service Collection not found"
-        )
-    
-    # Check if user is owner or admin
+
+    # Additional check: only owner or admin can delete
     if collection.owner_email != current_user.email and not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the collection owner or admin can delete this collection"
         )
-    
+
     before_data = collection.to_dict()
-    
+
     # Create audit log before deletion
     audit_entry = AuditLogEntry.log_collection_action(
         collection_id=str(collection.id),
@@ -288,11 +301,11 @@ async def delete_service_collection(
         before_data=before_data
     )
     db.add(audit_entry)
-    
+
     # Delete collection (cascade will handle related records)
     await db.delete(collection)
     await db.commit()
-    
+
     return {"message": "Service Collection deleted successfully"}
 
 
@@ -304,23 +317,14 @@ async def add_collection_member(
     db: AsyncSession = Depends(get_db)
 ):
     """Add member to Service Collection."""
-    result = await db.execute(
-        select(ServiceCollection).where(ServiceCollection.id == collection_id)
+    # Check both project and collection access using RBAC helper
+    collection, project = await CollectionAccessControl.check_collection_project_access(
+        collection_id,
+        current_user,
+        db,
+        required_project_role=ProjectRole.MANAGER,
+        required_collection_permission="manage"
     )
-    collection = result.scalar_one_or_none()
-    
-    if not collection:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Service Collection not found"
-        )
-    
-    # Check if user can manage members
-    if not collection.can_user_access(current_user.email, "manage") and not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission to manage members of this collection"
-        )
     
     # Find the user to add
     user_result = await db.execute(
@@ -363,23 +367,14 @@ async def remove_collection_member(
     db: AsyncSession = Depends(get_db)
 ):
     """Remove member from Service Collection."""
-    result = await db.execute(
-        select(ServiceCollection).where(ServiceCollection.id == collection_id)
+    # Check both project and collection access using RBAC helper
+    collection, project = await CollectionAccessControl.check_collection_project_access(
+        collection_id,
+        current_user,
+        db,
+        required_project_role=ProjectRole.MANAGER,
+        required_collection_permission="manage"
     )
-    collection = result.scalar_one_or_none()
-    
-    if not collection:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Service Collection not found"
-        )
-    
-    # Check if user can manage members
-    if not collection.can_user_access(current_user.email, "manage") and not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission to manage members of this collection"
-        )
     
     # Prevent removing the owner
     if user_email == collection.owner_email:
@@ -436,23 +431,14 @@ async def update_member_role(
     db: AsyncSession = Depends(get_db)
 ):
     """Update member role in Service Collection."""
-    result = await db.execute(
-        select(ServiceCollection).where(ServiceCollection.id == collection_id)
+    # Check both project and collection access using RBAC helper
+    collection, project = await CollectionAccessControl.check_collection_project_access(
+        collection_id,
+        current_user,
+        db,
+        required_project_role=ProjectRole.MANAGER,
+        required_collection_permission="manage"
     )
-    collection = result.scalar_one_or_none()
-    
-    if not collection:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Service Collection not found"
-        )
-    
-    # Check if user can manage members
-    if not collection.can_user_access(current_user.email, "manage") and not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission to manage members of this collection"
-        )
     
     # Prevent changing the owner role
     if user_email == collection.owner_email:
@@ -509,23 +495,14 @@ async def list_collection_members(
     db: AsyncSession = Depends(get_db)
 ):
     """List members of Service Collection."""
-    result = await db.execute(
-        select(ServiceCollection).where(ServiceCollection.id == collection_id)
+    # Check both project and collection access using RBAC helper
+    collection, project = await CollectionAccessControl.check_collection_project_access(
+        collection_id,
+        current_user,
+        db,
+        required_project_role=ProjectRole.VIEWER,
+        required_collection_permission="read"
     )
-    collection = result.scalar_one_or_none()
-    
-    if not collection:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Service Collection not found"
-        )
-    
-    # Check access permissions
-    if not collection.can_user_access(current_user.email, "read") and not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission to view this collection's members"
-        )
     
     # Get all users who are members
     all_users_result = await db.execute(select(User))
