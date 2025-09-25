@@ -49,11 +49,33 @@ class ProjectAccessControl:
         Raises:
             HTTPException: If project not found or access denied
         """
-        # Get the project
-        result = await db.execute(
-            select(Project).where(Project.id == project_id)
-        )
-        project = result.scalar_one_or_none()
+        # Get the project using raw SQL to avoid enum issues
+        project_sql = text("""
+            SELECT id, name, slug, description, status, color,
+                   avatar_url, owner_id, created_at, updated_at, settings
+            FROM projects
+            WHERE id = :project_id
+        """)
+        result = await db.execute(project_sql, {"project_id": project_id})
+        row = result.fetchone()
+
+        if not row:
+            project = None
+        else:
+            project_data = {
+                "id": row.id,
+                "name": row.name,
+                "slug": row.slug,
+                "description": row.description,
+                "status": row.status,
+                "color": row.color,
+                "avatar_url": row.avatar_url,
+                "owner_id": row.owner_id,
+                "created_at": row.created_at,
+                "updated_at": row.updated_at,
+                "settings": row.settings
+            }
+            project = Project(**project_data)
 
         if not project:
             raise HTTPException(
@@ -93,8 +115,31 @@ class ProjectAccessControl:
         """
         # Admin users can access all projects
         if user.is_admin:
-            result = await db.execute(select(Project))
-            return result.scalars().all()
+            projects_sql = text("""
+                SELECT DISTINCT id, name, slug, description, status, color,
+                       avatar_url, owner_id, created_at, updated_at, settings
+                FROM projects
+            """)
+            result = await db.execute(projects_sql)
+
+            # Convert raw results to Project objects
+            projects = []
+            for row in result:
+                project_data = {
+                    "id": row.id,
+                    "name": row.name,
+                    "slug": row.slug,
+                    "description": row.description,
+                    "status": row.status,
+                    "color": row.color,
+                    "avatar_url": row.avatar_url,
+                    "owner_id": row.owner_id,
+                    "created_at": row.created_at,
+                    "updated_at": row.updated_at,
+                    "settings": row.settings
+                }
+                projects.append(Project(**project_data))
+            return projects
 
         # Use completely raw SQL to avoid all SQLAlchemy enum issues
         # Simply get all projects where user is owner OR member (regardless of role)
@@ -255,11 +300,32 @@ class CollectionAccessControl:
         """
         from app.models import ServiceCollection
 
-        # Get the collection
-        result = await db.execute(
-            select(ServiceCollection).where(ServiceCollection.id == collection_id)
-        )
-        collection = result.scalar_one_or_none()
+        # Get the collection using raw SQL to avoid enum issues
+        collection_sql = text("""
+            SELECT id, name, description, environment, project_id,
+                   created_by, created_at, updated_at, tags, settings
+            FROM service_collections
+            WHERE id = :collection_id
+        """)
+        result = await db.execute(collection_sql, {"collection_id": collection_id})
+        row = result.fetchone()
+
+        if not row:
+            collection = None
+        else:
+            collection_data = {
+                "id": row.id,
+                "name": row.name,
+                "description": row.description,
+                "environment": row.environment,
+                "project_id": row.project_id,
+                "created_by": row.created_by,
+                "created_at": row.created_at,
+                "updated_at": row.updated_at,
+                "tags": row.tags,
+                "settings": row.settings
+            }
+            collection = ServiceCollection(**collection_data)
 
         if not collection:
             raise HTTPException(

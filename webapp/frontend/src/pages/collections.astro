@@ -1,5 +1,65 @@
 ---
 import Layout from '../layouts/Layout.astro';
+
+// Server-side data fetching
+let collections = [];
+let error = null;
+let currentProject = null;
+
+// Get auth context from middleware
+const authContext = Astro.locals.auth;
+const currentProjectId = Astro.locals.currentProjectId;
+
+// Get filter parameters from URL
+const url = new URL(Astro.request.url);
+const environmentFilter = url.searchParams.get('environment') || '';
+const statusFilter = url.searchParams.get('status') || '';
+const searchFilter = url.searchParams.get('search') || '';
+
+// Only fetch data if user is authenticated
+if (authContext.isAuthenticated) {
+  try {
+    const baseUrl = import.meta.env.PROD
+      ? 'http://vultr-backend:8000'
+      : 'http://localhost:8000';
+
+    // Build query parameters for filtering
+    const params = new URLSearchParams();
+    if (currentProjectId) params.append('project_id', currentProjectId);
+    if (environmentFilter) params.append('environment', environmentFilter);
+    if (statusFilter) params.append('status', statusFilter);
+    if (searchFilter) params.append('search', searchFilter);
+
+    const response = await fetch(`${baseUrl}/api/collections/?${params.toString()}`, {
+      headers: {
+        'Authorization': `Bearer ${Astro.cookies.get('auth_token')?.value}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.ok) {
+      collections = await response.json();
+    } else {
+      console.error('Failed to fetch collections:', response.status, response.statusText);
+      error = 'Failed to load collections. Please try again.';
+    }
+
+    // Get current project info if available
+    if (currentProjectId) {
+      const currentProjectCookie = Astro.cookies.get('currentProject')?.value;
+      if (currentProjectCookie) {
+        try {
+          currentProject = JSON.parse(decodeURIComponent(currentProjectCookie));
+        } catch {
+          // Invalid project cookie, ignore
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching collections:', err);
+    error = 'Network error while loading collections.';
+  }
+}
 ---
 
 <Layout title="Service Collections">
@@ -14,9 +74,9 @@ import Layout from '../layouts/Layout.astro';
             </p>
           </div>
           <div class="mt-4 flex md:mt-0 md:ml-4">
-            <button type="button" 
+            <button type="button"
                     class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                    @click="$dispatch('open-create-modal')">
+                    onclick="openCreateModal()">
               <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
@@ -32,47 +92,43 @@ import Layout from '../layouts/Layout.astro';
         <!-- Filters -->
         <div class="mt-8 bg-white shadow rounded-lg">
           <div class="px-4 py-5 sm:p-6">
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-4">
+            <form method="GET" class="grid grid-cols-1 gap-4 sm:grid-cols-4" onchange="this.submit()">
               <div>
-                <label for="environment-filter" class="block text-sm font-medium text-gray-700">Environment</label>
-                <select id="environment-filter" 
-                        name="environment-filter" 
-                        class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md"
-                        x-data="{ value: '' }"
-                        x-model="value"
-                        @change="$store.collections.fetchCollections({ environment: value })">
+                <label for="environment" class="block text-sm font-medium text-gray-700">Environment</label>
+                <select id="environment"
+                        name="environment"
+                        class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md">
                   <option value="">All Environments</option>
-                  <option value="development">Development</option>
-                  <option value="testing">Testing</option>
-                  <option value="staging">Staging</option>
-                  <option value="production">Production</option>
+                  <option value="development" {environmentFilter === 'development' && 'selected'}>Development</option>
+                  <option value="testing" {environmentFilter === 'testing' && 'selected'}>Testing</option>
+                  <option value="staging" {environmentFilter === 'staging' && 'selected'}>Staging</option>
+                  <option value="production" {environmentFilter === 'production' && 'selected'}>Production</option>
                 </select>
               </div>
-              
+
               <div>
-                <label for="status-filter" class="block text-sm font-medium text-gray-700">Status</label>
-                <select id="status-filter" 
-                        name="status-filter" 
-                        class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md"
-                        x-data="{ value: '' }"
-                        x-model="value"
-                        @change="$store.collections.fetchCollections({ status: value })">
+                <label for="status" class="block text-sm font-medium text-gray-700">Status</label>
+                <select id="status"
+                        name="status"
+                        class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md">
                   <option value="">All Statuses</option>
-                  <option value="draft">Draft</option>
-                  <option value="active">Active</option>
-                  <option value="suspended">Suspended</option>
-                  <option value="archived">Archived</option>
+                  <option value="draft" {statusFilter === 'draft' && 'selected'}>Draft</option>
+                  <option value="active" {statusFilter === 'active' && 'selected'}>Active</option>
+                  <option value="suspended" {statusFilter === 'suspended' && 'selected'}>Suspended</option>
+                  <option value="archived" {statusFilter === 'archived' && 'selected'}>Archived</option>
                 </select>
               </div>
-              
+
               <div class="sm:col-span-2">
                 <label for="search" class="block text-sm font-medium text-gray-700">Search</label>
                 <div class="mt-1 relative rounded-md shadow-sm">
-                  <input type="text" 
-                         name="search" 
-                         id="search" 
-                         class="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md" 
-                         placeholder="Search collections...">
+                  <input type="text"
+                         name="search"
+                         id="search"
+                         value={searchFilter}
+                         class="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
+                         placeholder="Search collections..."
+                         onkeydown="if(event.key === 'Enter') this.form.submit()">
                   <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -80,40 +136,189 @@ import Layout from '../layouts/Layout.astro';
                   </div>
                 </div>
               </div>
-            </div>
+            </form>
           </div>
         </div>
 
         <!-- Collections Grid -->
-        <div class="mt-8"
-             x-data="{
-               init() {
-                 this.fetchCollectionsForCurrentProject();
-               },
+        <div class="mt-8">
+          {error && (
+            <div class="rounded-md bg-red-50 p-4">
+              <div class="flex">
+                <div class="flex-shrink-0">
+                  <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+                <div class="ml-3">
+                  <h3 class="text-sm font-medium text-red-800">Error loading collections</h3>
+                  <div class="mt-2 text-sm text-red-700">
+                    <p>{error}</p>
+                  </div>
+                  <div class="mt-4">
+                    <button type="button"
+                            class="bg-red-50 text-red-800 text-sm font-medium px-3 py-1 rounded-md hover:bg-red-100"
+                            onclick="window.location.reload()">
+                      Try again
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
-               fetchCollectionsForCurrentProject() {
-                 const currentProject = $store.projects.currentProject;
-                 if (currentProject) {
-                   $store.collections.fetchCollections({ project_id: currentProject.id });
-                 } else {
-                   // If no project selected, fetch all collections
-                   $store.collections.fetchCollections();
-                 }
-               }
-             }"
-             x-on:project-changed.window="fetchCollectionsForCurrentProject()">
-          
-          <!-- Loading State -->
-          <div x-show="$store.collections.loading" class="text-center py-12">
-            <svg class="animate-spin -ml-1 mr-3 h-8 w-8 text-primary-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <p class="mt-2 text-sm text-gray-500">Loading collections...</p>
+          {!error && (
+            <>
+              {/* Empty State */}
+              {collections.length === 0 && (
+                <div class="text-center py-12">
+                  <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                  </svg>
+                  <h3 class="mt-2 text-sm font-medium text-gray-900">No collections found</h3>
+                  <p class="mt-1 text-sm text-gray-500">
+                    {(environmentFilter || statusFilter || searchFilter)
+                      ? 'No collections match your current filters. Try adjusting your search criteria.'
+                      : 'Get started by creating a new Service Collection.'
+                    }
+                  </p>
+                  <div class="mt-6">
+                    {(environmentFilter || statusFilter || searchFilter) ? (
+                      <a href="/collections"
+                         onclick="navigateWithTransition('/collections', event)"
+                         class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                        Clear filters
+                      </a>
+                    ) : (
+                      <button type="button"
+                              class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                              onclick="openCreateModal()">
+                        <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        New Collection
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Collections List */}
+              {collections.length > 0 && (
+                <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {collections.map((collection) => (
+                    <div class="bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition-shadow cursor-pointer"
+                         onclick={`navigateToCollection('${collection.id}')`}>
+                      <div class="p-6">
+                        <div class="flex items-center justify-between">
+                          <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                              <div class="h-10 w-10 rounded-lg bg-primary-100 flex items-center justify-center">
+                                <svg class="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                                </svg>
+                              </div>
+                            </div>
+                            <div class="ml-4">
+                              <h3 class="text-lg font-medium text-gray-900">{collection.name}</h3>
+                              <p class="text-sm text-gray-500 capitalize">{collection.environment}</p>
+                            </div>
+                          </div>
+                          <div class="flex-shrink-0">
+                            <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
+                              collection.status === 'active' ? 'bg-green-100 text-green-800' :
+                              collection.status === 'draft' ? 'bg-yellow-100 text-yellow-800' :
+                              collection.status === 'suspended' ? 'bg-red-100 text-red-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {collection.status}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div class="mt-4">
+                          <p class="text-sm text-gray-600">{collection.description || 'No description'}</p>
+                        </div>
+
+                        <div class="mt-4 flex items-center justify-between text-sm text-gray-500">
+                          <span>Created {new Date(collection.created_at).toLocaleDateString()}</span>
+                          {collection.estimated_monthly_cost && (
+                            <span>${collection.estimated_monthly_cost}/mo</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Create Collection Modal -->
+  <div id="create-modal" class="hidden fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="closeCreateModal()"></div>
+
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+      <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+        <form id="create-collection-form" action="/api/collections/" method="POST" onsubmit="handleCreateSubmit(event)">
+          <div>
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-primary-100">
+              <svg class="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+            </div>
+            <div class="mt-3 text-center sm:mt-5">
+              <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                Create New Service Collection
+              </h3>
+              <div class="mt-2">
+                <p class="text-sm text-gray-500">
+                  Create a new Service Collection to organize your infrastructure resources.
+                </p>
+              </div>
+            </div>
           </div>
 
-          <!-- Error State -->
-          <div x-show="$store.collections.error" class="rounded-md bg-red-50 p-4">
+          <div class="mt-5 sm:mt-6 space-y-4">
+            <div>
+              <label for="collection-name" class="block text-sm font-medium text-gray-700">Name</label>
+              <input type="text"
+                     name="name"
+                     id="collection-name"
+                     required
+                     class="mt-1 focus:ring-primary-500 focus:border-primary-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+                     placeholder="e.g., Production Web App">
+            </div>
+
+            <div>
+              <label for="collection-description" class="block text-sm font-medium text-gray-700">Description</label>
+              <textarea id="collection-description"
+                        name="description"
+                        rows="3"
+                        class="mt-1 focus:ring-primary-500 focus:border-primary-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+                        placeholder="Describe the purpose of this collection..."></textarea>
+            </div>
+
+            <div>
+              <label for="collection-environment" class="block text-sm font-medium text-gray-700">Environment</label>
+              <select id="collection-environment"
+                      name="environment"
+                      class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md">
+                <option value="development">Development</option>
+                <option value="testing">Testing</option>
+                <option value="staging">Staging</option>
+                <option value="production">Production</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="form-error" class="hidden mt-4 rounded-md bg-red-50 p-4">
             <div class="flex">
               <div class="flex-shrink-0">
                 <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
@@ -121,238 +326,174 @@ import Layout from '../layouts/Layout.astro';
                 </svg>
               </div>
               <div class="ml-3">
-                <h3 class="text-sm font-medium text-red-800">Error loading collections</h3>
+                <h3 class="text-sm font-medium text-red-800">Error creating collection</h3>
                 <div class="mt-2 text-sm text-red-700">
-                  <p x-text="$store.collections.error"></p>
-                </div>
-                <div class="mt-4">
-                  <button type="button" 
-                          class="bg-red-50 text-red-800 text-sm font-medium px-3 py-1 rounded-md hover:bg-red-100"
-                          @click="$store.collections.fetchCollections()">
-                    Try again
-                  </button>
+                  <p id="form-error-message"></p>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Collections Grid -->
-          <div x-show="!$store.collections.loading && !$store.collections.error">
-            <!-- Empty State -->
-            <div x-show="$store.collections.items.length === 0" class="text-center py-12">
-              <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-              </svg>
-              <h3 class="mt-2 text-sm font-medium text-gray-900">No collections</h3>
-              <p class="mt-1 text-sm text-gray-500">Get started by creating a new Service Collection.</p>
-              <div class="mt-6">
-                <button type="button" 
-                        class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                        @click="$dispatch('open-create-modal')">
-                  <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                  </svg>
-                  New Collection
-                </button>
-              </div>
-            </div>
-
-            <!-- Collections List -->
-            <div x-show="$store.collections.items.length > 0" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              <template x-for="collection in $store.collections.items" :key="collection.id">
-                <div class="bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition-shadow cursor-pointer" 
-                     @click="window.location.href = `/collections/${collection.id}`">
-                  <div class="p-6">
-                    <div class="flex items-center justify-between">
-                      <div class="flex items-center">
-                        <div class="flex-shrink-0">
-                          <div class="h-10 w-10 rounded-lg bg-primary-100 flex items-center justify-center">
-                            <svg class="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                              <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-                            </svg>
-                          </div>
-                        </div>
-                        <div class="ml-4">
-                          <h3 class="text-lg font-medium text-gray-900" x-text="collection.name"></h3>
-                          <p class="text-sm text-gray-500" x-text="collection.environment"></p>
-                        </div>
-                      </div>
-                      <div class="flex-shrink-0">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                              :class="{
-                                'bg-green-100 text-green-800': collection.status === 'active',
-                                'bg-yellow-100 text-yellow-800': collection.status === 'draft',
-                                'bg-red-100 text-red-800': collection.status === 'suspended',
-                                'bg-gray-100 text-gray-800': collection.status === 'archived'
-                              }"
-                              x-text="collection.status">
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div class="mt-4">
-                      <p class="text-sm text-gray-600" x-text="collection.description || 'No description'"></p>
-                    </div>
-                    
-                    <div class="mt-4 flex items-center justify-between text-sm text-gray-500">
-                      <span>Created <span x-text="new Date(collection.created_at).toLocaleDateString()"></span></span>
-                      <span x-show="collection.estimated_monthly_cost">
-                        $<span x-text="collection.estimated_monthly_cost"></span>/mo
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </template>
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
-  </div>
-
-  <!-- Create Collection Modal -->
-  <div x-data="modal()"
-       x-on:open-create-modal.window="open()"
-       x-on:close-create-modal.window="close()">
-    <div x-show="isOpen" 
-         class="fixed inset-0 z-50 overflow-y-auto" 
-         aria-labelledby="modal-title" 
-         role="dialog" 
-         aria-modal="true">
-      <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div x-show="isOpen" 
-             x-transition:enter="ease-out duration-300"
-             x-transition:enter-start="opacity-0"
-             x-transition:enter-end="opacity-100"
-             x-transition:leave="ease-in duration-200"
-             x-transition:leave-start="opacity-100"
-             x-transition:leave-end="opacity-0"
-             class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" 
-             @click="close()"></div>
-
-        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-        <div x-show="isOpen" 
-             x-transition:enter="ease-out duration-300"
-             x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-             x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
-             x-transition:leave="ease-in duration-200"
-             x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
-             x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-             class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
-          
-          <form x-data="{
-                  name: '',
-                  description: '',
-                  environment: 'development',
-                  loading: false,
-                  
-                  async handleSubmit(e) {
-                    e.preventDefault();
-                    this.loading = true;
-
-                    const currentProject = $store.projects.currentProject;
-                    if (!currentProject) {
-                      $store.notification.show('Please select a project first', 'error');
-                      this.loading = false;
-                      return;
-                    }
-
-                    const result = await $store.collections.createCollection({
-                      name: this.name,
-                      description: this.description,
-                      environment: this.environment,
-                      project_id: currentProject.id
-                    });
-                    
-                    if (result.success) {
-                      $dispatch('close-create-modal');
-                      this.name = '';
-                      this.description = '';
-                      this.environment = 'development';
-                    }
-                    
-                    this.loading = false;
-                  }
-                }" 
-                @submit="handleSubmit">
-            
-            <div>
-              <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-primary-100">
-                <svg class="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          <div class="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
+            <button type="submit"
+                    id="create-button"
+                    class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary-600 text-base font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:col-start-2 sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+              <span id="create-text">Create</span>
+              <span id="create-loading" class="hidden flex items-center">
+                <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-              </div>
-              <div class="mt-3 text-center sm:mt-5">
-                <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
-                  Create New Service Collection
-                </h3>
-                <div class="mt-2">
-                  <p class="text-sm text-gray-500">
-                    Create a new Service Collection to organize your infrastructure resources.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div class="mt-5 sm:mt-6 space-y-4">
-              <div>
-                <label for="collection-name" class="block text-sm font-medium text-gray-700">Name</label>
-                <input type="text" 
-                       name="collection-name" 
-                       id="collection-name" 
-                       required
-                       class="mt-1 focus:ring-primary-500 focus:border-primary-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" 
-                       placeholder="e.g., Production Web App"
-                       x-model="name">
-              </div>
-
-              <div>
-                <label for="collection-description" class="block text-sm font-medium text-gray-700">Description</label>
-                <textarea id="collection-description" 
-                          name="collection-description" 
-                          rows="3" 
-                          class="mt-1 focus:ring-primary-500 focus:border-primary-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" 
-                          placeholder="Describe the purpose of this collection..."
-                          x-model="description"></textarea>
-              </div>
-
-              <div>
-                <label for="collection-environment" class="block text-sm font-medium text-gray-700">Environment</label>
-                <select id="collection-environment" 
-                        name="collection-environment" 
-                        class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md"
-                        x-model="environment">
-                  <option value="development">Development</option>
-                  <option value="testing">Testing</option>
-                  <option value="staging">Staging</option>
-                  <option value="production">Production</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
-              <button type="submit" 
-                      class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary-600 text-base font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:col-start-2 sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                      :disabled="loading">
-                <span x-show="!loading">Create</span>
-                <span x-show="loading" class="flex items-center">
-                  <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Creating...
-                </span>
-              </button>
-              <button type="button" 
-                      class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:col-start-1 sm:text-sm"
-                      @click="close()">
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
+                Creating...
+              </span>
+            </button>
+            <button type="button"
+                    class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:col-start-1 sm:text-sm"
+                    onclick="closeCreateModal()">
+              Cancel
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
+
+  <!-- JavaScript for modal and View Transitions -->
+  <script>
+    // Modal management
+    function openCreateModal() {
+      document.getElementById('create-modal').classList.remove('hidden');
+      document.getElementById('collection-name').focus();
+    }
+
+    function closeCreateModal() {
+      document.getElementById('create-modal').classList.add('hidden');
+      // Reset form
+      document.getElementById('create-collection-form').reset();
+      // Hide any error messages
+      document.getElementById('form-error').classList.add('hidden');
+    }
+
+    // Collection navigation with View Transitions
+    function navigateToCollection(collectionId) {
+      const url = `/collections/${collectionId}`;
+      if (document.startViewTransition) {
+        document.startViewTransition(() => {
+          window.location.href = url;
+        });
+      } else {
+        window.location.href = url;
+      }
+    }
+
+    // Navigation with View Transitions
+    function navigateWithTransition(url, event) {
+      if (event) {
+        event.preventDefault();
+      }
+
+      if (document.startViewTransition) {
+        document.startViewTransition(() => {
+          window.location.href = url;
+        });
+      } else {
+        window.location.href = url;
+      }
+    }
+
+    // Form submission handler
+    async function handleCreateSubmit(event) {
+      event.preventDefault();
+
+      const form = event.target;
+      const formData = new FormData(form);
+      const createButton = document.getElementById('create-button');
+      const createText = document.getElementById('create-text');
+      const createLoading = document.getElementById('create-loading');
+      const formError = document.getElementById('form-error');
+      const errorMessage = document.getElementById('form-error-message');
+
+      // Show loading state
+      createButton.disabled = true;
+      createText.classList.add('hidden');
+      createLoading.classList.remove('hidden');
+      formError.classList.add('hidden');
+
+      try {
+        // Get auth token from cookie
+        const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+          const [key, value] = cookie.trim().split('=');
+          acc[key] = value;
+          return acc;
+        }, {});
+
+        const authToken = cookies.auth_token;
+        if (!authToken) {
+          throw new Error('Authentication token not found. Please log in again.');
+        }
+
+        // Get current project from cookie
+        const currentProjectCookie = cookies.currentProject;
+        if (!currentProjectCookie) {
+          throw new Error('No project selected. Please select a project first.');
+        }
+
+        const currentProject = JSON.parse(decodeURIComponent(currentProjectCookie));
+
+        // Prepare request data
+        const requestData = {
+          name: formData.get('name'),
+          description: formData.get('description') || '',
+          environment: formData.get('environment'),
+          project_id: currentProject.id
+        };
+
+        // Submit form to backend
+        const response = await fetch('/api/collections/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify(requestData)
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Failed to create collection');
+        }
+
+        // Success - close modal and refresh page with View Transition
+        closeCreateModal();
+
+        if (document.startViewTransition) {
+          document.startViewTransition(() => {
+            window.location.reload();
+          });
+        } else {
+          window.location.reload();
+        }
+
+      } catch (error) {
+        console.error('Error creating collection:', error);
+
+        // Show error message
+        errorMessage.textContent = error.message;
+        formError.classList.remove('hidden');
+
+      } finally {
+        // Reset loading state
+        createButton.disabled = false;
+        createText.classList.remove('hidden');
+        createLoading.classList.add('hidden');
+      }
+    }
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', function(event) {
+      if (event.key === 'Escape') {
+        closeCreateModal();
+      }
+    });
+  </script>
 </Layout>
