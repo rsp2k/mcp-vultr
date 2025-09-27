@@ -125,12 +125,19 @@ class ProjectAccessControl:
             # Convert raw results to Project objects
             projects = []
             for row in result:
+                # Handle status conversion carefully
+                if isinstance(row.status, str):
+                    status_value = ProjectStatus(row.status.lower())
+                else:
+                    # Already an enum, convert to string first then back to enum to ensure consistency
+                    status_value = ProjectStatus(str(row.status).lower())
+
                 project_data = {
                     "id": row.id,
                     "name": row.name,
                     "slug": row.slug,
                     "description": row.description,
-                    "status": row.status,
+                    "status": status_value,
                     "color": row.color,
                     "avatar_url": row.avatar_url,
                     "owner_id": row.owner_id,
@@ -143,8 +150,9 @@ class ProjectAccessControl:
 
         # Use completely raw SQL to avoid all SQLAlchemy enum issues
         # Simply get all projects where user is owner OR member (regardless of role)
+        # Note: Using DISTINCT ON (p.id) to handle potential duplicates from JOIN while including JSON settings
         projects_sql = text("""
-            SELECT DISTINCT p.id, p.name, p.slug, p.description, p.status, p.color,
+            SELECT DISTINCT ON (p.id) p.id, p.name, p.slug, p.description, p.status, p.color,
                    p.avatar_url, p.owner_id, p.created_at, p.updated_at, p.settings
             FROM projects p
             LEFT JOIN project_members pm ON p.id = pm.project_id
@@ -155,6 +163,7 @@ class ProjectAccessControl:
                 -- User is a member (any role - we'll handle role hierarchy in application layer)
                 pm.user_id = :user_id
             )
+            ORDER BY p.id
         """)
 
         result = await db.execute(projects_sql, {"user_id": user.id})
@@ -162,9 +171,16 @@ class ProjectAccessControl:
         # Convert raw results to Project objects
         projects = []
         for row in result:
+            # Handle status conversion carefully
+            if isinstance(row.status, str):
+                status_value = ProjectStatus(row.status.lower())
+            else:
+                # Already an enum, convert to string first then back to enum to ensure consistency
+                status_value = ProjectStatus(str(row.status).lower())
+
             project = Project(
                 id=row.id, name=row.name, slug=row.slug, description=row.description,
-                status=ProjectStatus(row.status.lower()), color=row.color, avatar_url=row.avatar_url,
+                status=status_value, color=row.color, avatar_url=row.avatar_url,
                 owner_id=row.owner_id, created_at=row.created_at, updated_at=row.updated_at,
                 settings=row.settings
             )

@@ -136,13 +136,15 @@ class User(Base):
         back_populates="owner"
     )
 
-    projects = relationship(
-        "Project",
-        secondary=project_members,
-        back_populates="members",
-        primaryjoin="User.id == project_members.c.user_id",
-        secondaryjoin="Project.id == project_members.c.project_id"
-    )
+    # DISABLED: This relationship causes SQLAlchemy enum casting issues with PostgreSQL
+    # Use raw SQL queries in the service layer instead
+    # projects = relationship(
+    #     "Project",
+    #     secondary=project_members,
+    #     back_populates="members",
+    #     primaryjoin="User.id == project_members.c.user_id",
+    #     secondaryjoin="Project.id == project_members.c.project_id"
+    # )
 
     # Note: WorkflowApproval and WorkflowTemplate relationships
     # commented out until these models are implemented
@@ -296,6 +298,33 @@ class User(Base):
     
     def to_dict(self, include_sensitive: bool = False) -> Dict[str, Any]:
         """Convert to dictionary for API responses."""
+        # Get connected accounts for enhanced authentication info
+        # Handle case where connected_accounts might not be loaded in async context
+        github_account = None
+        connected_accounts_list = []
+
+        try:
+            # Try to access connected_accounts, but handle case where it's not loaded
+            if hasattr(self, '_sa_instance_state') and self._sa_instance_state.expired:
+                # If the instance is expired, we can't safely access relationships
+                pass
+            else:
+                for account in (self.connected_accounts or []):
+                    if account.provider_type.value == 'github':
+                        github_account = account
+                    connected_accounts_list.append({
+                        "provider": account.provider_type.value,
+                        "provider_id": account.provider_id,
+                        "username": account.provider_username,
+                        "verified": account.is_verified,
+                        "is_primary": account.is_primary,
+                        "last_used": account.last_used_at.isoformat() if account.last_used_at else None
+                    })
+        except Exception:
+            # If we can't access connected_accounts due to async context issues,
+            # fall back to basic OAuth provider information
+            pass
+
         result = {
             "id": str(self.id),
             "email": self.email,
@@ -319,7 +348,18 @@ class User(Base):
             "verified_at": self.verified_at.isoformat() if self.verified_at else None,
             "last_login_at": self.last_login_at.isoformat() if self.last_login_at else None,
             "is_active": self.is_active,
-            "is_admin": self.is_admin
+            "is_admin": self.is_admin,
+
+            # Enhanced authentication fields for frontend compatibility
+            "provider": self.oauth_provider,  # Alias for oauth_provider
+            "login_type": self.oauth_provider,  # Frontend expects this field
+            "github_id": github_account.provider_id if github_account else self.oauth_subject if self.oauth_provider == 'github' else None,
+            "github_username": github_account.provider_username if github_account else None,
+            "github_verified": github_account.is_verified if github_account else False,
+            "has_github_account": github_account is not None or self.oauth_provider == 'github',
+
+            # Connected accounts summary (use pre-built list to avoid async issues)
+            "connected_accounts": connected_accounts_list
         }
         
         if include_sensitive:

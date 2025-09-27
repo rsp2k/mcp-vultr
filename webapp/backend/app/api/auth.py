@@ -880,9 +880,12 @@ async def github_callback(
             detail="Failed to authenticate with GitHub"
         )
     
-    # Find or create user
+    # Find or create user (with eager loading of connected accounts)
+    from sqlalchemy.orm import selectinload
     result = await db.execute(
-        select(User).where(User.email == primary_email)
+        select(User)
+        .options(selectinload(User.connected_accounts))
+        .where(User.email == primary_email)
     )
     user = result.scalar_one_or_none()
     
@@ -1015,7 +1018,16 @@ async def github_callback(
     )
     db.add(audit_entry)
     await db.commit()
-    
+
+    # Refresh user with connected accounts to ensure they're loaded
+    await db.refresh(user)
+    result = await db.execute(
+        select(User)
+        .options(selectinload(User.connected_accounts))
+        .where(User.id == user.id)
+    )
+    user = result.scalar_one()
+
     # Generate JWT token for the webapp session
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     jwt_token = create_access_token(
@@ -1023,10 +1035,10 @@ async def github_callback(
         expires_delta=access_token_expires
     )
     expires_in = ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert to seconds
-    
-    logger.info("GitHub OAuth login successful", 
+
+    logger.info("GitHub OAuth login successful",
                user_id=str(user.id), email=user.email)
-    
+
     return LoginResponse(
         access_token=jwt_token,
         expires_in=expires_in,
@@ -1048,10 +1060,10 @@ async def github_callback_get(
     try:
         result = await github_callback(callback_data, request, db)
 
-        # For a browser redirect, redirect to the frontend dashboard with the token
-        # We'll use a RedirectResponse to send them to the dashboard
+        # For a browser redirect, redirect to the login page with return parameter
+        # The login page will extract the token and redirect to dashboard with cookie set
         return RedirectResponse(
-            url=f"/dashboard?token={result.access_token}",
+            url=f"/login?return=%2Fdashboard%3Ftoken%3D{result.access_token}",
             status_code=status.HTTP_302_FOUND
         )
 
