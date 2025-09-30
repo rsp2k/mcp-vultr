@@ -572,6 +572,12 @@ export default (Alpine: Alpine) => {
       id: ''
     },
 
+    // Validation state
+    validationErrors: {
+      name: '',
+      slug: ''
+    },
+
     init() {
       // Auto-open create modal if URL parameter is set
       const params = new URLSearchParams(window.location.search);
@@ -582,6 +588,28 @@ export default (Alpine: Alpine) => {
         newUrl.searchParams.delete('create');
         window.history.replaceState({}, '', newUrl.toString());
       }
+
+      // Auto-generate slug from name (only in create mode)
+      this.$watch('form.name', (value) => {
+        if (this.currentModalMode === 'create' && value) {
+          // Convert to lowercase, replace spaces with hyphens, remove special chars
+          this.form.slug = value
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+            .replace(/\s+/g, '-')          // Replace spaces with hyphens
+            .replace(/-+/g, '-')           // Replace multiple hyphens with single
+            .replace(/^-|-$/g, '');        // Remove leading/trailing hyphens
+        }
+
+        // Validate name uniqueness
+        this.validateName(value);
+      });
+
+      // Validate slug when it changes
+      this.$watch('form.slug', (value) => {
+        this.validateSlug(value);
+      });
 
       // Sync color inputs
       this.$watch('form.color', (value) => {
@@ -768,6 +796,53 @@ export default (Alpine: Alpine) => {
       }
     },
 
+    // Validation methods
+    validateName(name: string) {
+      if (!name) {
+        this.validationErrors.name = '';
+        return true;
+      }
+
+      // Check if name already exists (case-insensitive, excluding current project in edit mode)
+      const existingProject = this.projects.find((p: any) =>
+        p.name.toLowerCase() === name.toLowerCase() &&
+        p.id !== this.form.id
+      );
+
+      if (existingProject) {
+        this.validationErrors.name = 'A project with this name already exists';
+        return false;
+      }
+
+      this.validationErrors.name = '';
+      return true;
+    },
+
+    validateSlug(slug: string) {
+      if (!slug) {
+        this.validationErrors.slug = '';
+        return true;
+      }
+
+      // Check if slug already exists (excluding current project in edit mode)
+      const existingProject = this.projects.find((p: any) =>
+        p.slug === slug &&
+        p.id !== this.form.id
+      );
+
+      if (existingProject) {
+        this.validationErrors.slug = 'This URL slug is already in use';
+        return false;
+      }
+
+      this.validationErrors.slug = '';
+      return true;
+    },
+
+    hasValidationErrors() {
+      return this.validationErrors.name || this.validationErrors.slug;
+    },
+
     // Utility methods
     showNotification(type: string, message: string) {
       const notificationStore = Alpine.store('notification') as any;
@@ -781,6 +856,10 @@ export default (Alpine: Alpine) => {
     get submitButtonText() {
       if (this.submitting) return 'Saving...';
       return this.currentModalMode === 'create' ? 'Create Project' : 'Save Changes';
+    },
+
+    get canSubmit() {
+      return !this.submitting && !this.hasValidationErrors() && this.form.name && this.form.slug;
     }
   }));
 }
