@@ -25,11 +25,11 @@ class ProjectStatus(enum.Enum):
 
 class ProjectRole(enum.Enum):
     """User roles within a project."""
-    OWNER = "owner"          # Full control including deletion
-    ADMIN = "admin"          # Manage everything except deletion
-    MANAGER = "manager"      # Manage resources and workflows
-    DEVELOPER = "developer"  # Create/edit resources and workflows
-    VIEWER = "viewer"        # Read-only access
+    OWNER = "OWNER"          # Full control including deletion
+    ADMIN = "ADMIN"          # Manage everything except deletion
+    MANAGER = "MANAGER"      # Manage resources and workflows
+    DEVELOPER = "DEVELOPER"  # Create/edit resources and workflows
+    VIEWER = "VIEWER"        # Read-only access
 
 
 # Association table for project team members
@@ -85,14 +85,16 @@ class Project(Base):
     owner = relationship("User", foreign_keys=[owner_id], back_populates="owned_projects")
 
     # Many-to-many relationship with users through project_members
-    members = relationship(
-        "User",
-        secondary=project_members,
-        back_populates="projects",
-        lazy="selectin",
-        primaryjoin="Project.id == project_members.c.project_id",
-        secondaryjoin="User.id == project_members.c.user_id"
-    )
+    # DISABLED: This relationship causes SQLAlchemy enum casting issues with PostgreSQL
+    # Use raw SQL queries in the service layer instead
+    # members = relationship(
+    #     "User",
+    #     secondary=project_members,
+    #     back_populates="projects",
+    #     lazy="selectin",
+    #     primaryjoin="Project.id == project_members.c.project_id",
+    #     secondaryjoin="User.id == project_members.c.user_id"
+    # )
 
     # One-to-many relationships
     service_collections = relationship("ServiceCollection", back_populates="project", cascade="all, delete-orphan")
@@ -184,16 +186,9 @@ class Project(Base):
         }
 
         if include_members:
-            data['members'] = [
-                {
-                    'user_id': str(member.id),
-                    'email': member.email,
-                    'full_name': member.full_name,
-                    'avatar_url': member.avatar_url,
-                    'role': self.get_user_role(member.id).value if self.get_user_role(member.id) else None
-                }
-                for member in (self.members or [])
-            ]
+            # NOTE: Members relationship is disabled due to enum casting issues
+            # Use explicit service layer queries to get member data when needed
+            data['members'] = []
 
         return data
 

@@ -4,21 +4,19 @@ export default (Alpine: Alpine) => {
 
   // Global Alpine.js configuration and stores
 
-  // Authentication store
+  // Authentication store (legacy - now using server-side auth)
   Alpine.store('auth', {
     user: null,
-    token: localStorage.getItem('auth_token'),
+    token: null,
     isAuthenticated: false,
     authConfig: null,
-    _initialized: false,
+    _initialized: true, // Mark as initialized to prevent auto-init
     _initializing: false,
 
     async init() {
-      // Prevent multiple simultaneous initializations
-      if (this._initialized || this._initializing) {
-        console.log('🔐 Auth store already initialized/initializing, skipping...');
-        return;
-      }
+      // Skip initialization - we now use server-side authentication
+      console.log('🔐 Auth store init skipped (using server-side auth)');
+      return;
 
       this._initializing = true;
       console.log('🔐 Auth store init called', {
@@ -194,31 +192,26 @@ export default (Alpine: Alpine) => {
   });
 
   // Projects Store
+  // Projects store (legacy - now using server-side data)
   Alpine.store('projects', {
     items: [],
     loading: false,
     error: null,
     currentProject: null,
     total: 0,
-    initialized: false,
+    initialized: true, // Mark as initialized to prevent auto-init
 
     init() {
-      if (this.initialized) return;
-
-      // Load current project from localStorage
-      const stored = localStorage.getItem('currentProject');
-      if (stored) {
-        try {
-          this.currentProject = JSON.parse(stored);
-        } catch (e) {
-          localStorage.removeItem('currentProject');
-        }
-      }
-
-      this.initialized = true;
+      // Skip initialization - we now use server-side data
+      console.log('🎯 Projects store init skipped (using server-side data)');
+      return;
     },
 
     async fetchProjects(filters = {}) {
+      // Skip fetching - projects are now fetched server-side
+      console.log('🎯 Projects fetch skipped (using server-side data)');
+      return;
+
       this.loading = true;
       this.error = null;
 
@@ -543,19 +536,251 @@ export default (Alpine: Alpine) => {
     visible: false,
     message: '',
     type: 'info', // success, error, warning, info
-    
+
     show(message: string, type = 'info') {
       this.message = message;
       this.type = type;
       this.visible = true;
-      
+
       setTimeout(() => {
         this.hide();
       }, 5000);
     },
-    
+
     hide() {
       this.visible = false;
+    }
+  }));
+
+  // Project Manager component for projects page
+  Alpine.data('projectManager', (initialProjects = []) => ({
+    // State
+    projects: initialProjects,
+    currentModalMode: 'create',
+    selectedProjectId: null,
+    projectModal: false,
+    teamModal: false,
+    dropdownOpen: {},
+    submitting: false,
+
+    // Form state
+    form: {
+      name: '',
+      slug: '',
+      description: '',
+      color: '#6366f1',
+      id: ''
+    },
+
+    init() {
+      // Auto-open create modal if URL parameter is set
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('create') === 'true') {
+        this.openCreateModal();
+        // Clean URL
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete('create');
+        window.history.replaceState({}, '', newUrl.toString());
+      }
+
+      // Sync color inputs
+      this.$watch('form.color', (value) => {
+        const colorInput = document.getElementById('project-color') as HTMLInputElement;
+        const colorTextInput = document.getElementById('project-color-text') as HTMLInputElement;
+        if (colorInput) colorInput.value = value;
+        if (colorTextInput) colorTextInput.value = value;
+      });
+    },
+
+    // Modal management
+    openCreateModal() {
+      this.currentModalMode = 'create';
+      this.selectedProjectId = null;
+      this.form = {
+        name: '',
+        slug: '',
+        description: '',
+        color: '#6366f1',
+        id: ''
+      };
+      this.projectModal = true;
+      document.body.style.overflow = 'hidden';
+    },
+
+    editProject(project: any) {
+      this.currentModalMode = 'edit';
+      this.selectedProjectId = project.id;
+      this.form = {
+        name: project.name,
+        slug: project.slug,
+        description: project.description || '',
+        color: project.color || '#6366f1',
+        id: project.id
+      };
+      this.projectModal = true;
+      this.closeAllDropdowns();
+      document.body.style.overflow = 'hidden';
+    },
+
+    closeProjectModal() {
+      this.projectModal = false;
+      document.body.style.overflow = '';
+    },
+
+    openTeamModal(project: any) {
+      this.selectedProjectId = project.id;
+      this.teamModal = true;
+      this.closeAllDropdowns();
+      document.body.style.overflow = 'hidden';
+    },
+
+    closeTeamModal() {
+      this.teamModal = false;
+      document.body.style.overflow = '';
+    },
+
+    // Dropdown management
+    toggleDropdown(projectId: string) {
+      // Close all other dropdowns
+      Object.keys(this.dropdownOpen).forEach(key => {
+        if (key !== projectId) {
+          this.dropdownOpen[key] = false;
+        }
+      });
+
+      // Toggle this dropdown
+      this.dropdownOpen[projectId] = !this.dropdownOpen[projectId];
+    },
+
+    closeAllDropdowns() {
+      this.dropdownOpen = {};
+    },
+
+    isDropdownOpen(projectId: string) {
+      return this.dropdownOpen[projectId] || false;
+    },
+
+    // Project actions
+    selectProject(project: any) {
+      // Store project in cookie and redirect to collections
+      document.cookie = `currentProject=${encodeURIComponent(JSON.stringify({ id: project.id, name: project.name }))}; path=/`;
+
+      // Use View Transition if supported
+      if ((document as any).startViewTransition) {
+        (document as any).startViewTransition(() => {
+          window.location.href = '/collections';
+        });
+      } else {
+        window.location.href = '/collections';
+      }
+    },
+
+    async deleteProject(project: any) {
+      const confirmed = confirm(`Are you sure you want to delete "${project.name}"? This action cannot be undone.`);
+      if (!confirmed) {
+        this.closeAllDropdowns();
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/projects/${project.id}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          this.showNotification('success', 'Project deleted successfully');
+          // Reload page after a short delay
+          setTimeout(() => {
+            if ((document as any).startViewTransition) {
+              (document as any).startViewTransition(() => {
+                window.location.reload();
+              });
+            } else {
+              window.location.reload();
+            }
+          }, 1000);
+        } else {
+          const errorData = await response.json();
+          this.showNotification('error', errorData.detail || 'Failed to delete project');
+        }
+      } catch (error) {
+        console.error('Delete error:', error);
+        this.showNotification('error', 'Network error occurred');
+      }
+      this.closeAllDropdowns();
+    },
+
+    // Form submission
+    async submitForm() {
+      this.submitting = true;
+
+      try {
+        const data = { ...this.form };
+
+        // Remove empty id field for create mode
+        if (!data.id) {
+          delete data.id;
+        }
+
+        const url = this.currentModalMode === 'create'
+          ? '/api/projects/'
+          : `/api/projects/${this.selectedProjectId}`;
+        const method = this.currentModalMode === 'create' ? 'POST' : 'PUT';
+
+        const response = await fetch(url, {
+          method: method,
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+          this.closeProjectModal();
+          this.showNotification('success',
+            this.currentModalMode === 'create'
+              ? 'Project created successfully'
+              : 'Project updated successfully'
+          );
+
+          // Reload page after a short delay
+          setTimeout(() => {
+            if ((document as any).startViewTransition) {
+              (document as any).startViewTransition(() => {
+                window.location.reload();
+              });
+            } else {
+              window.location.reload();
+            }
+          }, 1000);
+        } else {
+          const errorData = await response.json();
+          this.showNotification('error', errorData.detail || 'Failed to save project');
+        }
+      } catch (error) {
+        console.error('Form submission error:', error);
+        this.showNotification('error', 'Network error occurred');
+      } finally {
+        this.submitting = false;
+      }
+    },
+
+    // Utility methods
+    showNotification(type: string, message: string) {
+      const notificationStore = Alpine.store('notification') as any;
+      notificationStore.show(type, message);
+    },
+
+    get modalTitle() {
+      return this.currentModalMode === 'create' ? 'Create New Project' : 'Edit Project';
+    },
+
+    get submitButtonText() {
+      if (this.submitting) return 'Saving...';
+      return this.currentModalMode === 'create' ? 'Create Project' : 'Save Changes';
     }
   }));
 }

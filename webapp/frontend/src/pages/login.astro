@@ -42,9 +42,27 @@ import Layout from '../layouts/Layout.astro';
                 @click="async () => {
                   loading = true;
                   error = null;
-                  const result = await $store.auth.loginWithGitHub();
-                  if (!result.success) {
-                    error = result.error;
+
+                  try {
+                    const response = await fetch('/api/auth/github/authorize', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({})
+                    });
+
+                    if (response.ok) {
+                      const data = await response.json();
+                      // Redirect to GitHub authorization URL
+                      window.location.href = data.authorization_url;
+                    } else {
+                      const errorData = await response.json();
+                      error = errorData.detail || 'Failed to start OAuth flow';
+                      loading = false;
+                    }
+                  } catch (err) {
+                    error = 'Network error occurred';
                     loading = false;
                   }
                 }"
@@ -184,10 +202,51 @@ import Layout from '../layouts/Layout.astro';
 </Layout>
 
 <script>
-  // Check if user is already authenticated
-  document.addEventListener('alpine:init', () => {
-    if (localStorage.getItem('auth_token')) {
-      window.location.href = '/dashboard';
+  // Handle OAuth token callback and check authentication immediately
+  (function() {
+    console.log('🚀 Login page loaded, checking for OAuth token...');
+
+    // Prevent infinite redirect loops
+    const redirectCount = parseInt(sessionStorage.getItem('redirect_count') || '0');
+    if (redirectCount > 3) {
+      console.error('🚫 Too many redirects, stopping to prevent infinite loop');
+      sessionStorage.removeItem('redirect_count');
+      return;
     }
-  });
+
+    // Extract token from URL parameters (OAuth callback)
+    const urlParams = new URLSearchParams(window.location.search);
+    const returnUrl = urlParams.get('return');
+
+    console.log('🔍 Return URL:', returnUrl);
+
+    if (returnUrl) {
+      // Parse token from return URL if present
+      const returnParams = new URLSearchParams(returnUrl.split('?')[1] || '');
+      const token = returnParams.get('token');
+
+      console.log('🔑 Token found:', token ? token.substring(0, 20) + '...' : 'None');
+
+      if (token) {
+        // Store the token and redirect to dashboard with token parameter
+        localStorage.setItem('auth_token', token);
+        console.log('✅ OAuth token received and stored in localStorage');
+        sessionStorage.setItem('redirect_count', (redirectCount + 1).toString());
+        console.log('🚀 Redirecting to dashboard with token...');
+        window.location.href = `/dashboard?token=${encodeURIComponent(token)}`;
+        return;
+      }
+    }
+
+    // Check if user is already authenticated
+    const existingToken = localStorage.getItem('auth_token');
+    if (existingToken) {
+      console.log('✅ Found existing token in localStorage');
+      sessionStorage.setItem('redirect_count', (redirectCount + 1).toString());
+      console.log('🚀 Redirecting to dashboard...');
+      window.location.href = '/dashboard';
+    } else {
+      console.log('ℹ️ No token found, staying on login page');
+    }
+  })();
 </script>

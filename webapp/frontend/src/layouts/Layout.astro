@@ -1,4 +1,6 @@
 ---
+import { ViewTransitions } from 'astro:transitions';
+
 export interface Props {
   title: string;
   description?: string;
@@ -6,6 +8,40 @@ export interface Props {
 }
 
 const { title, description = "Service Collection Management Dashboard", requireAuth = true } = Astro.props;
+
+// Get auth context from middleware
+const { auth, currentProjectId } = Astro.locals;
+const user = auth?.user;
+const isAuthenticated = auth?.isAuthenticated || false;
+
+// Fetch user's projects if authenticated
+let projects = [];
+let currentProject = null;
+
+if (isAuthenticated && user) {
+  try {
+    const projectsResponse = await fetch('http://vultr-backend:8000/api/projects/', {
+      headers: {
+        'Authorization': `Bearer ${Astro.cookies.get('auth_token')?.value}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (projectsResponse.ok) {
+      projects = await projectsResponse.json();
+
+      // Set current project (prefer from cookie, fallback to first project)
+      if (currentProjectId) {
+        currentProject = projects.find((p: any) => p.id === currentProjectId);
+      }
+      if (!currentProject && projects.length > 0) {
+        currentProject = projects[0];
+      }
+    }
+  } catch (error) {
+    console.error('Failed to fetch projects:', error);
+  }
+}
 
 // Get current pathname for navigation active state
 const currentPath = Astro.url.pathname;
@@ -35,7 +71,8 @@ function getMobileNavClasses(path: string): string {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title}</title>
-    
+    <ViewTransitions />
+
     <!-- Use system fonts for faster loading -->
     
     <!-- Global styles -->
@@ -78,14 +115,12 @@ function getMobileNavClasses(path: string): string {
     </style>
   </head>
   <body class="h-full">
-    {requireAuth && (
-      <div x-data="authGuard()" x-init="checkAuth()"></div>
-    )}
+{/* Auth is now handled server-side by middleware */}
     
     <!-- Main Application Container -->
     <div class="min-h-full">
       <!-- Navigation -->
-      <nav class="bg-white shadow-sm border-b border-gray-200" x-data="{ mobileMenuOpen: false }">
+      <nav class="bg-white shadow-sm border-b border-gray-200" x-data="{ mobileMenuOpen: false }" transition:name="main-nav">
         <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div class="flex justify-between h-16">
             <!-- Left side - Logo and main nav -->
@@ -107,15 +142,27 @@ function getMobileNavClasses(path: string): string {
                           @click="toggle()"
                           x-bind:aria-expanded="isOpen">
                     <div class="flex items-center space-x-2">
-                      <div class="h-2 w-2 rounded-full"
-                           :class="$store.projects.currentProject?.color ? `bg-[${$store.projects.currentProject.color}]` : 'bg-gray-400'"
-                           x-show="$store.projects.currentProject"></div>
-                      <span x-text="$store.projects.currentProject?.name || 'No Project'"></span>
+                      {currentProject && (
+                        <div class="h-2 w-2 rounded-full" style={`background-color: ${currentProject.color || '#6B7280'}`}></div>
+                      )}
+                      <span>{currentProject?.name || 'No Project'}</span>
                     </div>
                     <svg class="ml-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                     </svg>
                   </button>
+
+                  <!-- Backdrop overlay for better coverage -->
+                  <div x-show="isOpen"
+                       x-transition:enter="transition ease-out duration-100"
+                       x-transition:enter-start="opacity-0"
+                       x-transition:enter-end="opacity-100"
+                       x-transition:leave="transition ease-in duration-75"
+                       x-transition:leave-start="opacity-100"
+                       x-transition:leave-end="opacity-0"
+                       class="fixed inset-0 bg-black bg-opacity-10 z-[50]"
+                       @click="close()">
+                  </div>
 
                   <div x-show="isOpen"
                        x-transition:enter="transition ease-out duration-100"
@@ -124,48 +171,45 @@ function getMobileNavClasses(path: string): string {
                        x-transition:leave="transition ease-in duration-75"
                        x-transition:leave-start="transform opacity-100 scale-100"
                        x-transition:leave-end="transform opacity-0 scale-95"
-                       class="origin-top-left absolute left-0 mt-2 w-72 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-50"
+                       class="origin-top-left absolute left-0 mt-2 w-72 rounded-md shadow-xl bg-white ring-1 ring-black ring-opacity-10 focus:outline-none z-[60]"
+                       style="background-color: rgba(255, 255, 255, 1);"
                        @click.away="close()">
                     <div class="py-1">
                       <div class="px-4 py-2 text-xs font-semibold text-gray-900 uppercase tracking-wide border-b border-gray-100">
                         Switch Project
                       </div>
                       <div class="max-h-64 overflow-y-auto">
-                        <template x-for="project in $store.projects.items" :key="project.id">
+                        {projects.map((project: any) => (
                           <button type="button"
-                                  class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3"
-                                  :class="{ 'bg-primary-50': $store.projects.currentProject?.id === project.id }"
-                                  @click="$store.projects.setCurrentProject(project); close()">
-                            <div class="h-2 w-2 rounded-full flex-shrink-0"
-                                 :class="`bg-[${project.color || '#6B7280'}]`"></div>
+                                  class={`w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-3 ${currentProject?.id === project.id ? 'bg-primary-50' : ''}`}
+                                  onclick={`window.setCurrentProject('${project.id}'); document.querySelector('[x-data*="dropdown"]').dispatchEvent(new CustomEvent('close'));`}>
+                            <div class="h-2 w-2 rounded-full flex-shrink-0" style={`background-color: ${project.color || '#6B7280'}`}></div>
                             <div class="flex-1 min-w-0">
-                              <div class="font-medium" x-text="project.name"></div>
-                              <div class="text-xs text-gray-500 truncate" x-text="project.description"></div>
+                              <div class="font-medium">{project.name}</div>
+                              <div class="text-xs text-gray-500 truncate">{project.description}</div>
                             </div>
                             <div class="flex-shrink-0">
-                              <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
-                                    :class="{
-                                      'bg-green-100 text-green-800': project.status === 'active',
-                                      'bg-yellow-100 text-yellow-800': project.status === 'suspended',
-                                      'bg-gray-100 text-gray-800': project.status === 'archived'
-                                    }"
-                                    x-text="project.status"></span>
+                              <span class={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                project.status === 'active' ? 'bg-green-100 text-green-800' :
+                                project.status === 'suspended' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {project.status}
+                              </span>
                             </div>
                           </button>
-                        </template>
+                        ))}
                       </div>
                       <div class="border-t border-gray-100">
-                        <button type="button"
-                                class="w-full text-left px-4 py-3 text-sm text-primary-600 hover:bg-primary-50 font-medium flex items-center space-x-2"
-                                @click="window.location.href = '/projects?create=true'; close()">
+                        <a href="/projects?create=true"
+                           class="w-full text-left px-4 py-3 text-sm text-primary-600 hover:bg-primary-50 font-medium flex items-center space-x-2">
                           <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                           </svg>
                           <span>Create Project</span>
-                        </button>
+                        </a>
                         <a href="/projects"
-                           class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 font-medium"
-                           @click="close()">
+                           class="block px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 font-medium">
                           Manage Projects
                         </a>
                       </div>
@@ -203,25 +247,26 @@ function getMobileNavClasses(path: string): string {
               <!-- Profile dropdown -->
               <div class="ml-3 relative" x-data="dropdown()">
                 <div>
-                  <button type="button" 
-                          class="bg-white flex text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500" 
+                  <button type="button"
+                          class="bg-white flex text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                           @click="toggle()"
                           x-bind:aria-expanded="isOpen">
                     <span class="sr-only">Open user menu</span>
-                    <div class="h-8 w-8 rounded-full overflow-hidden"
-                         x-show="$store.auth.user?.avatar_url">
-                      <img :src="$store.auth.user?.avatar_url"
-                           :alt="$store.auth.user?.first_name + ' ' + $store.auth.user?.last_name"
-                           class="h-8 w-8 object-cover">
-                    </div>
-                    <div class="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center"
-                         x-show="!$store.auth.user?.avatar_url">
-                      <span class="text-sm font-medium text-primary-600" x-text="$store.auth.user?.first_name?.[0] || 'U'"></span>
-                    </div>
+                    {user?.avatar_url ? (
+                      <div class="h-8 w-8 rounded-full overflow-hidden">
+                        <img src={user.avatar_url}
+                             alt={`${user.full_name}`}
+                             class="h-8 w-8 object-cover">
+                      </div>
+                    ) : (
+                      <div class="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
+                        <span class="text-sm font-medium text-primary-600">{user?.full_name?.[0] || 'U'}</span>
+                      </div>
+                    )}
                   </button>
                 </div>
-                
-                <div x-show="isOpen" 
+
+                <div x-show="isOpen"
                      x-transition:enter="transition ease-out duration-200"
                      x-transition:enter-start="transform opacity-0 scale-95"
                      x-transition:enter-end="transform opacity-100 scale-100"
@@ -231,12 +276,14 @@ function getMobileNavClasses(path: string): string {
                      class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-50"
                      @click.away="close()">
                   <div class="px-4 py-2 text-sm text-gray-700 border-b border-gray-100">
-                    <div class="font-medium" x-text="$store.auth.user?.full_name"></div>
-                    <div class="text-gray-500" x-text="$store.auth.user?.email"></div>
+                    <div class="font-medium">{user?.full_name}</div>
+                    <div class="text-gray-500">{user?.email}</div>
                   </div>
                   <a href="/profile" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Profile</a>
                   <a href="/settings" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Settings</a>
-                  <button @click="$store.auth.logout()" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Sign out</button>
+                  <form method="post" action="/api/auth/logout" class="block">
+                    <button type="submit" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Sign out</button>
+                  </form>
                 </div>
               </div>
             </div>
@@ -269,33 +316,36 @@ function getMobileNavClasses(path: string): string {
           <div class="pt-4 pb-3 border-t border-gray-200">
             <div class="flex items-center px-4">
               <div class="flex-shrink-0">
-                <div class="h-10 w-10 rounded-full overflow-hidden"
-                     x-show="$store.auth.user?.avatar_url">
-                  <img :src="$store.auth.user?.avatar_url"
-                       :alt="$store.auth.user?.first_name + ' ' + $store.auth.user?.last_name"
-                       class="h-10 w-10 object-cover">
-                </div>
-                <div class="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center"
-                     x-show="!$store.auth.user?.avatar_url">
-                  <span class="text-sm font-medium text-primary-600" x-text="$store.auth.user?.first_name?.[0] || 'U'"></span>
-                </div>
+                {user?.avatar_url ? (
+                  <div class="h-10 w-10 rounded-full overflow-hidden">
+                    <img src={user.avatar_url}
+                         alt={`${user.full_name}`}
+                         class="h-10 w-10 object-cover">
+                  </div>
+                ) : (
+                  <div class="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
+                    <span class="text-sm font-medium text-primary-600">{user?.full_name?.[0] || 'U'}</span>
+                  </div>
+                )}
               </div>
               <div class="ml-3">
-                <div class="text-base font-medium text-gray-800" x-text="$store.auth.user?.full_name"></div>
-                <div class="text-sm font-medium text-gray-500" x-text="$store.auth.user?.email"></div>
+                <div class="text-base font-medium text-gray-800">{user?.full_name}</div>
+                <div class="text-sm font-medium text-gray-500">{user?.email}</div>
               </div>
             </div>
             <div class="mt-3 space-y-1">
               <a href="/profile" class="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">Profile</a>
               <a href="/settings" class="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">Settings</a>
-              <button @click="$store.auth.logout()" class="block w-full text-left px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">Sign out</button>
+              <form method="post" action="/api/auth/logout" class="block">
+                <button type="submit" class="block w-full text-left px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">Sign out</button>
+              </form>
             </div>
           </div>
         </div>
       </nav>
       
       <!-- Page content -->
-      <main class="flex-1">
+      <main class="flex-1" transition:name="main-content">
         <slot />
       </main>
     </div>
@@ -343,19 +393,36 @@ function getMobileNavClasses(path: string): string {
       </div>
     </div>
 
-    <!-- Alpine.js Stores and Utilities (inline to ensure immediate availability) -->
+    <!-- Project switching and utilities -->
     <script type="module">
       // Import PassKey utilities first
       import { confirmWithPassKey, authenticateWithPassKey, hasPassKeys } from '/src/js/passkey-utils.js';
 
       // Utility function to get authentication headers
       function getAuthHeaders() {
-        const token = localStorage.getItem('auth_token');
+        const token = document.cookie
+          .split('; ')
+          .find(row => row.startsWith('auth_token='))
+          ?.split('=')[1];
         return {
           'Content-Type': 'application/json',
           'Authorization': token ? `Bearer ${token}` : ''
         };
       }
+
+      // Global function to switch projects (server-side)
+      window.setCurrentProject = async function(projectId) {
+        try {
+          // Set the current project cookie and reload page
+          const projectData = { id: projectId };
+          document.cookie = `currentProject=${encodeURIComponent(JSON.stringify(projectData))}; path=/; max-age=31536000`;
+
+          // Reload the page to get server-side updates
+          window.location.reload();
+        } catch (error) {
+          console.error('Failed to set current project:', error);
+        }
+      };
 
       // Wait for Alpine to be available and register stores immediately
       function waitForAlpine() {
@@ -497,26 +564,15 @@ function getMobileNavClasses(path: string): string {
         };
       };
 
-      // Initialize authentication after Alpine and stores are ready
+      // Initialize Alpine.js components after stores are ready
       document.addEventListener('alpine:init', async () => {
-        console.log('🎯 Alpine init event - initializing auth...');
+        console.log('🎯 Alpine init event - initializing components...');
 
-        // Initialize authentication (stores are loaded via Astro integration entrypoint)
-        if (Alpine.store('auth')) {
-          await Alpine.store('auth').init();
-          console.log('✅ Authentication initialized');
-        } else {
-          console.warn('⚠️ Auth store not available');
-        }
+        // We now use server-side authentication via middleware
+        // Alpine.js stores are only used for UI interactions (dropdowns, modals, notifications)
+        // No need to initialize auth or projects stores since data comes from server-side
 
-        // Initialize projects store and fetch projects
-        if (Alpine.store('projects')) {
-          Alpine.store('projects').init();
-          await Alpine.store('projects').fetchProjects();
-          console.log('✅ Projects store initialized and projects fetched');
-        }
-
-        console.log('✅ Alpine.js initialization complete');
+        console.log('✅ Alpine.js initialization complete (server-side auth mode)');
       });
     </script>
 

@@ -1,14 +1,119 @@
 ---
 import Layout from '../layouts/Layout.astro';
+
+// Server-side data fetching
+let dashboardData = null;
+let error = null;
+let accountError = null;
+let userEmail = null;
+
+// Handle OAuth token from URL parameter
+const urlToken = Astro.url.searchParams.get('token');
+if (urlToken) {
+  // Set the token as a cookie for server-side auth
+  Astro.cookies.set('auth_token', urlToken, {
+    httpOnly: true,
+    secure: import.meta.env.PROD,
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24 * 7 // 7 days
+  });
+
+  // Redirect to clean URL without token parameter
+  const cleanUrl = new URL(Astro.url);
+  cleanUrl.searchParams.delete('token');
+  return Astro.redirect(cleanUrl.pathname + cleanUrl.search);
+}
+
+// Get auth context from middleware
+const authContext = Astro.locals.auth;
+
+// Only fetch data if user is authenticated
+if (authContext.isAuthenticated) {
+  try {
+    // Always use container service name for internal communication
+    const baseUrl = 'http://vultr-backend:8000';
+
+    // First, get user information to check account type
+    const userResponse = await fetch(`${baseUrl}/api/auth/me`, {
+      headers: {
+        'Authorization': `Bearer ${Astro.cookies.get('auth_token')?.value}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (userResponse.ok) {
+      const userData = await userResponse.json();
+      userEmail = userData.email;
+
+      // Check if this is a GitHub account (simple heuristic)
+      const isGitHubAccount = userData.provider === 'github' ||
+                             userData.github_id ||
+                             userData.login_type === 'github';
+
+      if (!isGitHubAccount) {
+        accountError = 'github_required';
+      }
+    }
+
+    // Try to fetch dashboard data
+    const response = await fetch(`${baseUrl}/api/collections`, {
+      headers: {
+        'Authorization': `Bearer ${Astro.cookies.get('auth_token')?.value}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.ok) {
+      // If collections endpoint works, try dashboard overview
+      const dashboardResponse = await fetch(`${baseUrl}/api/dashboard/overview`, {
+        headers: {
+          'Authorization': `Bearer ${Astro.cookies.get('auth_token')?.value}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (dashboardResponse.ok) {
+        dashboardData = await dashboardResponse.json();
+      } else {
+        // Dashboard overview might not exist, that's okay
+        dashboardData = { summary: { total_collections: 0, active_operations: 0, pending_approvals: 0, recent_activity_count: 0 } };
+      }
+    } else if (response.status === 500) {
+      // Database error - check if it's the enum issue
+      const errorText = await response.text().catch(() => '');
+      if (errorText.includes('projectrole') || errorText.includes('does not exist')) {
+        accountError = 'setup_required';
+      } else {
+        accountError = 'github_required';
+      }
+    } else if (response.status === 403) {
+      accountError = 'github_required';
+    } else {
+      console.error('Failed to fetch dashboard data:', response.status, response.statusText);
+      error = 'Unable to load your dashboard. Please try signing in again.';
+    }
+  } catch (err) {
+    console.error('Error fetching dashboard data:', err);
+    // Network errors might indicate the account isn't properly set up
+    accountError = 'setup_required';
+  }
+}
+
+// Provide fallback data structure if no data received
+const overview = dashboardData?.summary || {
+  total_collections: 0,
+  active_operations: 0,
+  pending_approvals: 0,
+  recent_activity_count: 0
+};
+
+const recentActivity = dashboardData?.recent_activity || [];
+const environmentStats = dashboardData?.collections_by_environment || {};
+const statusStats = dashboardData?.collections_by_status || {};
 ---
 
-<Layout title="Dashboard - Service Collections (Hot Reload Test)">
-  <div class="py-10" 
-       x-data="{
-         init() {
-           $store.dashboard.fetchOverview();
-         }
-       }">
+<Layout title="Dashboard - Service Collections">
+  <div class="py-10">
     <header>
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <h1 class="text-3xl font-bold leading-tight text-gray-900">Dashboard</h1>
@@ -17,12 +122,100 @@ import Layout from '../layouts/Layout.astro';
         </p>
       </div>
     </header>
-    
+
     <main>
       <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-        <!-- Overview Cards -->
-        <div class="mt-8">
-          <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4" x-data x-show="$store.dashboard.overview">
+
+        {accountError === 'github_required' && (
+          <div class="mt-8 rounded-md bg-yellow-50 p-4">
+            <div class="flex">
+              <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-6-6.75h12a2.25 2.25 0 110 4.5h-12a2.25 2.25 0 110-4.5z" />
+                </svg>
+              </div>
+              <div class="ml-3">
+                <h3 class="text-sm font-medium text-yellow-800">GitHub Account Required</h3>
+                <div class="mt-2 text-sm text-yellow-700">
+                  <p>The email address <strong>{userEmail}</strong> is not associated with a GitHub account.</p>
+                  <p class="mt-1">This application requires a GitHub account for authentication. Please:</p>
+                  <ul class="mt-2 list-disc list-inside space-y-1">
+                    <li>Sign out and use a different GitHub account, or</li>
+                    <li>Create a GitHub account using this email address</li>
+                  </ul>
+                </div>
+                <div class="mt-4">
+                  <a href="/login"
+                     class="text-sm bg-yellow-100 hover:bg-yellow-200 text-yellow-800 py-2 px-3 rounded-md border border-yellow-200">
+                    Sign in with different account
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {accountError === 'setup_required' && (
+          <div class="mt-8 rounded-md bg-blue-50 p-4">
+            <div class="flex">
+              <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                </svg>
+              </div>
+              <div class="ml-3">
+                <h3 class="text-sm font-medium text-blue-800">Account Setup in Progress</h3>
+                <div class="mt-2 text-sm text-blue-700">
+                  <p>Your account is being configured for first-time access.</p>
+                  <p class="mt-1">This usually takes a few moments. Please:</p>
+                  <ul class="mt-2 list-disc list-inside space-y-1">
+                    <li>Wait a moment and refresh the page, or</li>
+                    <li>Contact your administrator if this persists</li>
+                  </ul>
+                </div>
+                <div class="mt-4 space-x-3">
+                  <button onclick="window.location.reload()"
+                          class="text-sm bg-blue-100 hover:bg-blue-200 text-blue-800 py-2 px-3 rounded-md border border-blue-200">
+                    Refresh page
+                  </button>
+                  <a href="/login"
+                     class="text-sm bg-white hover:bg-gray-50 text-blue-800 py-2 px-3 rounded-md border border-blue-200">
+                    Sign in again
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {error && !accountError && (
+          <div class="mt-8 rounded-md bg-red-50 p-4">
+            <div class="flex">
+              <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                </svg>
+              </div>
+              <div class="ml-3">
+                <h3 class="text-sm font-medium text-red-800">Unable to Load Dashboard</h3>
+                <div class="mt-2 text-sm text-red-700">{error}</div>
+                <div class="mt-4">
+                  <button onclick="window.location.reload()"
+                          class="text-sm bg-red-100 hover:bg-red-200 text-red-800 py-2 px-3 rounded-md border border-red-200">
+                    Try again
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <!-- Dashboard Content - Only show if no account errors -->
+        {!accountError && (
+          <>
+            <!-- Overview Cards -->
+            <div class="mt-8">
+              <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
             <!-- Total Collections -->
             <div class="bg-white overflow-hidden shadow rounded-lg">
               <div class="p-5">
@@ -35,14 +228,16 @@ import Layout from '../layouts/Layout.astro';
                   <div class="ml-5 w-0 flex-1">
                     <dl>
                       <dt class="text-sm font-medium text-gray-500 truncate">Total Collections</dt>
-                      <dd class="text-lg font-medium text-gray-900" x-text="$store.dashboard.overview?.summary?.total_collections || 0"></dd>
+                      <dd class="text-lg font-medium text-gray-900">{overview.total_collections}</dd>
                     </dl>
                   </div>
                 </div>
               </div>
               <div class="bg-gray-50 px-5 py-3">
                 <div class="text-sm">
-                  <a href="/collections" class="font-medium text-primary-700 hover:text-primary-900">View all</a>
+                  <a href="/collections"
+                     onclick="navigateWithTransition('/collections', event)"
+                     class="font-medium text-primary-700 hover:text-primary-900">View all</a>
                 </div>
               </div>
             </div>
@@ -53,264 +248,229 @@ import Layout from '../layouts/Layout.astro';
                 <div class="flex items-center">
                   <div class="flex-shrink-0">
                     <svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
                     </svg>
                   </div>
                   <div class="ml-5 w-0 flex-1">
                     <dl>
                       <dt class="text-sm font-medium text-gray-500 truncate">Active Operations</dt>
-                      <dd class="text-lg font-medium text-gray-900" x-text="($store.dashboard.overview?.summary?.operations_by_status?.executing || 0) + ($store.dashboard.overview?.summary?.operations_by_status?.pending_approval || 0)"></dd>
+                      <dd class="text-lg font-medium text-gray-900">{overview.active_operations}</dd>
                     </dl>
                   </div>
                 </div>
               </div>
               <div class="bg-gray-50 px-5 py-3">
                 <div class="text-sm">
-                  <a href="/workflows" class="font-medium text-primary-700 hover:text-primary-900">View all</a>
+                  <a href="/operations"
+                     onclick="navigateWithTransition('/operations', event)"
+                     class="font-medium text-primary-700 hover:text-primary-900">View all</a>
                 </div>
               </div>
             </div>
 
-            <!-- Monthly Cost -->
+            <!-- Pending Approvals -->
             <div class="bg-white overflow-hidden shadow rounded-lg">
               <div class="p-5">
                 <div class="flex items-center">
                   <div class="flex-shrink-0">
                     <svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
                     </svg>
                   </div>
                   <div class="ml-5 w-0 flex-1">
                     <dl>
-                      <dt class="text-sm font-medium text-gray-500 truncate">Est. Monthly Cost</dt>
-                      <dd class="text-lg font-medium text-gray-900">
-                        $<span x-text="($store.dashboard.overview?.summary?.estimated_monthly_cost || 0).toFixed(2)"></span>
-                      </dd>
+                      <dt class="text-sm font-medium text-gray-500 truncate">Pending Approvals</dt>
+                      <dd class="text-lg font-medium text-gray-900">{overview.pending_approvals}</dd>
                     </dl>
                   </div>
                 </div>
               </div>
               <div class="bg-gray-50 px-5 py-3">
                 <div class="text-sm">
-                  <a href="/billing" class="font-medium text-primary-700 hover:text-primary-900">View details</a>
+                  <a href="/approvals"
+                     onclick="navigateWithTransition('/approvals', event)"
+                     class="font-medium text-primary-700 hover:text-primary-900">View all</a>
                 </div>
               </div>
             </div>
 
-            <!-- Success Rate -->
+            <!-- Recent Activity -->
             <div class="bg-white overflow-hidden shadow rounded-lg">
               <div class="p-5">
                 <div class="flex items-center">
                   <div class="flex-shrink-0">
-                    <svg class="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
                   <div class="ml-5 w-0 flex-1">
                     <dl>
-                      <dt class="text-sm font-medium text-gray-500 truncate">Success Rate</dt>
-                      <dd class="text-lg font-medium text-gray-900">
-                        <span x-text="calculateSuccessRate()">--</span>%
-                      </dd>
+                      <dt class="text-sm font-medium text-gray-500 truncate">Recent Activity</dt>
+                      <dd class="text-lg font-medium text-gray-900">{overview.recent_activity_count}</dd>
                     </dl>
                   </div>
                 </div>
               </div>
               <div class="bg-gray-50 px-5 py-3">
                 <div class="text-sm">
-                  <span class="text-gray-500">Last 30 days</span>
+                  <a href="/activity"
+                     onclick="navigateWithTransition('/activity', event)"
+                     class="font-medium text-primary-700 hover:text-primary-900">View all</a>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Quick Actions -->
-        <div class="mt-8">
-          <div class="bg-white shadow rounded-lg">
-            <div class="px-4 py-5 sm:p-6">
-              <h3 class="text-lg leading-6 font-medium text-gray-900">Quick Actions</h3>
-              <div class="mt-5">
+        <!-- Environment Distribution -->
+        {Object.keys(environmentStats).length > 0 && (
+          <div class="mt-8">
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+              <div class="px-4 py-5 sm:p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Collections by Environment</h3>
                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <button type="button"
-                          class="relative block w-full border-2 border-gray-300 border-dashed rounded-lg p-6 text-center hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                          @click="window.location.href = '/collections/new'">
-                    <svg class="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                    <span class="mt-2 block text-sm font-medium text-gray-900">Create Collection</span>
-                    <span class="mt-1 block text-xs text-gray-500">Start a new Service Collection</span>
-                  </button>
-
-                  <button type="button"
-                          class="relative block w-full border-2 border-gray-300 border-dashed rounded-lg p-6 text-center hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                          @click="window.location.href = '/projects?create=true'">
-                    <svg class="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
-                    </svg>
-                    <span class="mt-2 block text-sm font-medium text-gray-900">Create Project</span>
-                    <span class="mt-1 block text-xs text-gray-500">Set up a new project workspace</span>
-                  </button>
-
-                  <button type="button"
-                          class="relative block w-full border-2 border-gray-300 border-dashed rounded-lg p-6 text-center hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                          @click="window.location.href = '/workflows'">
-                    <svg class="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
-                    </svg>
-                    <span class="mt-2 block text-sm font-medium text-gray-900">View Workflows</span>
-                    <span class="mt-1 block text-xs text-gray-500">Monitor pending operations</span>
-                  </button>
-
-                  <button type="button" 
-                          class="relative block w-full border-2 border-gray-300 border-dashed rounded-lg p-6 text-center hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                          @click="window.location.href = '/resources'">
-                    <svg class="mx-auto h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3V6a3 3 0 013-3h13.5a3 3 0 013 3v5.25a3 3 0 01-3 3m-16.5 0a3 3 0 013 3v5.25a3 3 0 013-3m13.5-3a3 3 0 013 3v5.25a3 3 0 01-3 3H6.75a3 3 0 01-3-3v-5.25a3 3 0 013-3m16.5 0h-16.5" />
-                    </svg>
-                    <span class="mt-2 block text-sm font-medium text-gray-900">Manage Resources</span>
-                    <span class="mt-1 block text-xs text-gray-500">View Vultr resources</span>
-                  </button>
+                  {Object.entries(environmentStats).map(([environment, count]) => (
+                    <div class="text-center">
+                      <div class="text-2xl font-bold text-gray-900">{count}</div>
+                      <div class="text-sm text-gray-500 capitalize">{environment}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
-        <!-- Recent Activity -->
-        <div class="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
-          <!-- Recent Operations -->
-          <div class="bg-white shadow rounded-lg">
-            <div class="px-4 py-5 sm:p-6">
-              <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Recent Operations</h3>
-              <div class="flow-root">
-                <ul role="list" class="-mb-8" x-data x-show="$store.dashboard.overview?.recent_operations?.length > 0">
-                  <template x-for="(operation, index) in $store.dashboard.overview?.recent_operations?.slice(0, 5) || []" :key="operation.id">
-                    <li>
-                      <div class="relative pb-8" x-show="index < 4">
-                        <span class="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200" x-show="index < 4"></span>
-                        <div class="relative flex space-x-3">
-                          <div>
-                            <span class="h-8 w-8 rounded-full flex items-center justify-center"
-                                  :class="{
-                                    'bg-green-500': operation.status === 'completed',
-                                    'bg-blue-500': operation.status === 'executing',
-                                    'bg-yellow-500': operation.status === 'pending_approval',
-                                    'bg-red-500': operation.status === 'failed',
-                                    'bg-gray-500': !['completed', 'executing', 'pending_approval', 'failed'].includes(operation.status)
-                                  }">
-                              <svg class="h-5 w-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M10 2L3 7v11h4v-6h6v6h4V7l-7-5z"/>
-                              </svg>
-                            </span>
-                          </div>
-                          <div class="min-w-0 flex-1 pt-1.5 flex justify-between space-x-4">
-                            <div>
-                              <p class="text-sm text-gray-500">
-                                <span class="font-medium text-gray-900" x-text="operation.operation_type.replace('_', ' ')"></span>
-                                <span x-text="operation.resource_type"></span>
-                              </p>
-                              <p class="text-xs text-gray-400" x-text="new Date(operation.created_at).toLocaleString()"></p>
-                            </div>
-                            <div class="text-right text-sm whitespace-nowrap text-gray-500">
-                              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                                    :class="{
-                                      'bg-green-100 text-green-800': operation.status === 'completed',
-                                      'bg-blue-100 text-blue-800': operation.status === 'executing',
-                                      'bg-yellow-100 text-yellow-800': operation.status === 'pending_approval',
-                                      'bg-red-100 text-red-800': operation.status === 'failed',
-                                      'bg-gray-100 text-gray-800': !['completed', 'executing', 'pending_approval', 'failed'].includes(operation.status)
-                                    }"
-                                    x-text="operation.status.replace('_', ' ')">
-                              </span>
-                            </div>
-                          </div>
+        <!-- Status Distribution -->
+        {Object.keys(statusStats).length > 0 && (
+          <div class="mt-8">
+            <div class="bg-white overflow-hidden shadow rounded-lg">
+              <div class="px-4 py-5 sm:p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Collections by Status</h3>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  {Object.entries(statusStats).map(([status, count]) => (
+                    <div class="text-center">
+                      <div class="text-2xl font-bold text-gray-900">{count}</div>
+                      <div class={`text-sm capitalize ${
+                        status === 'active' ? 'text-green-600' :
+                        status === 'inactive' ? 'text-yellow-600' :
+                        status === 'suspended' ? 'text-red-600' :
+                        'text-gray-500'
+                      }`}>{status}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <!-- Recent Activity List -->
+        {recentActivity.length > 0 && (
+          <div class="mt-8">
+            <div class="bg-white shadow overflow-hidden sm:rounded-md">
+              <div class="px-4 py-5 sm:px-6">
+                <h3 class="text-lg font-medium text-gray-900">Recent Activity</h3>
+                <p class="mt-1 text-sm text-gray-500">Latest actions across your service collections</p>
+              </div>
+              <ul class="divide-y divide-gray-200">
+                {recentActivity.slice(0, 10).map((activity) => (
+                  <li class="px-4 py-4 sm:px-6 hover:bg-gray-50">
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                          <div class={`h-2 w-2 rounded-full ${
+                            activity.severity === 'high' ? 'bg-red-400' :
+                            activity.severity === 'medium' ? 'bg-yellow-400' :
+                            'bg-green-400'
+                          }`}></div>
+                        </div>
+                        <div class="ml-3">
+                          <p class="text-sm font-medium text-gray-900">{activity.action}</p>
+                          <p class="text-sm text-gray-500">{activity.resource_type}: {activity.resource_name || 'N/A'}</p>
                         </div>
                       </div>
-                    </li>
-                  </template>
-                </ul>
-                <div x-show="!$store.dashboard.overview?.recent_operations?.length" class="text-center py-4 text-gray-500">
-                  No recent operations
-                </div>
-              </div>
-              <div class="mt-6">
-                <a href="/workflows" class="w-full flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-                  View all operations
-                </a>
-              </div>
-            </div>
-          </div>
-
-          <!-- Recent Activity -->
-          <div class="bg-white shadow rounded-lg">
-            <div class="px-4 py-5 sm:p-6">
-              <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Recent Activity</h3>
-              <div class="flow-root">
-                <ul role="list" class="-mb-8" x-data x-show="$store.dashboard.overview?.recent_activities?.length > 0">
-                  <template x-for="(activity, index) in $store.dashboard.overview?.recent_activities?.slice(0, 5) || []" :key="activity.id">
-                    <li>
-                      <div class="relative pb-8" x-show="index < 4">
-                        <span class="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200" x-show="index < 4"></span>
-                        <div class="relative flex space-x-3">
-                          <div>
-                            <span class="h-8 w-8 rounded-full bg-gray-400 flex items-center justify-center">
-                              <svg class="h-5 w-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
-                              </svg>
-                            </span>
-                          </div>
-                          <div class="min-w-0 flex-1 pt-1.5 flex justify-between space-x-4">
-                            <div>
-                              <p class="text-sm text-gray-900" x-text="activity.message"></p>
-                              <p class="text-xs text-gray-400" x-text="new Date(activity.timestamp).toLocaleString()"></p>
-                            </div>
-                            <div class="text-right text-sm whitespace-nowrap text-gray-500">
-                              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                                    :class="{
-                                      'bg-green-100 text-green-800': activity.severity === 'info',
-                                      'bg-yellow-100 text-yellow-800': activity.severity === 'warning',
-                                      'bg-red-100 text-red-800': activity.severity === 'error'
-                                    }"
-                                    x-text="activity.severity">
-                              </span>
-                            </div>
-                          </div>
-                        </div>
+                      <div class="text-sm text-gray-500">
+                        {new Date(activity.timestamp).toLocaleString()}
                       </div>
-                    </li>
-                  </template>
-                </ul>
-                <div x-show="!$store.dashboard.overview?.recent_activities?.length" class="text-center py-4 text-gray-500">
-                  No recent activity
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {recentActivity.length > 10 && (
+                <div class="bg-gray-50 px-4 py-3">
+                  <div class="text-sm">
+                    <a href="/activity"
+                       onclick="navigateWithTransition('/activity', event)"
+                       class="font-medium text-primary-700 hover:text-primary-900">
+                      View all {recentActivity.length} activities
+                    </a>
+                  </div>
                 </div>
-              </div>
-              <div class="mt-6">
-                <a href="/audit" class="w-full flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-                  View full audit log
-                </a>
-              </div>
+              )}
             </div>
           </div>
-        </div>
+        )}
+
+        {/* Empty state when no collections exist */}
+        {overview.total_collections === 0 && !error && (
+          <div class="mt-8 text-center py-12">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+            </svg>
+            <h3 class="mt-2 text-sm font-semibold text-gray-900">No service collections</h3>
+            <p class="mt-1 text-sm text-gray-500">Get started by creating your first service collection.</p>
+            <div class="mt-6">
+              <a href="/projects"
+                 onclick="navigateWithTransition('/projects', event)"
+                 class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                Create Project
+              </a>
+            </div>
+          </div>
+        )}
+          </>
+        )}
       </div>
     </main>
   </div>
-</Layout>
 
-<script>
-  function calculateSuccessRate() {
-    const overview = Alpine.store('dashboard').overview;
-    if (!overview?.summary?.operations_by_status) return '--';
-    
-    const statuses = overview.summary.operations_by_status;
-    const total = Object.values(statuses).reduce((sum, count) => sum + count, 0);
-    const successful = statuses.completed || 0;
-    
-    return total > 0 ? Math.round((successful / total) * 100) : 0;
-  }
-  
-  // Make function globally available
-  window.calculateSuccessRate = calculateSuccessRate;
-</script>
+  <!-- Navigation with View Transitions -->
+  <script>
+    // Clear redirect counter on successful dashboard load
+    sessionStorage.removeItem('redirect_count');
+    console.log('✅ Dashboard loaded successfully, redirect counter cleared');
+
+    function navigateWithTransition(url, event) {
+      if (event) {
+        event.preventDefault();
+      }
+
+      if (document.startViewTransition) {
+        document.startViewTransition(() => {
+          window.location.href = url;
+        });
+      } else {
+        window.location.href = url;
+      }
+    }
+
+    // Auto-refresh dashboard data every 30 seconds (optional progressive enhancement)
+    if ('fetch' in window) {
+      setInterval(async () => {
+        try {
+          const response = await fetch('/api/dashboard/overview');
+          if (response.ok) {
+            // Optionally reload page with new data
+            // For now, we'll just keep it static until user navigates
+          }
+        } catch (error) {
+          // Silent fail for auto-refresh
+        }
+      }, 30000);
+    }
+  </script>
+</Layout>

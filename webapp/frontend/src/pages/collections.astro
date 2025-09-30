@@ -19,9 +19,8 @@ const searchFilter = url.searchParams.get('search') || '';
 // Only fetch data if user is authenticated
 if (authContext.isAuthenticated) {
   try {
-    const baseUrl = import.meta.env.PROD
-      ? 'http://vultr-backend:8000'
-      : 'http://localhost:8000';
+    // Always use container service name for internal communication
+    const baseUrl = 'http://vultr-backend:8000';
 
     // Build query parameters for filtering
     const params = new URLSearchParams();

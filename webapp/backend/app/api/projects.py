@@ -134,13 +134,17 @@ async def get_user_role_in_project(
     user_id: UUID
 ) -> Optional[ProjectRole]:
     """Get user's role in a project."""
-    # Check if user is the owner
-    project = await db.get(Project, project_id)
-    if project and project.owner_id == user_id:
+    # Check if user is the owner using raw SQL to avoid enum casting issues
+    from sqlalchemy import text
+    owner_result = await db.execute(
+        text("SELECT owner_id FROM projects WHERE id = :project_id"),
+        {"project_id": project_id}
+    )
+    owner_row = owner_result.first()
+    if owner_row and owner_row[0] == user_id:
         return ProjectRole.OWNER
 
     # Check project_members table with raw SQL to avoid enum casting issues
-    from sqlalchemy import text
     result = await db.execute(
         text("SELECT role FROM project_members WHERE project_id = :project_id AND user_id = :user_id"),
         {"project_id": project_id, "user_id": user_id}
@@ -245,14 +249,14 @@ async def list_projects(
     where_clause = " AND ".join(sql_conditions)
 
     projects_sql = text(f"""
-        SELECT DISTINCT p.id, p.name, p.slug, p.description, p.status, p.color,
+        SELECT DISTINCT ON (p.id) p.id, p.name, p.slug, p.description, p.status, p.color,
                p.avatar_url, p.owner_id, p.created_at, p.updated_at, p.settings,
                (SELECT COUNT(*) FROM project_members WHERE project_id = p.id) + 1 as member_count,
                (SELECT COUNT(*) FROM service_collections WHERE project_id = p.id) as collection_count
         FROM projects p
         LEFT JOIN project_members pm ON p.id = pm.project_id
         WHERE {where_clause}
-        ORDER BY p.updated_at DESC
+        ORDER BY p.id, p.updated_at DESC
         LIMIT :limit OFFSET :offset
     """)
 

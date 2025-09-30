@@ -1,11 +1,48 @@
 ---
 import Layout from '../layouts/Layout.astro';
+
+// Server-side data fetching
+let projects = [];
+let error = null;
+let currentProject = null;
+
+// Get auth context from middleware
+const authContext = Astro.locals.auth;
+const currentProjectId = Astro.locals.currentProjectId;
+
+// Only fetch data if user is authenticated
+if (authContext.isAuthenticated) {
+  try {
+    // Always use container service name for internal communication
+    const baseUrl = 'http://vultr-backend:8000';
+
+    const response = await fetch(`${baseUrl}/api/projects/`, {
+      headers: {
+        'Authorization': `Bearer ${Astro.cookies.get('auth_token')?.value}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.ok) {
+      projects = await response.json();
+
+      // Find current project if set
+      if (currentProjectId) {
+        currentProject = projects.find(p => p.id === currentProjectId);
+      }
+    } else {
+      console.error('Failed to fetch projects:', response.status, response.statusText);
+      error = 'Failed to load projects. Please try again.';
+    }
+  } catch (err) {
+    console.error('Error fetching projects:', err);
+    error = 'Network error while loading projects.';
+  }
+}
 ---
 
 <Layout title="Projects - Service Collection Management">
-  <div class="py-6"
-       x-data="projectManager()"
-       x-init="init()">
+  <div class="py-6" x-data="projectManager($projects)" x-init="init()">
 
     <!-- Page Header -->
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -30,154 +67,145 @@ import Layout from '../layouts/Layout.astro';
       </div>
     </div>
 
-    <!-- Loading State -->
-    <div x-show="$store.projects.loading" class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 mt-8">
-      <div class="animate-pulse">
-        <div class="space-y-4">
-          <div class="h-24 bg-gray-200 rounded-lg"></div>
-          <div class="h-24 bg-gray-200 rounded-lg"></div>
-          <div class="h-24 bg-gray-200 rounded-lg"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Error State -->
-    <div x-show="$store.projects.error" class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 mt-8">
-      <div class="rounded-md bg-red-50 p-4">
-        <div class="flex">
-          <div class="flex-shrink-0">
-            <svg class="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-            </svg>
-          </div>
-          <div class="ml-3">
-            <h3 class="text-sm font-medium text-red-800">Error Loading Projects</h3>
-            <div class="mt-2 text-sm text-red-700" x-text="$store.projects.error"></div>
+    {error && (
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 mt-8">
+        <div class="rounded-md bg-red-50 p-4">
+          <div class="flex">
+            <div class="flex-shrink-0">
+              <svg class="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+              </svg>
+            </div>
+            <div class="ml-3">
+              <h3 class="text-sm font-medium text-red-800">Error Loading Projects</h3>
+              <div class="mt-2 text-sm text-red-700">{error}</div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    )}
 
-    <!-- Projects Grid -->
-    <div x-show="!$store.projects.loading && !$store.projects.error"
-         class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 mt-8">
-
-      <!-- Empty State -->
-      <div x-show="$store.projects.items.length === 0" class="text-center py-12">
-        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
-        </svg>
-        <h3 class="mt-2 text-sm font-semibold text-gray-900">No projects</h3>
-        <p class="mt-1 text-sm text-gray-500">Get started by creating your first project workspace.</p>
-        <div class="mt-6">
-          <button @click="openCreateModal()" class="btn-primary">
-            <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            New Project
-          </button>
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 mt-8">
+      {projects.length === 0 && !error ? (
+        <!-- Empty State -->
+        <div class="text-center py-12">
+          <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+          </svg>
+          <h3 class="mt-2 text-sm font-semibold text-gray-900">No projects</h3>
+          <p class="mt-1 text-sm text-gray-500">Get started by creating your first project workspace.</p>
+          <div class="mt-6">
+            <button @click="openCreateModal()" class="btn-primary">
+              <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              New Project
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <!-- Project Cards -->
+        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {projects.map((project) => (
+            <div class="group relative rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm hover:shadow-md transition-shadow"
+                 @click.away={`isDropdownOpen('${project.id}') && closeAllDropdowns()`}>
 
-      <!-- Project Cards -->
-      <div x-show="$store.projects.items.length > 0"
-           class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <template x-for="project in $store.projects.items" :key="project.id">
-          <div class="group relative rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm hover:shadow-md transition-shadow">
-
-            <!-- Project Header -->
-            <div class="flex items-center justify-between">
-              <div class="flex items-center">
-                <div class="flex h-10 w-10 items-center justify-center rounded-lg"
-                     :style="`background-color: ${project.color || '#6366f1'}`">
-                  <span class="text-sm font-medium text-white"
-                        x-text="project.name.charAt(0).toUpperCase()"></span>
+              <!-- Project Header -->
+              <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                  <div
+                    class="flex h-10 w-10 items-center justify-center rounded-lg"
+                    style={`background-color: ${project.color || '#6366f1'}`}>
+                    <span class="text-sm font-medium text-white">
+                      {project.name.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div class="ml-4">
+                    <h3 class="text-base font-semibold leading-6 text-gray-900">{project.name}</h3>
+                    <p class="text-sm text-gray-500">{project.slug}</p>
+                  </div>
                 </div>
-                <div class="ml-4">
-                  <h3 class="text-base font-semibold leading-6 text-gray-900" x-text="project.name"></h3>
-                  <p class="text-sm text-gray-500" x-text="project.slug"></p>
-                </div>
-              </div>
 
-              <!-- Project Menu -->
-              <div class="relative" x-data="dropdown()">
-                <button @click="toggle()" class="opacity-0 group-hover:opacity-100 transition-opacity rounded-full bg-gray-100 p-1 text-gray-400 hover:text-gray-600">
-                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
-                  </svg>
-                </button>
+                <!-- Project Menu -->
+                <div class="relative">
+                  <button
+                    @click.stop={`toggleDropdown('${project.id}')`}
+                    class="opacity-0 group-hover:opacity-100 transition-opacity rounded-full bg-gray-100 p-1 text-gray-400 hover:text-gray-600">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
+                    </svg>
+                  </button>
 
-                <div x-show="isOpen"
-                     x-transition
-                     @click.away="close()"
-                     class="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5">
-                  <div class="py-1">
-                    <button @click="selectProject(project); close()" class="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100">
-                      Switch to Project
-                    </button>
-                    <button @click="openEditModal(project); close()" class="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100">
-                      Edit Project
-                    </button>
-                    <button @click="openTeamModal(project); close()" class="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100">
-                      Manage Team
-                    </button>
-                    <hr class="my-1">
-                    <button @click="deleteProject(project); close()" class="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50">
-                      Delete Project
-                    </button>
+                  <div
+                    x-show={`isDropdownOpen('${project.id}')`}
+                    x-transition
+                    class="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5">
+                    <div class="py-1">
+                      <button @click.stop={`selectProject(${JSON.stringify(project)})`} class="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100">
+                        Switch to Project
+                      </button>
+                      <button @click.stop={`editProject(${JSON.stringify(project)})`} class="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100">
+                        Edit Project
+                      </button>
+                      <button @click.stop={`openTeamModal(${JSON.stringify(project)})`} class="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100">
+                        Manage Team
+                      </button>
+                      <hr class="my-1" />
+                      <button @click.stop={`deleteProject(${JSON.stringify(project)})`} class="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50">
+                        Delete Project
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <!-- Project Description -->
-            <div class="mt-4">
-              <p class="text-sm text-gray-600 line-clamp-2" x-text="project.description || 'No description'"></p>
-            </div>
-
-            <!-- Project Stats -->
-            <div class="mt-4 flex items-center justify-between">
-              <div class="flex space-x-4 text-sm text-gray-500">
-                <span x-text="`${project.collection_count} collections`"></span>
-                <span x-text="`${project.member_count} members`"></span>
+              <!-- Project Description -->
+              <div class="mt-4">
+                <p class="text-sm text-gray-600 line-clamp-2">{project.description || 'No description'}</p>
               </div>
-              <div class="flex items-center space-x-1">
-                <div class="h-2 w-2 rounded-full" :class="{
-                  'bg-green-400': project.status === 'active',
-                  'bg-yellow-400': project.status === 'suspended',
-                  'bg-gray-400': project.status === 'archived'
-                }"></div>
-                <span class="text-sm text-gray-500 capitalize" x-text="project.status"></span>
-              </div>
-            </div>
 
-            <!-- Click to select -->
-            <button @click="selectProject(project)"
-                    class="absolute inset-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-lg">
-              <span class="sr-only">Select project <span x-text="project.name"></span></span>
-            </button>
-          </div>
-        </template>
-      </div>
+              <!-- Project Stats -->
+              <div class="mt-4 flex items-center justify-between">
+                <div class="flex space-x-4 text-sm text-gray-500">
+                  <span>{project.collection_count} collections</span>
+                  <span>{project.member_count} members</span>
+                </div>
+                <div class="flex items-center space-x-1">
+                  <div class={`h-2 w-2 rounded-full ${
+                    project.status === 'active' ? 'bg-green-400' :
+                    project.status === 'suspended' ? 'bg-yellow-400' :
+                    'bg-gray-400'
+                  }`}></div>
+                  <span class="text-sm text-gray-500 capitalize">{project.status}</span>
+                </div>
+              </div>
+
+              <!-- Click to select -->
+              <button
+                @click.stop={`selectProject(${JSON.stringify(project)})`}
+                class="absolute inset-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-lg">
+                <span class="sr-only">Select project {project.name}</span>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
 
     <!-- Create/Edit Project Modal -->
-    <div x-show="showModal"
-         x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200"
-         x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-         class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
+    <div x-show="projectModal"
+         x-transition
+         class="fixed inset-0 z-50 overflow-y-auto"
+         @click.self="closeProjectModal()">
       <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeModal()"></div>
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
 
-        <div x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-             x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100" x-transition:leave="ease-in duration-200"
-             x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-             class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+        <div class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6"
+             @click.stop>
 
           <form @submit.prevent="submitForm()">
             <div>
-              <h3 class="text-lg font-semibold leading-6 text-gray-900" x-text="modalMode === 'create' ? 'Create New Project' : 'Edit Project'"></h3>
+              <h3 x-text="modalTitle" class="text-lg font-semibold leading-6 text-gray-900"></h3>
 
               <div class="mt-6 space-y-4">
                 <!-- Project Name -->
@@ -185,7 +213,7 @@ import Layout from '../layouts/Layout.astro';
                   <label for="project-name" class="block text-sm font-medium text-gray-700">Project Name</label>
                   <input type="text"
                          id="project-name"
-                         x-model="formData.name"
+                         x-model="form.name"
                          required
                          class="form-input mt-1 block w-full"
                          placeholder="Enter project name">
@@ -196,7 +224,7 @@ import Layout from '../layouts/Layout.astro';
                   <label for="project-slug" class="block text-sm font-medium text-gray-700">URL Slug</label>
                   <input type="text"
                          id="project-slug"
-                         x-model="formData.slug"
+                         x-model="form.slug"
                          required
                          pattern="^[a-z0-9-]+$"
                          class="form-input mt-1 block w-full"
@@ -208,7 +236,7 @@ import Layout from '../layouts/Layout.astro';
                 <div>
                   <label for="project-description" class="block text-sm font-medium text-gray-700">Description</label>
                   <textarea id="project-description"
-                           x-model="formData.description"
+                           x-model="form.description"
                            rows="3"
                            class="form-input mt-1 block w-full"
                            placeholder="Describe your project..."></textarea>
@@ -220,10 +248,11 @@ import Layout from '../layouts/Layout.astro';
                   <div class="mt-1 flex items-center space-x-3">
                     <input type="color"
                            id="project-color"
-                           x-model="formData.color"
+                           x-model="form.color"
                            class="h-10 w-16 border border-gray-300 rounded-md">
                     <input type="text"
-                           x-model="formData.color"
+                           id="project-color-text"
+                           x-model="form.color"
                            class="form-input flex-1"
                            placeholder="#6366f1">
                   </div>
@@ -232,14 +261,13 @@ import Layout from '../layouts/Layout.astro';
             </div>
 
             <div class="mt-6 flex items-center justify-end space-x-3">
-              <button type="button" @click="closeModal()" class="btn-secondary">
+              <button type="button" @click="closeProjectModal()" class="btn-secondary">
                 Cancel
               </button>
               <button type="submit"
                       :disabled="submitting"
                       class="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
-                <span x-show="!submitting" x-text="modalMode === 'create' ? 'Create Project' : 'Save Changes'"></span>
-                <span x-show="submitting">Saving...</span>
+                <span x-text="submitButtonText"></span>
               </button>
             </div>
           </form>
@@ -248,17 +276,19 @@ import Layout from '../layouts/Layout.astro';
     </div>
 
     <!-- Team Management Modal -->
-    <div x-show="showTeamModal"
+    <div x-show="teamModal"
          x-transition
-         class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
+         class="fixed inset-0 z-50 overflow-y-auto"
+         @click.self="closeTeamModal()">
       <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeTeamModal()"></div>
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
 
-        <div class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl sm:p-6">
+        <div class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl sm:p-6"
+             @click.stop>
 
           <div>
             <h3 class="text-lg font-semibold leading-6 text-gray-900">
-              Manage Team - <span x-text="selectedProject?.name"></span>
+              Manage Team
             </h3>
 
             <div class="mt-6">
@@ -277,121 +307,8 @@ import Layout from '../layouts/Layout.astro';
     </div>
   </div>
 
-  <!-- Project Manager Component -->
-  <script>
-    window.projectManager = function() {
-      return {
-        showModal: false,
-        showTeamModal: false,
-        modalMode: 'create', // 'create' or 'edit'
-        submitting: false,
-        selectedProject: null,
-        formData: {
-          name: '',
-          slug: '',
-          description: '',
-          color: '#6366f1'
-        },
-
-        init() {
-          // Load projects
-          this.$store.projects.fetchProjects();
-
-          // Check for create parameter in URL
-          const urlParams = new URLSearchParams(window.location.search);
-          if (urlParams.get('create') === 'true') {
-            // Open create modal automatically
-            this.openCreateModal();
-            // Clean up URL by removing create parameter
-            const newUrl = new URL(window.location.href);
-            newUrl.searchParams.delete('create');
-            window.history.replaceState({}, '', newUrl.toString());
-          }
-        },
-
-        openCreateModal() {
-          this.modalMode = 'create';
-          this.formData = {
-            name: '',
-            slug: '',
-            description: '',
-            color: '#6366f1'
-          };
-          this.showModal = true;
-        },
-
-        openEditModal(project) {
-          this.modalMode = 'edit';
-          this.selectedProject = project;
-          this.formData = {
-            name: project.name,
-            slug: project.slug,
-            description: project.description || '',
-            color: project.color || '#6366f1'
-          };
-          this.showModal = true;
-        },
-
-        openTeamModal(project) {
-          this.selectedProject = project;
-          this.showTeamModal = true;
-        },
-
-        closeModal() {
-          this.showModal = false;
-          this.selectedProject = null;
-        },
-
-        closeTeamModal() {
-          this.showTeamModal = false;
-          this.selectedProject = null;
-        },
-
-        selectProject(project) {
-          this.$store.projects.setCurrentProject(project);
-          // Redirect to collections page for the selected project
-          window.location.href = '/collections';
-        },
-
-        async submitForm() {
-          this.submitting = true;
-
-          try {
-            let result;
-            if (this.modalMode === 'create') {
-              result = await this.$store.projects.createProject(this.formData);
-            } else {
-              result = await this.$store.projects.updateProject(this.selectedProject.id, this.formData);
-            }
-
-            if (result.success) {
-              this.closeModal();
-              this.$store.notification.show('success',
-                this.modalMode === 'create' ? 'Project created successfully' : 'Project updated successfully'
-              );
-            } else {
-              this.$store.notification.show('error', result.error);
-            }
-          } catch (error) {
-            console.error('Form submission error:', error);
-            this.$store.notification.show('error', 'An error occurred');
-          }
-
-          this.submitting = false;
-        },
-
-        async deleteProject(project) {
-          const confirmed = confirm(`Are you sure you want to delete "${project.name}"? This action cannot be undone.`);
-          if (confirmed) {
-            const result = await this.$store.projects.deleteProject(project.id);
-            if (result.success) {
-              this.$store.notification.show('success', 'Project deleted successfully');
-            } else {
-              this.$store.notification.show('error', result.error);
-            }
-          }
-        }
-      };
-    };
+  <!-- Pass server-side projects data to Alpine.js -->
+  <script is:inline define:vars={{ projects }}>
+    window.$projects = projects;
   </script>
 </Layout>

@@ -21,7 +21,7 @@ export default defineConfig({
       allowedHosts: ['mcp-vultr.l.supported.systems', 'localhost'],
       proxy: {
         '/api': {
-          target: 'http://localhost:8000',
+          target: 'http://localhost:8001',
           changeOrigin: true,
           secure: false
         }
@@ -31,10 +31,11 @@ export default defineConfig({
   build: {
     assets: 'assets'
   },
-  output: 'static',
+  output: 'server',
   site: 'https://mcp-vultr.l.supported.systems',
   compressHTML: true,
   experimental: {
     contentCollectionCache: true
-  }
+  },
+  prefetch: true
 });
