@@ -227,7 +227,7 @@ if (authContext.isAuthenticated) {
                          id="project-slug"
                          x-model="form.slug"
                          required
-                         pattern="[a-z0-9\-]+"
+                         pattern="[-a-z0-9]+"
                          :class="validationErrors.slug ? 'form-input mt-1 block w-full border-red-300 focus:ring-red-500 focus:border-red-500' : 'form-input mt-1 block w-full'"
                          placeholder="project-slug">
                   <p x-show="validationErrors.slug" x-text="validationErrors.slug" class="mt-1 text-sm text-red-600"></p>
