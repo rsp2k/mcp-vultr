@@ -42,7 +42,10 @@ if (authContext.isAuthenticated) {
 ---
 
 <Layout title="Projects - Service Collection Management">
-  <div class="py-6" x-data="projectManager($projects)" x-init="init()">
+  <div class="py-6"
+       data-projects={JSON.stringify(projects)}
+       x-data="projectManager(JSON.parse($el.dataset.projects || '[]'))"
+       x-init="init()">
 
     <!-- Page Header -->
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -307,9 +310,4 @@ if (authContext.isAuthenticated) {
       </div>
     </div>
   </div>
-
-  <!-- Pass server-side projects data to Alpine.js -->
-  <script is:inline define:vars={{ projects }}>
-    window.$projects = projects;
-  </script>
 </Layout>
