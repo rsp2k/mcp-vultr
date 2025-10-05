@@ -231,7 +231,8 @@ export default (Alpine: Alpine) => {
           headers: {
             'Content-Type': 'application/json',
             ...auth.getAuthHeaders()
-          }
+          },
+          credentials: 'include'  // Include cookies for authentication
         });
 
         if (response.ok) {
@@ -268,6 +269,7 @@ export default (Alpine: Alpine) => {
             'Content-Type': 'application/json',
             ...auth.getAuthHeaders()
           },
+          credentials: 'include',  // Include cookies for authentication
           body: JSON.stringify(data)
         });
 
@@ -303,6 +305,7 @@ export default (Alpine: Alpine) => {
             'Content-Type': 'application/json',
             ...auth.getAuthHeaders()
           },
+          credentials: 'include',  // Include cookies for authentication
           body: JSON.stringify(data)
         });
 
@@ -334,7 +337,8 @@ export default (Alpine: Alpine) => {
         const auth = Alpine.store('auth');
         const response = await fetch(`/api/projects/${id}`, {
           method: 'DELETE',
-          headers: auth.getAuthHeaders()
+          headers: auth.getAuthHeaders(),
+          credentials: 'include'  // Include cookies for authentication
         });
 
         if (response.ok) {
@@ -415,6 +419,7 @@ export default (Alpine: Alpine) => {
         const params = new URLSearchParams(filters);
         const response = await fetch(`/api/collections?${params}`, {
           headers: auth.getAuthHeaders(),
+          credentials: 'include'  // Include cookies for authentication
         });
         
         if (response.ok) {
@@ -439,6 +444,7 @@ export default (Alpine: Alpine) => {
             'Content-Type': 'application/json',
             ...auth.getAuthHeaders(),
           },
+          credentials: 'include',  // Include cookies for authentication
           body: JSON.stringify(collectionData),
         });
         
@@ -461,6 +467,7 @@ export default (Alpine: Alpine) => {
         const response = await fetch(`/api/collections/${collectionId}`, {
           method: 'DELETE',
           headers: auth.getAuthHeaders(),
+          credentials: 'include'  // Include cookies for authentication
         });
         
         if (response.ok) {
@@ -488,6 +495,7 @@ export default (Alpine: Alpine) => {
         const auth = Alpine.store('auth');
         const response = await fetch('/api/dashboard/overview', {
           headers: auth.getAuthHeaders(),
+          credentials: 'include'  // Include cookies for authentication
         });
         
         if (response.ok) {
@@ -715,7 +723,8 @@ export default (Alpine: Alpine) => {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json'
-          }
+          },
+          credentials: 'include'  // Include cookies for authentication
         });
 
         if (response.ok) {
@@ -763,6 +772,7 @@ export default (Alpine: Alpine) => {
           headers: {
             'Content-Type': 'application/json'
           },
+          credentials: 'include',  // Include cookies for authentication
           body: JSON.stringify(data)
         });
 
