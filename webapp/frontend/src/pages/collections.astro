@@ -359,22 +359,24 @@ if (authContext.isAuthenticated) {
 
   <!-- JavaScript for modal and View Transitions -->
   <script>
+    // Attach functions to window object for global access from inline onclick handlers
+
     // Modal management
-    function openCreateModal() {
+    window.openCreateModal = function() {
       document.getElementById('create-modal').classList.remove('hidden');
       document.getElementById('collection-name').focus();
-    }
+    };
 
-    function closeCreateModal() {
+    window.closeCreateModal = function() {
       document.getElementById('create-modal').classList.add('hidden');
       // Reset form
       document.getElementById('create-collection-form').reset();
       // Hide any error messages
       document.getElementById('form-error').classList.add('hidden');
-    }
+    };
 
     // Collection navigation with View Transitions
-    function navigateToCollection(collectionId) {
+    window.navigateToCollection = function(collectionId) {
       const url = `/collections/${collectionId}`;
       if (document.startViewTransition) {
         document.startViewTransition(() => {
@@ -383,9 +385,9 @@ if (authContext.isAuthenticated) {
       } else {
         window.location.href = url;
       }
-    }
+    };
 
-    // Navigation with View Transitions - attach to window for global access
+    // Navigation with View Transitions
     window.navigateWithTransition = function(url, event) {
       if (event) {
         event.preventDefault();
@@ -401,7 +403,7 @@ if (authContext.isAuthenticated) {
     };
 
     // Form submission handler
-    async function handleCreateSubmit(event) {
+    window.handleCreateSubmit = async function(event) {
       event.preventDefault();
 
       const form = event.target;
@@ -419,19 +421,13 @@ if (authContext.isAuthenticated) {
       formError.classList.add('hidden');
 
       try {
-        // Get auth token from cookie
+        // Get current project from cookie
         const cookies = document.cookie.split(';').reduce((acc, cookie) => {
           const [key, value] = cookie.trim().split('=');
           acc[key] = value;
           return acc;
         }, {});
 
-        const authToken = cookies.auth_token;
-        if (!authToken) {
-          throw new Error('Authentication token not found. Please log in again.');
-        }
-
-        // Get current project from cookie
         const currentProjectCookie = cookies.currentProject;
         if (!currentProjectCookie) {
           throw new Error('No project selected. Please select a project first.');
@@ -451,9 +447,9 @@ if (authContext.isAuthenticated) {
         const response = await fetch('/api/collections/', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
+            'Content-Type': 'application/json'
           },
+          credentials: 'include',  // Send auth_token cookie
           body: JSON.stringify(requestData)
         });
 
@@ -463,7 +459,7 @@ if (authContext.isAuthenticated) {
         }
 
         // Success - close modal and refresh page with View Transition
-        closeCreateModal();
+        window.closeCreateModal();
 
         if (document.startViewTransition) {
           document.startViewTransition(() => {
@@ -486,12 +482,12 @@ if (authContext.isAuthenticated) {
         createText.classList.remove('hidden');
         createLoading.classList.add('hidden');
       }
-    }
+    };
 
     // Close modal on Escape key
     document.addEventListener('keydown', function(event) {
       if (event.key === 'Escape') {
-        closeCreateModal();
+        window.closeCreateModal();
       }
     });
   </script>
