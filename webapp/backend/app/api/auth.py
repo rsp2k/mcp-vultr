@@ -131,14 +131,26 @@ class GitHubCallbackRequest(BaseModel):
 
 
 async def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: AsyncSession = Depends(get_db)
 ) -> Optional[User]:
-    """Get current authenticated user from token or API key."""
-    if not credentials:
+    """Get current authenticated user from token or API key.
+
+    Checks for authentication in this order:
+    1. auth_token cookie (for browser requests)
+    2. Authorization header (for API clients)
+    """
+    # First check for cookie-based auth (browser requests)
+    token = request.cookies.get("auth_token")
+
+    # Fall back to Authorization header if no cookie
+    if not token and credentials:
+        token = credentials.credentials
+
+    # No authentication found
+    if not token:
         return None
-    
-    token = credentials.credentials
     
     # Check if it's an API key (starts with vsc_)
     if token.startswith("vsc_"):
