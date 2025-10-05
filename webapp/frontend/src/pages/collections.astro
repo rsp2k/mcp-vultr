@@ -385,8 +385,8 @@ if (authContext.isAuthenticated) {
       }
     }
 
-    // Navigation with View Transitions
-    function navigateWithTransition(url, event) {
+    // Navigation with View Transitions - attach to window for global access
+    window.navigateWithTransition = function(url, event) {
       if (event) {
         event.preventDefault();
       }
@@ -398,7 +398,7 @@ if (authContext.isAuthenticated) {
       } else {
         window.location.href = url;
       }
-    }
+    };
 
     // Form submission handler
     async function handleCreateSubmit(event) {

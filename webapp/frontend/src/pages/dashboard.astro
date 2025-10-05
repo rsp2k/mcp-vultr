@@ -444,7 +444,8 @@ const statusStats = dashboardData?.collections_by_status || {};
     sessionStorage.removeItem('redirect_count');
     console.log('✅ Dashboard loaded successfully, redirect counter cleared');
 
-    function navigateWithTransition(url, event) {
+    // Attach to window object for global access from inline onclick handlers
+    window.navigateWithTransition = function(url, event) {
       if (event) {
         event.preventDefault();
       }
@@ -456,7 +457,7 @@ const statusStats = dashboardData?.collections_by_status || {};
       } else {
         window.location.href = url;
       }
-    }
+    };
 
     // Auto-refresh dashboard data every 30 seconds (optional progressive enhancement)
     if ('fetch' in window) {
