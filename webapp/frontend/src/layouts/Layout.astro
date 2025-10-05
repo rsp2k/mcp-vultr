@@ -120,7 +120,7 @@ function getMobileNavClasses(path: string): string {
     <!-- Main Application Container -->
     <div class="min-h-full">
       <!-- Navigation -->
-      <nav class="bg-white shadow-sm border-b border-gray-200" x-data="{ mobileMenuOpen: false }" transition:name="main-nav">
+      <nav class="bg-white shadow-sm border-b border-gray-200 relative z-50" x-data="{ mobileMenuOpen: false }" transition:name="main-nav">
         <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div class="flex justify-between h-16">
             <!-- Left side - Logo and main nav -->
@@ -160,7 +160,7 @@ function getMobileNavClasses(path: string): string {
                        x-transition:leave="transition ease-in duration-75"
                        x-transition:leave-start="opacity-100"
                        x-transition:leave-end="opacity-0"
-                       class="fixed inset-0 bg-black bg-opacity-10 z-[50]"
+                       class="fixed inset-0 bg-black bg-opacity-10 z-[100]"
                        @click="close()">
                   </div>
 
@@ -171,7 +171,7 @@ function getMobileNavClasses(path: string): string {
                        x-transition:leave="transition ease-in duration-75"
                        x-transition:leave-start="transform opacity-100 scale-100"
                        x-transition:leave-end="transform opacity-0 scale-95"
-                       class="origin-top-left absolute left-0 mt-2 w-72 rounded-md shadow-lg bg-white ring-1 ring-gray-900 ring-opacity-5 focus:outline-none z-[60]"
+                       class="origin-top-left absolute left-0 mt-2 w-72 rounded-md shadow-lg bg-white ring-1 ring-gray-900 ring-opacity-5 focus:outline-none z-[110]"
                        style="background-color: #ffffff;"
                        @click.away="close()">
                     <div class="py-1">
