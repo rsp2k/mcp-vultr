@@ -118,6 +118,8 @@ async def create_service_collection(
 
     # Add creator as owner in membership
     current_user.add_collection_membership(str(new_collection.id), "owner")
+    # Trigger SQLAlchemy change detection by reassigning
+    current_user.service_collection_memberships = dict(current_user.service_collection_memberships)
 
     # Create audit log
     audit_entry = AuditLogEntry.log_collection_action(
@@ -137,7 +139,7 @@ async def create_service_collection(
 async def list_service_collections(
     project_id: Optional[UUID] = Query(None, description="Filter by project ID"),
     environment: Optional[CollectionEnvironment] = Query(None),
-    status: Optional[CollectionStatus] = Query(None),
+    status_filter: Optional[CollectionStatus] = Query(None),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(require_auth),
@@ -177,8 +179,8 @@ async def list_service_collections(
     # Add additional filters
     if environment:
         conditions.append(ServiceCollection.environment == environment)
-    if status:
-        conditions.append(ServiceCollection.status == status)
+    if status_filter:
+        conditions.append(ServiceCollection.status == status_filter)
 
     # Build and execute query
     query = select(ServiceCollection)
@@ -242,6 +244,11 @@ async def update_service_collection(
         required_collection_permission="update"
     )
 
+    # Reload collection via ORM for session tracking (RBAC uses raw SQL)
+    collection = await db.get(ServiceCollection, collection_id)
+    if not collection:
+        raise HTTPException(status_code=404, detail="Collection not found")
+
     before_data = collection.to_dict()
 
     # Update collection fields
@@ -289,6 +296,11 @@ async def delete_service_collection(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the collection owner or admin can delete this collection"
         )
+
+    # Reload collection via ORM for session tracking (RBAC uses raw SQL)
+    collection = await db.get(ServiceCollection, collection_id)
+    if not collection:
+        raise HTTPException(status_code=404, detail="Collection not found")
 
     before_data = collection.to_dict()
 
@@ -340,7 +352,9 @@ async def add_collection_member(
     
     # Add membership
     target_user.add_collection_membership(str(collection.id), membership_data.role)
-    
+    # Trigger SQLAlchemy change detection by reassigning
+    target_user.service_collection_memberships = dict(target_user.service_collection_memberships)
+
     # Create audit log
     audit_entry = AuditLogEntry.log_collection_action(
         collection_id=str(collection.id),
@@ -398,7 +412,9 @@ async def remove_collection_member(
     # Remove membership
     old_role = target_user.get_collection_role(str(collection.id))
     target_user.remove_collection_membership(str(collection.id))
-    
+    # Trigger SQLAlchemy change detection by reassigning
+    target_user.service_collection_memberships = dict(target_user.service_collection_memberships)
+
     # Create audit log
     audit_entry = AuditLogEntry.log_collection_action(
         collection_id=str(collection.id),
@@ -468,7 +484,9 @@ async def update_member_role(
     
     # Update role
     target_user.add_collection_membership(str(collection.id), role_data.new_role)
-    
+    # Trigger SQLAlchemy change detection by reassigning
+    target_user.service_collection_memberships = dict(target_user.service_collection_memberships)
+
     # Create audit log
     audit_entry = AuditLogEntry.log_collection_action(
         collection_id=str(collection.id),

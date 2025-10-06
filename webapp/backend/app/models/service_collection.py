@@ -64,11 +64,10 @@ class ServiceCollection(Base):
     # Access control
     members = Column(JSON, default=list)  # List of member configurations
     permissions = Column(JSON, default=dict)  # Permission configurations
-    
-    # Resource definitions
-    planned_resources = Column(JSON, default=list)  # Resources queued for creation
-    managed_resources = Column(JSON, default=list)  # Existing Vultr resources
-    
+
+    # Resource definitions moved to relationships (planned_resources_rel, managed_resources_rel)
+    # to avoid SQLAlchemy name collision issues
+
     # Workflow configuration
     approval_required = Column(Boolean, default=True)
     auto_approve_operations = Column(JSON, default=list)  # Operations that auto-approve
@@ -92,14 +91,14 @@ class ServiceCollection(Base):
         cascade="all, delete-orphan"
     )
 
-    # Resource relationships
-    planned_resources = relationship(
+    # Resource relationships (using _rel suffix to avoid collision with JSON columns)
+    planned_resources_rel = relationship(
         "PlannedResource",
         back_populates="service_collection",
         cascade="all, delete-orphan"
     )
 
-    managed_resources = relationship(
+    managed_resources_rel = relationship(
         "ManagedResource",
         back_populates="service_collection",
         cascade="all, delete-orphan"
@@ -123,17 +122,24 @@ class ServiceCollection(Base):
     @hybrid_property
     def full_name(self) -> str:
         """Full collection name including environment."""
-        return f"{self.name}-{self.environment.value}"
-    
+        env_value = self.environment.value if isinstance(self.environment, CollectionEnvironment) else self.environment
+        return f"{self.name}-{env_value}"
+
     @hybrid_property
     def is_active(self) -> bool:
         """Check if collection is in active status."""
-        return self.status == CollectionStatus.ACTIVE
-    
+        # Handle both enum and string values from raw SQL
+        if isinstance(self.status, CollectionStatus):
+            return self.status == CollectionStatus.ACTIVE
+        return self.status == "active"
+
     @hybrid_property
     def is_production(self) -> bool:
         """Check if collection is production environment."""
-        return self.environment == CollectionEnvironment.PRODUCTION
+        # Handle both enum and string values from raw SQL
+        if isinstance(self.environment, CollectionEnvironment):
+            return self.environment == CollectionEnvironment.PRODUCTION
+        return self.environment == "production"
     
     def get_member_role(self, user_email: str) -> Optional[str]:
         """Get the role of a specific member."""
@@ -191,18 +197,11 @@ class ServiceCollection(Base):
     def estimate_monthly_cost(self) -> float:
         """Estimate monthly cost for all resources in collection."""
         total_cost = 0.0
-        
-        # Calculate cost for planned resources
-        for resource in self.planned_resources:
-            # This would integrate with Vultr pricing API
-            # For now, return placeholder
-            total_cost += 10.0  # Placeholder
-        
-        # Calculate cost for managed resources
-        for resource in self.managed_resources:
-            # This would query actual Vultr billing data
-            total_cost += 15.0  # Placeholder
-        
+
+        # Note: Resource cost calculation would integrate with actual PlannedResource
+        # and ManagedResource relationships via planned_resources_rel and managed_resources_rel
+        # For now, return 0.0 as this is a placeholder
+
         return total_cost
     
     def to_dict(self) -> Dict[str, Any]:
@@ -211,8 +210,8 @@ class ServiceCollection(Base):
             "id": str(self.id),
             "name": self.name,
             "description": self.description,
-            "environment": self.environment.value,
-            "status": self.status.value,
+            "environment": self.environment.value if isinstance(self.environment, CollectionEnvironment) else self.environment,
+            "status": self.status.value if isinstance(self.status, CollectionStatus) else self.status,
             "created_by": self.created_by,
             "owner_email": self.owner_email,
             "vultr_service_user": self.vultr_service_user,
@@ -220,8 +219,8 @@ class ServiceCollection(Base):
             "cost_budget_monthly": self.cost_budget_monthly,
             "members": self.members,
             "permissions": self.permissions,
-            "planned_resources": self.planned_resources,
-            "managed_resources": self.managed_resources,
+            # Note: planned_resources and managed_resources are now relationships (_rel suffix)
+            # and should not be accessed in to_dict() to avoid lazy loading in async context
             "approval_required": self.approval_required,
             "auto_approve_operations": self.auto_approve_operations,
             "restricted_operations": self.restricted_operations,
