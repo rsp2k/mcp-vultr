@@ -228,6 +228,9 @@ function getMobileNavClasses(path: string): string {
                 <a href="/collections" class={getNavClasses("/collections")}>
                   Collections
                 </a>
+                <a href="/credentials" class={getNavClasses("/credentials")}>
+                  Credentials
+                </a>
                 <a href="/workflows" class={getNavClasses("/workflows")}>
                   Workflows
                 </a>
@@ -311,6 +314,7 @@ function getMobileNavClasses(path: string): string {
             <a href="/dashboard" class={getMobileNavClasses("/dashboard")}>Dashboard</a>
             <a href="/projects" class={getMobileNavClasses("/projects")}>Projects</a>
             <a href="/collections" class={getMobileNavClasses("/collections")}>Collections</a>
+            <a href="/credentials" class={getMobileNavClasses("/credentials")}>Credentials</a>
             <a href="/workflows" class={getMobileNavClasses("/workflows")}>Workflows</a>
           </div>
           <div class="pt-4 pb-3 border-t border-gray-200">
@@ -394,9 +398,11 @@ function getMobileNavClasses(path: string): string {
     </div>
 
     <!-- Project switching and utilities -->
-    <script type="module">
+    <script type="module" define:vars={{ serverProject: currentProject, serverProjects: projects }}>
       // Import PassKey utilities first
       import { confirmWithPassKey, authenticateWithPassKey, hasPassKeys } from '/src/js/passkey-utils.js';
+      // Import project store
+      import { currentProject } from '/src/stores/projectStore';
 
       // Utility function to get authentication headers
       function getAuthHeaders() {
@@ -410,15 +416,24 @@ function getMobileNavClasses(path: string): string {
         };
       }
 
-      // Global function to switch projects (server-side)
+      // Initialize project store from server-side data
+      if (serverProject) {
+        currentProject.set(serverProject);
+      }
+
+      // Global function to switch projects (using nanostore)
       window.setCurrentProject = async function(projectId) {
         try {
-          // Set the current project cookie and reload page
-          const projectData = { id: projectId };
-          document.cookie = `currentProject=${encodeURIComponent(JSON.stringify(projectData))}; path=/; max-age=31536000`;
+          // Find the full project data from available projects
+          const project = serverProjects.find((p) => p.id === projectId);
 
-          // Reload the page to get server-side updates
-          window.location.reload();
+          if (project) {
+            // Update nanostore (automatically syncs to localStorage)
+            currentProject.set(project);
+
+            // Reload the page to get server-side updates
+            window.location.reload();
+          }
         } catch (error) {
           console.error('Failed to set current project:', error);
         }

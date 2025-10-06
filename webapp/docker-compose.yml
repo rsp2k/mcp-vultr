@@ -34,6 +34,7 @@ services:
       AUTH_MODE: ${AUTH_MODE}
       DOMAIN: ${DOMAIN}
       VULTR_API_KEY: ${VULTR_API_KEY}
+      FERNET_KEY: ${FERNET_KEY}
       PROCRASTINATE_DATABASE_URL: ${PROCRASTINATE_DATABASE_URL}
     volumes:
       - ${DEV_MODE:+./backend:/app}
@@ -59,6 +60,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
       VULTR_API_KEY: ${VULTR_API_KEY}
+      FERNET_KEY: ${FERNET_KEY}
       PROCRASTINATE_DATABASE_URL: ${PROCRASTINATE_DATABASE_URL}
     volumes:
       - ${DEV_MODE:+./backend:/app}
