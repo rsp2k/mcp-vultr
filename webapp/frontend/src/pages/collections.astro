@@ -29,7 +29,7 @@ if (authContext.isAuthenticated) {
     if (statusFilter) params.append('status', statusFilter);
     if (searchFilter) params.append('search', searchFilter);
 
-    const response = await fetch(`${baseUrl}/api/collections/?${params.toString()}`, {
+    const response = await fetch(`${baseUrl}/api/collections?${params.toString()}`, {
       headers: {
         'Authorization': `Bearer ${Astro.cookies.get('auth_token')?.value}`,
         'Content-Type': 'application/json'
@@ -37,7 +37,8 @@ if (authContext.isAuthenticated) {
     });
 
     if (response.ok) {
-      collections = await response.json();
+      const data = await response.json();
+      collections = data.collections || [];
     } else {
       console.error('Failed to fetch collections:', response.status, response.statusText);
       error = 'Failed to load collections. Please try again.';
@@ -206,11 +207,10 @@ if (authContext.isAuthenticated) {
               {collections.length > 0 && (
                 <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                   {collections.map((collection) => (
-                    <div class="bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition-shadow cursor-pointer"
-                         onclick={`navigateToCollection('${collection.id}')`}>
+                    <div class="group relative bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition-shadow">
                       <div class="p-6">
                         <div class="flex items-center justify-between">
-                          <div class="flex items-center">
+                          <div class="flex items-center flex-1 min-w-0 cursor-pointer" onclick={`navigateToCollection('${collection.id}')`}>
                             <div class="flex-shrink-0">
                               <div class="h-10 w-10 rounded-lg bg-primary-100 flex items-center justify-center">
                                 <svg class="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -218,12 +218,14 @@ if (authContext.isAuthenticated) {
                                 </svg>
                               </div>
                             </div>
-                            <div class="ml-4">
-                              <h3 class="text-lg font-medium text-gray-900">{collection.name}</h3>
+                            <div class="ml-4 flex-1 min-w-0">
+                              <h3 class="text-lg font-medium text-gray-900 truncate">{collection.name}</h3>
                               <p class="text-sm text-gray-500 capitalize">{collection.environment}</p>
                             </div>
                           </div>
-                          <div class="flex-shrink-0">
+
+                          <!-- Action Menu -->
+                          <div class="flex items-center space-x-2 flex-shrink-0 ml-4">
                             <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
                               collection.status === 'active' ? 'bg-green-100 text-green-800' :
                               collection.status === 'draft' ? 'bg-yellow-100 text-yellow-800' :
@@ -232,14 +234,40 @@ if (authContext.isAuthenticated) {
                             }`}>
                               {collection.status}
                             </span>
+
+                            <div class="relative" id={`dropdown-container-${collection.id}`}>
+                              <button onclick={`event.stopPropagation(); toggleDropdown('${collection.id}')`}
+                                      class="opacity-0 group-hover:opacity-100 transition-opacity rounded-full bg-gray-100 p-1 text-gray-400 hover:text-gray-600 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary-500">
+                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
+                                </svg>
+                              </button>
+
+                              <div id={`dropdown-${collection.id}`}
+                                   class="hidden absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5">
+                                <div class="py-1">
+                                  <button data-collection={JSON.stringify(collection)}
+                                          onclick="event.stopPropagation(); openEditModal(JSON.parse(this.dataset.collection))"
+                                          class="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100">
+                                    Edit Collection
+                                  </button>
+                                  <hr class="my-1" />
+                                  <button data-collection={JSON.stringify(collection)}
+                                          onclick="event.stopPropagation(); openDeleteModal(JSON.parse(this.dataset.collection))"
+                                          class="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50">
+                                    Delete Collection
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </div>
 
-                        <div class="mt-4">
-                          <p class="text-sm text-gray-600">{collection.description || 'No description'}</p>
+                        <div class="mt-4 cursor-pointer" onclick={`navigateToCollection('${collection.id}')`}>
+                          <p class="text-sm text-gray-600 line-clamp-2">{collection.description || 'No description'}</p>
                         </div>
 
-                        <div class="mt-4 flex items-center justify-between text-sm text-gray-500">
+                        <div class="mt-4 flex items-center justify-between text-sm text-gray-500 cursor-pointer" onclick={`navigateToCollection('${collection.id}')`}>
                           <span>Created {new Date(collection.created_at).toLocaleDateString()}</span>
                           {collection.estimated_monthly_cost && (
                             <span>${collection.estimated_monthly_cost}/mo</span>
@@ -257,7 +285,7 @@ if (authContext.isAuthenticated) {
     </main>
   </div>
 
-  <!-- Create Collection Modal -->
+  <!-- Create/Edit Collection Modal -->
   <div id="create-modal" class="hidden fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
       <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="closeCreateModal()"></div>
@@ -266,6 +294,7 @@ if (authContext.isAuthenticated) {
 
       <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
         <form id="create-collection-form" action="/api/collections/" method="POST" onsubmit="handleCreateSubmit(event)">
+          <input type="hidden" id="edit-collection-id" value="">
           <div>
             <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-primary-100">
               <svg class="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -277,7 +306,7 @@ if (authContext.isAuthenticated) {
                 Create New Service Collection
               </h3>
               <div class="mt-2">
-                <p class="text-sm text-gray-500">
+                <p class="text-sm text-gray-500" id="modal-description">
                   Create a new Service Collection to organize your infrastructure resources.
                 </p>
               </div>
@@ -343,7 +372,7 @@ if (authContext.isAuthenticated) {
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Creating...
+                <span id="loading-text">Creating...</span>
               </span>
             </button>
             <button type="button"
@@ -357,22 +386,175 @@ if (authContext.isAuthenticated) {
     </div>
   </div>
 
+  <!-- Delete Confirmation Modal -->
+  <div id="delete-modal" class="hidden fixed inset-0 z-50 overflow-y-auto" aria-labelledby="delete-modal-title" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="closeDeleteModal()"></div>
+
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+      <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+        <div>
+          <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+            <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+          </div>
+          <div class="mt-3 text-center sm:mt-5">
+            <h3 class="text-lg leading-6 font-medium text-gray-900" id="delete-modal-title">
+              Delete Service Collection
+            </h3>
+            <div class="mt-2">
+              <p class="text-sm text-gray-500">
+                Are you sure you want to delete "<span id="delete-collection-name" class="font-semibold"></span>"? This action cannot be undone.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div id="delete-error" class="hidden mt-4 rounded-md bg-red-50 p-4">
+          <div class="flex">
+            <div class="flex-shrink-0">
+              <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <div class="ml-3">
+              <h3 class="text-sm font-medium text-red-800">Error deleting collection</h3>
+              <div class="mt-2 text-sm text-red-700">
+                <p id="delete-error-message"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
+          <button type="button"
+                  id="delete-button"
+                  onclick="handleDelete()"
+                  class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:col-start-2 sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+            <span id="delete-text">Delete</span>
+            <span id="delete-loading" class="hidden flex items-center">
+              <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Deleting...
+            </span>
+          </button>
+          <button type="button"
+                  class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:col-start-1 sm:text-sm"
+                  onclick="closeDeleteModal()">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- JavaScript for modal and View Transitions -->
   <script>
     // Attach functions to window object for global access from inline onclick handlers
 
+    // State management for dropdowns
+    let currentOpenDropdown = null;
+
+    // Dropdown management
+    window.toggleDropdown = function(collectionId) {
+      const dropdown = document.getElementById(`dropdown-${collectionId}`);
+      const wasHidden = dropdown.classList.contains('hidden');
+
+      // Close all dropdowns first
+      window.closeAllDropdowns();
+
+      // If this dropdown was hidden, show it
+      if (wasHidden) {
+        dropdown.classList.remove('hidden');
+        currentOpenDropdown = collectionId;
+      }
+    };
+
+    window.closeAllDropdowns = function() {
+      if (currentOpenDropdown) {
+        const dropdown = document.getElementById(`dropdown-${currentOpenDropdown}`);
+        if (dropdown) {
+          dropdown.classList.add('hidden');
+        }
+        currentOpenDropdown = null;
+      }
+    };
+
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', function(event) {
+      if (currentOpenDropdown) {
+        const dropdownContainer = document.getElementById(`dropdown-container-${currentOpenDropdown}`);
+        if (dropdownContainer && !dropdownContainer.contains(event.target)) {
+          window.closeAllDropdowns();
+        }
+      }
+    });
+
     // Modal management
     window.openCreateModal = function() {
+      // Reset to create mode
+      document.getElementById('edit-collection-id').value = '';
+      document.getElementById('modal-title').textContent = 'Create New Service Collection';
+      document.getElementById('modal-description').textContent = 'Create a new Service Collection to organize your infrastructure resources.';
+      document.getElementById('create-text').textContent = 'Create';
+      document.getElementById('loading-text').textContent = 'Creating...';
+
+      // Show modal
       document.getElementById('create-modal').classList.remove('hidden');
       document.getElementById('collection-name').focus();
+    };
+
+    window.openEditModal = function(collection) {
+      // Set edit mode
+      document.getElementById('edit-collection-id').value = collection.id;
+      document.getElementById('modal-title').textContent = 'Edit Service Collection';
+      document.getElementById('modal-description').textContent = 'Update the details of your Service Collection.';
+      document.getElementById('create-text').textContent = 'Save Changes';
+      document.getElementById('loading-text').textContent = 'Saving...';
+
+      // Populate form with existing values
+      document.getElementById('collection-name').value = collection.name;
+      document.getElementById('collection-description').value = collection.description || '';
+      document.getElementById('collection-environment').value = collection.environment;
+
+      // Show modal
+      document.getElementById('create-modal').classList.remove('hidden');
+      document.getElementById('collection-name').focus();
+
+      // Close dropdown
+      window.closeAllDropdowns();
     };
 
     window.closeCreateModal = function() {
       document.getElementById('create-modal').classList.add('hidden');
       // Reset form
       document.getElementById('create-collection-form').reset();
+      document.getElementById('edit-collection-id').value = '';
       // Hide any error messages
       document.getElementById('form-error').classList.add('hidden');
+    };
+
+    // Delete modal management
+    let deleteCollectionId = null;
+
+    window.openDeleteModal = function(collection) {
+      deleteCollectionId = collection.id;
+      document.getElementById('delete-collection-name').textContent = collection.name;
+      document.getElementById('delete-modal').classList.remove('hidden');
+      document.getElementById('delete-error').classList.add('hidden');
+
+      // Close dropdown
+      window.closeAllDropdowns();
+    };
+
+    window.closeDeleteModal = function() {
+      document.getElementById('delete-modal').classList.add('hidden');
+      deleteCollectionId = null;
+      document.getElementById('delete-error').classList.add('hidden');
     };
 
     // Collection navigation with View Transitions
@@ -402,7 +584,7 @@ if (authContext.isAuthenticated) {
       }
     };
 
-    // Form submission handler
+    // Form submission handler (handles both create and edit)
     window.handleCreateSubmit = async function(event) {
       event.preventDefault();
 
@@ -413,6 +595,8 @@ if (authContext.isAuthenticated) {
       const createLoading = document.getElementById('create-loading');
       const formError = document.getElementById('form-error');
       const errorMessage = document.getElementById('form-error-message');
+      const editCollectionId = document.getElementById('edit-collection-id').value;
+      const isEdit = !!editCollectionId;
 
       // Show loading state
       createButton.disabled = true;
@@ -443,9 +627,12 @@ if (authContext.isAuthenticated) {
           project_id: currentProject.id
         };
 
-        // Submit form to backend
-        const response = await fetch('/api/collections/', {
-          method: 'POST',
+        // Submit form to backend (PUT for edit, POST for create)
+        const url = isEdit ? `/api/collections/${editCollectionId}` : '/api/collections';
+        const method = isEdit ? 'PUT' : 'POST';
+
+        const response = await fetch(url, {
+          method: method,
           headers: {
             'Content-Type': 'application/json'
           },
@@ -455,7 +642,7 @@ if (authContext.isAuthenticated) {
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.detail || 'Failed to create collection');
+          throw new Error(errorData.detail || `Failed to ${isEdit ? 'update' : 'create'} collection`);
         }
 
         // Success - close modal and refresh page with View Transition
@@ -470,7 +657,7 @@ if (authContext.isAuthenticated) {
         }
 
       } catch (error) {
-        console.error('Error creating collection:', error);
+        console.error(`Error ${isEdit ? 'updating' : 'creating'} collection:`, error);
 
         // Show error message
         errorMessage.textContent = error.message;
@@ -484,10 +671,64 @@ if (authContext.isAuthenticated) {
       }
     };
 
-    // Close modal on Escape key
+    // Delete handler
+    window.handleDelete = async function() {
+      if (!deleteCollectionId) return;
+
+      const deleteButton = document.getElementById('delete-button');
+      const deleteText = document.getElementById('delete-text');
+      const deleteLoading = document.getElementById('delete-loading');
+      const deleteError = document.getElementById('delete-error');
+      const deleteErrorMessage = document.getElementById('delete-error-message');
+
+      // Show loading state
+      deleteButton.disabled = true;
+      deleteText.classList.add('hidden');
+      deleteLoading.classList.remove('hidden');
+      deleteError.classList.add('hidden');
+
+      try {
+        const response = await fetch(`/api/collections/${deleteCollectionId}`, {
+          method: 'DELETE',
+          credentials: 'include'  // Send auth_token cookie
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Failed to delete collection');
+        }
+
+        // Success - close modal and refresh page with View Transition
+        window.closeDeleteModal();
+
+        if (document.startViewTransition) {
+          document.startViewTransition(() => {
+            window.location.reload();
+          });
+        } else {
+          window.location.reload();
+        }
+
+      } catch (error) {
+        console.error('Error deleting collection:', error);
+
+        // Show error message
+        deleteErrorMessage.textContent = error.message;
+        deleteError.classList.remove('hidden');
+
+      } finally {
+        // Reset loading state
+        deleteButton.disabled = false;
+        deleteText.classList.remove('hidden');
+        deleteLoading.classList.add('hidden');
+      }
+    };
+
+    // Close modals on Escape key
     document.addEventListener('keydown', function(event) {
       if (event.key === 'Escape') {
         window.closeCreateModal();
+        window.closeDeleteModal();
       }
     });
   </script>
