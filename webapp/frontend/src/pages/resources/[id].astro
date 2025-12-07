@@ -1,0 +1,1669 @@
+---
+import Layout from '../../layouts/Layout.astro';
+
+// Get the resource ID from the URL
+const { id } = Astro.params;
+
+// Server-side authentication check
+const authToken = Astro.cookies.get('auth_token')?.value;
+
+if (!authToken) {
+  return Astro.redirect('/login');
+}
+
+// Verify authentication and fetch resource data
+let authContext: any = {};
+let resource: any = null;
+let collection: any = null;
+let errorMessage: string | null = null;
+
+const baseUrl = 'http://vultr-backend:8000';
+const headers = {
+  'Authorization': `Bearer ${authToken}`,
+  'Content-Type': 'application/json'
+};
+
+try {
+  // Verify auth
+  const authResponse = await fetch(`${baseUrl}/api/auth/me`, { headers });
+  if (!authResponse.ok) {
+    return Astro.redirect('/login');
+  }
+  const userData = await authResponse.json();
+  authContext = {
+    isAuthenticated: true,
+    user: userData
+  };
+
+  // Fetch resource details
+  const resourceResponse = await fetch(`${baseUrl}/api/resources/managed/${id}`, { headers });
+  if (!resourceResponse.ok) {
+    if (resourceResponse.status === 404) {
+      errorMessage = 'Resource not found';
+    } else {
+      errorMessage = 'Failed to load resource';
+    }
+  } else {
+    resource = await resourceResponse.json();
+
+    // Fetch collection details if we have a service_collection_id
+    if (resource.service_collection_id) {
+      const collectionResponse = await fetch(`${baseUrl}/api/collections/${resource.service_collection_id}`, { headers });
+      if (collectionResponse.ok) {
+        collection = await collectionResponse.json();
+      }
+    }
+  }
+} catch (error) {
+  console.error('Failed to fetch resource:', error);
+  errorMessage = 'An error occurred while loading the resource';
+}
+
+// Helper function for status badge colors
+function getStatusColor(status: string): string {
+  switch (status?.toLowerCase()) {
+    case 'active':
+    case 'running':
+      return 'bg-green-100 text-green-800';
+    case 'stopped':
+    case 'paused':
+      return 'bg-yellow-100 text-yellow-800';
+    case 'error':
+    case 'failed':
+    case 'deleted':
+      return 'bg-red-100 text-red-800';
+    case 'pending':
+    case 'provisioning':
+    case 'creating':
+      return 'bg-blue-100 text-blue-800';
+    default:
+      return 'bg-gray-100 text-gray-800';
+  }
+}
+
+// Helper function for resource type icons
+function getResourceTypeIcon(type: string): string {
+  switch (type?.toLowerCase()) {
+    case 'instance':
+      return 'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01';
+    case 'database':
+      return 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4';
+    case 'load_balancer':
+      return 'M4 6h16M4 12h16m-7 6h7';
+    case 'kubernetes':
+      return 'M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z';
+    case 'block_storage':
+      return 'M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z';
+    case 'object_storage':
+      return 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4';
+    case 'domain':
+      return 'M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9';
+    default:
+      return 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4';
+  }
+}
+
+// Helper to format bytes to human readable
+function formatBytes(bytes: number): string {
+  if (!bytes) return '-';
+  if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
+  if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+  if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return bytes + ' bytes';
+}
+
+// Helper to format time ago
+function timeAgo(dateString: string): string {
+  if (!dateString) return 'Never';
+  const date = new Date(dateString);
+  const now = new Date();
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (seconds < 60) return 'Just now';
+  if (seconds < 3600) return Math.floor(seconds / 60) + ' minutes ago';
+  if (seconds < 86400) return Math.floor(seconds / 3600) + ' hours ago';
+  if (seconds < 604800) return Math.floor(seconds / 86400) + ' days ago';
+  return date.toLocaleDateString();
+}
+
+// Get cached data for display
+const cachedData = resource?.cached_vultr_data || resource?.metadata || {};
+const canRefresh = resource?.can_refresh || false;
+const lastSync = resource?.last_sync;
+---
+
+<Layout title={resource?.resource_name || 'Resource Details'}>
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    {errorMessage ? (
+      <div class="text-center py-12">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+        </svg>
+        <h2 class="mt-4 text-lg font-medium text-gray-900">{errorMessage}</h2>
+        <p class="mt-2 text-sm text-gray-500">The resource you're looking for might have been removed or you don't have access to it.</p>
+        <a href="/resources" class="mt-4 inline-flex items-center text-blue-600 hover:text-blue-800">
+          <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+          </svg>
+          Back to Resources
+        </a>
+      </div>
+    ) : (
+      <>
+        <!-- Breadcrumb -->
+        <nav class="flex mb-6" aria-label="Breadcrumb">
+          <ol class="flex items-center space-x-2 text-sm text-gray-500">
+            <li>
+              <a href="/resources" class="hover:text-gray-700">Resources</a>
+            </li>
+            <li>
+              <svg class="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+              </svg>
+            </li>
+            <li class="text-gray-900 font-medium">{resource.resource_name}</li>
+          </ol>
+        </nav>
+
+        <!-- Page Header -->
+        <div class="md:flex md:items-center md:justify-between mb-8">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center">
+              <div class="flex-shrink-0 h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4">
+                <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={getResourceTypeIcon(resource.resource_type)}></path>
+                </svg>
+              </div>
+              <div>
+                <h1 class="text-2xl font-bold text-gray-900 sm:text-3xl">{resource.resource_name}</h1>
+                <div class="mt-1 flex items-center space-x-3">
+                  <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(resource.status)}`}>
+                    {resource.status || 'Unknown'}
+                  </span>
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 capitalize">
+                    {resource.resource_type?.replace('_', ' ')}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 flex md:mt-0 md:ml-4 space-x-3">
+            {canRefresh && (
+              <button
+                type="button"
+                id="refresh-btn"
+                onclick="refreshResource()"
+                class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <svg id="refresh-icon" class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+                <span id="refresh-text">Refresh Data</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onclick="showRemoveDialog()"
+              class="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            >
+              <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+              </svg>
+              Remove
+            </button>
+          </div>
+        </div>
+
+        <!-- Data Freshness Banner -->
+        <div id="freshness-banner" class={`mb-6 rounded-lg p-4 flex items-center justify-between ${canRefresh ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50 border border-gray-200'}`}>
+          <div class="flex items-center">
+            <svg class={`h-5 w-5 mr-3 ${canRefresh ? 'text-blue-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <div>
+              <p class={`text-sm font-medium ${canRefresh ? 'text-blue-800' : 'text-gray-600'}`}>
+                Last synced: <span id="last-sync-time">{lastSync ? timeAgo(lastSync) : 'Never'}</span>
+              </p>
+              {!canRefresh && (
+                <p class="text-xs text-gray-500 mt-1">
+                  No credential linked - showing cached data only
+                </p>
+              )}
+            </div>
+          </div>
+          {canRefresh && (
+            <button
+              onclick="refreshResource()"
+              class="text-sm text-blue-600 hover:text-blue-800 font-medium"
+            >
+              Fetch latest data
+            </button>
+          )}
+        </div>
+
+        <!-- Main Content -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- Details Card -->
+          <div class="lg:col-span-2 space-y-6">
+            <!-- Basic Resource Details -->
+            <div class="bg-white shadow rounded-lg">
+              <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-lg font-medium text-gray-900">Resource Details</h2>
+              </div>
+              <div class="px-6 py-4">
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-6">
+                  <div>
+                    <dt class="text-sm font-medium text-gray-500">Vultr ID</dt>
+                    <dd class="mt-1 text-sm text-gray-900 font-mono">{resource.vultr_resource_id}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-sm font-medium text-gray-500">Resource Type</dt>
+                    <dd class="mt-1 text-sm text-gray-900 capitalize">{resource.resource_type?.replace('_', ' ')}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-sm font-medium text-gray-500">Status</dt>
+                    <dd class="mt-1">
+                      <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(resource.status)}`}>
+                        {resource.status || 'Unknown'}
+                      </span>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="text-sm font-medium text-gray-500">Region</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{cachedData.region || resource.region || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-sm font-medium text-gray-500">Monthly Cost</dt>
+                    <dd class="mt-1 text-sm text-gray-900">
+                      {resource.monthly_cost && resource.monthly_cost !== 'None' && resource.monthly_cost !== 'null'
+                        ? `$${resource.monthly_cost}/mo`
+                        : '-'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="text-sm font-medium text-gray-500">Created</dt>
+                    <dd class="mt-1 text-sm text-gray-900">
+                      {resource.created_at ? new Date(resource.created_at).toLocaleDateString() : '-'}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+
+            <!-- Instance-specific details -->
+            {resource.resource_type === 'instance' && (
+              <>
+                {/* Compute Specifications */}
+                <div class="bg-white shadow rounded-lg">
+                  <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-medium text-gray-900">Instance Specifications</h2>
+                  </div>
+                  <div class="px-6 py-4">
+                    <dl class="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-6">
+                      <div class="bg-gray-50 rounded-lg p-4 text-center">
+                        <dt class="text-sm font-medium text-gray-500">vCPUs</dt>
+                        <dd class="mt-1 text-2xl font-semibold text-gray-900">
+                          {cachedData.vcpu_count || '-'}
+                        </dd>
+                      </div>
+                      <div class="bg-gray-50 rounded-lg p-4 text-center">
+                        <dt class="text-sm font-medium text-gray-500">RAM</dt>
+                        <dd class="mt-1 text-2xl font-semibold text-gray-900">
+                          {cachedData.ram ? `${(cachedData.ram / 1024).toFixed(0)} GB` : '-'}
+                        </dd>
+                      </div>
+                      <div class="bg-gray-50 rounded-lg p-4 text-center">
+                        <dt class="text-sm font-medium text-gray-500">Disk</dt>
+                        <dd class="mt-1 text-2xl font-semibold text-gray-900">
+                          {cachedData.disk ? `${cachedData.disk} GB` : '-'}
+                        </dd>
+                      </div>
+                    </dl>
+                    <dl class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
+                      {cachedData.os && (
+                        <div>
+                          <dt class="text-sm font-medium text-gray-500">Operating System</dt>
+                          <dd class="mt-1 text-sm text-gray-900">{cachedData.os}</dd>
+                        </div>
+                      )}
+                      {cachedData.plan && (
+                        <div>
+                          <dt class="text-sm font-medium text-gray-500">Plan</dt>
+                          <dd class="mt-1 text-sm text-gray-900 font-mono">{cachedData.plan}</dd>
+                        </div>
+                      )}
+                      {cachedData.hostname && (
+                        <div>
+                          <dt class="text-sm font-medium text-gray-500">Hostname</dt>
+                          <dd class="mt-1 text-sm text-gray-900 font-mono">{cachedData.hostname}</dd>
+                        </div>
+                      )}
+                      {cachedData.power_status && (
+                        <div>
+                          <dt class="text-sm font-medium text-gray-500">Power Status</dt>
+                          <dd class="mt-1">
+                            <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              cachedData.power_status === 'running' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {cachedData.power_status}
+                            </span>
+                          </dd>
+                        </div>
+                      )}
+                      {cachedData.server_status && (
+                        <div>
+                          <dt class="text-sm font-medium text-gray-500">Server Health</dt>
+                          <dd class="mt-1">
+                            <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              cachedData.server_status === 'ok' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {cachedData.server_status}
+                            </span>
+                          </dd>
+                        </div>
+                      )}
+                      {cachedData.allowed_bandwidth && (
+                        <div>
+                          <dt class="text-sm font-medium text-gray-500">Bandwidth Allowance</dt>
+                          <dd class="mt-1 text-sm text-gray-900">{cachedData.allowed_bandwidth} GB/mo</dd>
+                        </div>
+                      )}
+                    </dl>
+                    {cachedData.features && cachedData.features.length > 0 && (
+                      <div class="mt-6">
+                        <dt class="text-sm font-medium text-gray-500 mb-2">Features</dt>
+                        <dd class="flex flex-wrap gap-2">
+                          {cachedData.features.map((feature: string) => (
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                              {feature.replace('_', ' ')}
+                            </span>
+                          ))}
+                        </dd>
+                      </div>
+                    )}
+                    {cachedData.tags && cachedData.tags.length > 0 && (
+                      <div class="mt-4">
+                        <dt class="text-sm font-medium text-gray-500 mb-2">Tags</dt>
+                        <dd class="flex flex-wrap gap-2">
+                          {cachedData.tags.map((tag: string) => (
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                              {tag}
+                            </span>
+                          ))}
+                        </dd>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Instance Power Controls - Only for instances with credential */}
+                {resource.resource_type === 'instance' && canRefresh && (
+                  <div class="bg-white shadow rounded-lg">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                      <h2 class="text-lg font-medium text-gray-900 flex items-center">
+                        <svg class="mr-2 h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                        Power Controls
+                      </h2>
+                    </div>
+                    <div class="px-6 py-4">
+                      <div class="flex flex-wrap gap-3">
+                        {/* Show Start when stopped, Stop when running */}
+                        {cachedData.power_status === 'stopped' ? (
+                          <button
+                            type="button"
+                            id="start-btn"
+                            onclick="performPowerAction('start')"
+                            class="inline-flex items-center px-4 py-2 border border-green-300 rounded-md shadow-sm text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                          >
+                            <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            Start Instance
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            id="stop-btn"
+                            onclick="performPowerAction('stop')"
+                            class="inline-flex items-center px-4 py-2 border border-yellow-300 rounded-md shadow-sm text-sm font-medium text-yellow-700 bg-yellow-50 hover:bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
+                          >
+                            <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path>
+                            </svg>
+                            Stop Instance
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          id="reboot-btn"
+                          onclick="performPowerAction('reboot')"
+                          class="inline-flex items-center px-4 py-2 border border-blue-300 rounded-md shadow-sm text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                        >
+                          <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                          </svg>
+                          Reboot
+                        </button>
+                        <button
+                          type="button"
+                          onclick="showReinstallDialog()"
+                          class="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                        >
+                          <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                          </svg>
+                          Reinstall OS
+                        </button>
+                      </div>
+                      <p class="mt-3 text-xs text-gray-500">
+                        Power actions are performed directly via the Vultr API using your linked credential.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Console Access - Prominent position for operational use */}
+                {cachedData.kvm && (
+                  <div class="bg-gradient-to-r from-gray-800 to-gray-900 shadow rounded-lg text-white">
+                    <div class="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
+                      <h2 class="text-lg font-medium flex items-center">
+                        <svg class="mr-2 h-5 w-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                        Console Access
+                      </h2>
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30">
+                        <span class="w-1.5 h-1.5 bg-green-400 rounded-full mr-1.5 animate-pulse"></span>
+                        Available
+                      </span>
+                    </div>
+                    <div class="px-6 py-4">
+                      <p class="text-sm text-gray-300 mb-4">
+                        Direct access to the server console via KVM. Use for boot troubleshooting or when SSH is unavailable.
+                      </p>
+                      <a
+                        href={cachedData.kvm}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="inline-flex items-center px-4 py-2 border border-green-500 rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-green-500 transition-colors"
+                      >
+                        <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Launch KVM Console
+                        <svg class="ml-2 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                        </svg>
+                      </a>
+                    </div>
+                  </div>
+                )}
+
+                {/* Network Details */}
+                <div class="bg-white shadow rounded-lg">
+                  <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-medium text-gray-900">Network</h2>
+                  </div>
+                  <div class="px-6 py-4">
+                    <div class="space-y-6">
+                      {/* IPv4 Section */}
+                      <div>
+                        <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                          <svg class="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path>
+                          </svg>
+                          IPv4
+                        </h3>
+                        <dl class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          {cachedData.main_ip && (
+                            <div class="bg-gray-50 rounded-lg p-3">
+                              <dt class="text-xs font-medium text-gray-500">IP Address</dt>
+                              <dd class="mt-1 text-sm text-gray-900 font-mono">{cachedData.main_ip}</dd>
+                            </div>
+                          )}
+                          {cachedData.netmask_v4 && (
+                            <div class="bg-gray-50 rounded-lg p-3">
+                              <dt class="text-xs font-medium text-gray-500">Netmask</dt>
+                              <dd class="mt-1 text-sm text-gray-900 font-mono">{cachedData.netmask_v4}</dd>
+                            </div>
+                          )}
+                          {cachedData.gateway_v4 && (
+                            <div class="bg-gray-50 rounded-lg p-3">
+                              <dt class="text-xs font-medium text-gray-500">Gateway</dt>
+                              <dd class="mt-1 text-sm text-gray-900 font-mono">{cachedData.gateway_v4}</dd>
+                            </div>
+                          )}
+                        </dl>
+                      </div>
+
+                      {/* IPv6 Section */}
+                      {(cachedData.v6_main_ip || cachedData.v6_network) && (
+                        <div>
+                          <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                            <svg class="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path>
+                            </svg>
+                            IPv6
+                          </h3>
+                          <dl class="grid grid-cols-1 gap-4">
+                            {cachedData.v6_main_ip && (
+                              <div class="bg-gray-50 rounded-lg p-3">
+                                <dt class="text-xs font-medium text-gray-500">IP Address</dt>
+                                <dd class="mt-1 text-sm text-gray-900 font-mono break-all">{cachedData.v6_main_ip}</dd>
+                              </div>
+                            )}
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {cachedData.v6_network && (
+                                <div class="bg-gray-50 rounded-lg p-3">
+                                  <dt class="text-xs font-medium text-gray-500">Network</dt>
+                                  <dd class="mt-1 text-sm text-gray-900 font-mono">{cachedData.v6_network}</dd>
+                                </div>
+                              )}
+                              {cachedData.v6_network_size && (
+                                <div class="bg-gray-50 rounded-lg p-3">
+                                  <dt class="text-xs font-medium text-gray-500">Prefix Size</dt>
+                                  <dd class="mt-1 text-sm text-gray-900">/{cachedData.v6_network_size}</dd>
+                                </div>
+                              )}
+                            </div>
+                          </dl>
+                        </div>
+                      )}
+
+                      {/* Internal/VPC Network */}
+                      {(cachedData.internal_ip || (cachedData.vpcs && cachedData.vpcs.length > 0)) && (
+                        <div>
+                          <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                            <svg class="h-4 w-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                            </svg>
+                            Private Network
+                          </h3>
+                          <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {cachedData.internal_ip && (
+                              <div class="bg-gray-50 rounded-lg p-3">
+                                <dt class="text-xs font-medium text-gray-500">Internal IP</dt>
+                                <dd class="mt-1 text-sm text-gray-900 font-mono">{cachedData.internal_ip}</dd>
+                              </div>
+                            )}
+                            {cachedData.vpcs && cachedData.vpcs.length > 0 && (
+                              <div class="bg-gray-50 rounded-lg p-3">
+                                <dt class="text-xs font-medium text-gray-500">VPCs</dt>
+                                <dd class="mt-1 text-sm text-gray-900">{cachedData.vpcs.length} attached</dd>
+                              </div>
+                            )}
+                          </dl>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Security */}
+                <div class="bg-white shadow rounded-lg">
+                  <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-medium text-gray-900">Security</h2>
+                  </div>
+                  <div class="px-6 py-4">
+                    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
+                      {cachedData.firewall_group_id && (
+                        <div>
+                          <dt class="text-sm font-medium text-gray-500">Firewall Group</dt>
+                          <dd class="mt-1">
+                            <a
+                              href={`https://my.vultr.com/firewall/manage/?id=${cachedData.firewall_group_id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              class="text-sm text-blue-600 hover:text-blue-800 font-mono inline-flex items-center"
+                            >
+                              {cachedData.firewall_group_id.substring(0, 8)}...
+                              <svg class="ml-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                              </svg>
+                            </a>
+                          </dd>
+                        </div>
+                      )}
+                      {cachedData.user_scheme && (
+                        <div>
+                          <dt class="text-sm font-medium text-gray-500">Login User</dt>
+                          <dd class="mt-1 text-sm text-gray-900 font-mono">{cachedData.user_scheme}</dd>
+                        </div>
+                      )}
+                      <div>
+                        <dt class="text-sm font-medium text-gray-500">VPC Only Mode</dt>
+                        <dd class="mt-1">
+                          <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            cachedData.vpc_only ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {cachedData.vpc_only ? 'Enabled' : 'Disabled'}
+                          </span>
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                </div>
+
+                {/* Billing & Dates */}
+                <div class="bg-white shadow rounded-lg">
+                  <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-medium text-gray-900">Billing & Dates</h2>
+                  </div>
+                  <div class="px-6 py-4">
+                    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
+                      {cachedData.pending_charges !== undefined && (
+                        <div class="bg-blue-50 rounded-lg p-4">
+                          <dt class="text-sm font-medium text-blue-700">Pending Charges</dt>
+                          <dd class="mt-1 text-2xl font-semibold text-blue-900">${cachedData.pending_charges.toFixed(2)}</dd>
+                        </div>
+                      )}
+                      {cachedData.date_created && (
+                        <div class="bg-gray-50 rounded-lg p-4">
+                          <dt class="text-sm font-medium text-gray-500">Created on Vultr</dt>
+                          <dd class="mt-1 text-sm text-gray-900">
+                            {new Date(cachedData.date_created).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+                  </div>
+                </div>
+
+              </>
+            )}
+
+            <!-- Load Balancer specific details -->
+            {resource.resource_type === 'load_balancer' && (
+              <div class="bg-white shadow rounded-lg">
+                <div class="px-6 py-4 border-b border-gray-200">
+                  <h2 class="text-lg font-medium text-gray-900">Load Balancer Configuration</h2>
+                </div>
+                <div class="px-6 py-4">
+                  <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
+                    {cachedData.ipv4 && (
+                      <div>
+                        <dt class="text-sm font-medium text-gray-500">IPv4 Address</dt>
+                        <dd class="mt-1 text-sm text-gray-900 font-mono">{cachedData.ipv4}</dd>
+                      </div>
+                    )}
+                    {cachedData.ssl_redirect !== undefined && (
+                      <div>
+                        <dt class="text-sm font-medium text-gray-500">SSL Redirect</dt>
+                        <dd class="mt-1">
+                          <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            cachedData.ssl_redirect ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {cachedData.ssl_redirect ? 'Enabled' : 'Disabled'}
+                          </span>
+                        </dd>
+                      </div>
+                    )}
+                  </dl>
+                  {cachedData.forwarding_rules && cachedData.forwarding_rules.length > 0 && (
+                    <div class="mt-6">
+                      <h3 class="text-sm font-medium text-gray-700 mb-3">Forwarding Rules</h3>
+                      <div class="bg-gray-50 rounded-lg overflow-hidden">
+                        <table class="min-w-full divide-y divide-gray-200">
+                          <thead class="bg-gray-100">
+                            <tr>
+                              <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Frontend</th>
+                              <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Backend</th>
+                            </tr>
+                          </thead>
+                          <tbody class="divide-y divide-gray-200">
+                            {cachedData.forwarding_rules.map((rule: any) => (
+                              <tr>
+                                <td class="px-4 py-2 text-sm text-gray-900">
+                                  {rule.frontend_protocol}:{rule.frontend_port}
+                                </td>
+                                <td class="px-4 py-2 text-sm text-gray-900">
+                                  {rule.backend_protocol}:{rule.backend_port}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <!-- Block Storage specific details -->
+            {resource.resource_type === 'block_storage' && (
+              <>
+                {/* Storage Specifications */}
+                <div class="bg-white shadow rounded-lg">
+                  <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-medium text-gray-900">Storage Specifications</h2>
+                  </div>
+                  <div class="px-6 py-4">
+                    <dl class="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-6">
+                      <div class="bg-gray-50 rounded-lg p-4 text-center">
+                        <dt class="text-sm font-medium text-gray-500">Size</dt>
+                        <dd class="mt-1 text-2xl font-semibold text-gray-900">
+                          {cachedData.size_gb || '-'} <span class="text-base font-normal text-gray-500">GB</span>
+                        </dd>
+                      </div>
+                      <div class="bg-gray-50 rounded-lg p-4 text-center">
+                        <dt class="text-sm font-medium text-gray-500">Type</dt>
+                        <dd class="mt-1 text-xl font-semibold text-gray-900 capitalize">
+                          {cachedData.block_type?.replace('_', ' ') || '-'}
+                        </dd>
+                      </div>
+                      <div class="bg-gray-50 rounded-lg p-4 text-center">
+                        <dt class="text-sm font-medium text-gray-500">Bootable</dt>
+                        <dd class="mt-1">
+                          <span class={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                            cachedData.bootable ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                          }`}>
+                            {cachedData.bootable ? 'Yes' : 'No'}
+                          </span>
+                        </dd>
+                      </div>
+                    </dl>
+                    <dl class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
+                      {cachedData.mount_id && (
+                        <div>
+                          <dt class="text-sm font-medium text-gray-500">Mount ID</dt>
+                          <dd class="mt-1 text-sm text-gray-900 font-mono bg-gray-50 px-3 py-2 rounded">{cachedData.mount_id}</dd>
+                        </div>
+                      )}
+                      {cachedData.region && (
+                        <div>
+                          <dt class="text-sm font-medium text-gray-500">Region</dt>
+                          <dd class="mt-1 text-sm text-gray-900 uppercase">{cachedData.region}</dd>
+                        </div>
+                      )}
+                    </dl>
+                  </div>
+                </div>
+
+                {/* Attached Instance */}
+                {cachedData.attached_to_instance && (
+                  <div class="bg-white shadow rounded-lg">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                      <h2 class="text-lg font-medium text-gray-900 flex items-center">
+                        <svg class="mr-2 h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                        </svg>
+                        Attached Instance
+                      </h2>
+                    </div>
+                    <div class="px-6 py-4">
+                      <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                          <div class="flex items-center">
+                            <div class="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                              <svg class="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+                              </svg>
+                            </div>
+                            <div>
+                              {cachedData.attached_to_instance_label ? (
+                                <p class="text-base font-medium text-gray-900">{cachedData.attached_to_instance_label}</p>
+                              ) : (
+                                <p class="text-sm font-mono text-gray-600">{cachedData.attached_to_instance}</p>
+                              )}
+                              {cachedData.attached_to_instance_ip && (
+                                <p class="text-sm text-gray-500 font-mono">{cachedData.attached_to_instance_ip}</p>
+                              )}
+                            </div>
+                          </div>
+                          <dl class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div class="bg-gray-50 rounded-lg p-3">
+                              <dt class="text-xs font-medium text-gray-500">Instance ID</dt>
+                              <dd class="mt-1 text-sm text-gray-900 font-mono break-all">{cachedData.attached_to_instance}</dd>
+                            </div>
+                            {cachedData.attached_to_instance_ip && (
+                              <div class="bg-gray-50 rounded-lg p-3">
+                                <dt class="text-xs font-medium text-gray-500">Instance IP</dt>
+                                <dd class="mt-1 text-sm text-gray-900 font-mono">{cachedData.attached_to_instance_ip}</dd>
+                              </div>
+                            )}
+                          </dl>
+                        </div>
+                        <a
+                          href={`https://my.vultr.com/subs/?id=${cachedData.attached_to_instance}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="ml-4 inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                        >
+                          View Instance
+                          <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                          </svg>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Not Attached Warning */}
+                {!cachedData.attached_to_instance && (
+                  <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div class="flex">
+                      <svg class="h-5 w-5 text-yellow-400 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                      </svg>
+                      <div>
+                        <h3 class="text-sm font-medium text-yellow-800">Not Attached</h3>
+                        <p class="mt-1 text-sm text-yellow-700">
+                          This block storage volume is not currently attached to any instance.
+                          You can attach it via the Vultr control panel.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Billing & Dates */}
+                <div class="bg-white shadow rounded-lg">
+                  <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-medium text-gray-900">Billing & Dates</h2>
+                  </div>
+                  <div class="px-6 py-4">
+                    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
+                      {cachedData.cost !== undefined && (
+                        <div class="bg-green-50 rounded-lg p-4">
+                          <dt class="text-sm font-medium text-green-700">Monthly Cost</dt>
+                          <dd class="mt-1 text-2xl font-semibold text-green-900">${typeof cachedData.cost === 'number' ? cachedData.cost.toFixed(2) : cachedData.cost}</dd>
+                        </div>
+                      )}
+                      {cachedData.pending_charges !== undefined && (
+                        <div class="bg-blue-50 rounded-lg p-4">
+                          <dt class="text-sm font-medium text-blue-700">Pending Charges</dt>
+                          <dd class="mt-1 text-2xl font-semibold text-blue-900">${typeof cachedData.pending_charges === 'number' ? cachedData.pending_charges.toFixed(2) : cachedData.pending_charges}</dd>
+                        </div>
+                      )}
+                      {cachedData.date_created && (
+                        <div class="bg-gray-50 rounded-lg p-4 sm:col-span-2">
+                          <dt class="text-sm font-medium text-gray-500">Created on Vultr</dt>
+                          <dd class="mt-1 text-sm text-gray-900">
+                            {new Date(cachedData.date_created).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+                  </div>
+                </div>
+              </>
+            )}
+
+            <!-- DNS Domain specific details -->
+            {resource.resource_type === 'domain' && (
+              <>
+                {/* Domain Configuration */}
+                <div class="bg-white shadow rounded-lg">
+                  <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-medium text-gray-900 flex items-center">
+                      <svg class="mr-2 h-5 w-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path>
+                      </svg>
+                      Domain Configuration
+                    </h2>
+                  </div>
+                  <div class="px-6 py-4">
+                    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-6">
+                      <div class="bg-purple-50 rounded-lg p-4 text-center">
+                        <dt class="text-sm font-medium text-purple-700">Domain Name</dt>
+                        <dd class="mt-1 text-lg font-semibold text-purple-900 break-all">
+                          {resource.resource_name || cachedData.domain || '-'}
+                        </dd>
+                      </div>
+                      <div class="bg-gray-50 rounded-lg p-4 text-center">
+                        <dt class="text-sm font-medium text-gray-500">DNSSEC</dt>
+                        <dd class="mt-1">
+                          <span class={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                            cachedData.dns_sec === 'enabled' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                          }`}>
+                            <svg class={`mr-1.5 h-4 w-4 ${cachedData.dns_sec === 'enabled' ? 'text-green-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={cachedData.dns_sec === 'enabled' ? 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' : 'M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z'}></path>
+                            </svg>
+                            {cachedData.dns_sec === 'enabled' ? 'Enabled' : 'Disabled'}
+                          </span>
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                </div>
+
+                {/* DNS Records Summary */}
+                <div class="bg-white shadow rounded-lg">
+                  <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-medium text-gray-900 flex items-center">
+                      <svg class="mr-2 h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+                      </svg>
+                      DNS Records
+                    </h2>
+                  </div>
+                  <div class="px-6 py-4">
+                    {cachedData.record_count !== undefined ? (
+                      <div class="text-center">
+                        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-3">
+                          <span class="text-2xl font-bold text-blue-600">{cachedData.record_count}</span>
+                        </div>
+                        <p class="text-sm text-gray-500">Total DNS records</p>
+                        <a
+                          href={`https://my.vultr.com/dns/detail/?domain=${resource.vultr_resource_id || resource.resource_name}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="mt-4 inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                        >
+                          <svg class="mr-2 h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                          </svg>
+                          Manage Records
+                        </a>
+                      </div>
+                    ) : (
+                      <p class="text-sm text-gray-500 text-center">Record count not available. Refresh to get latest data.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Quick Actions for Domain */}
+                <div class="bg-white shadow rounded-lg">
+                  <div class="px-6 py-4 border-b border-gray-200">
+                    <h2 class="text-lg font-medium text-gray-900">Quick Actions</h2>
+                  </div>
+                  <div class="px-6 py-4 space-y-3">
+                    <a
+                      href={`https://my.vultr.com/dns/detail/?domain=${resource.vultr_resource_id || resource.resource_name}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                    >
+                      <svg class="mr-2 h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                      </svg>
+                      View in Vultr DNS
+                    </a>
+                    <a
+                      href={`https://dnschecker.org/#A/${resource.vultr_resource_id || resource.resource_name}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="w-full inline-flex items-center justify-center px-4 py-2 border border-blue-300 rounded-md shadow-sm text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100"
+                    >
+                      <svg class="mr-2 h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                      </svg>
+                      Check DNS Propagation
+                    </a>
+                    <a
+                      href={`https://www.whois.com/whois/${resource.vultr_resource_id || resource.resource_name}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="w-full inline-flex items-center justify-center px-4 py-2 border border-green-300 rounded-md shadow-sm text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100"
+                    >
+                      <svg class="mr-2 h-4 w-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                      </svg>
+                      WHOIS Lookup
+                    </a>
+                  </div>
+                </div>
+
+                {/* Date Created */}
+                {cachedData.date_created && (
+                  <div class="bg-white shadow rounded-lg">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                      <h2 class="text-lg font-medium text-gray-900">Timeline</h2>
+                    </div>
+                    <div class="px-6 py-4">
+                      <div class="bg-gray-50 rounded-lg p-4">
+                        <dt class="text-sm font-medium text-gray-500">Added to Vultr DNS</dt>
+                        <dd class="mt-1 text-sm text-gray-900">
+                          {new Date(cachedData.date_created).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </dd>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            <!-- Raw Cached Data (collapsible) -->
+            {Object.keys(cachedData).length > 0 && (
+              <div class="bg-white shadow rounded-lg">
+                <button
+                  type="button"
+                  onclick="toggleRawData()"
+                  class="w-full px-6 py-4 flex items-center justify-between text-left border-b border-gray-200 hover:bg-gray-50"
+                >
+                  <h2 class="text-lg font-medium text-gray-900">Raw Vultr Data</h2>
+                  <svg id="raw-data-chevron" class="h-5 w-5 text-gray-500 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                  </svg>
+                </button>
+                <div id="raw-data-content" class="hidden px-6 py-4">
+                  <pre class="text-xs text-gray-700 bg-gray-50 rounded-lg p-4 overflow-x-auto max-h-96">{JSON.stringify(cachedData, null, 2)}</pre>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <!-- Sidebar -->
+          <div class="space-y-6">
+            <!-- Collection Info -->
+            <div class="bg-white shadow rounded-lg">
+              <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-lg font-medium text-gray-900">Collection</h2>
+              </div>
+              <div class="px-6 py-4">
+                {collection ? (
+                  <div>
+                    <a
+                      href={`/collections/${collection.id}`}
+                      class="text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      {collection.name}
+                    </a>
+                    {collection.description && (
+                      <p class="mt-1 text-sm text-gray-500">{collection.description}</p>
+                    )}
+                    <div class="mt-3 flex items-center text-xs text-gray-400">
+                      <span class={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                        collection.environment === 'production' ? 'bg-red-100 text-red-700' :
+                        collection.environment === 'staging' ? 'bg-yellow-100 text-yellow-700' :
+                        collection.environment === 'testing' ? 'bg-purple-100 text-purple-700' :
+                        'bg-green-100 text-green-700'
+                      }`}>
+                        {collection.environment}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <p class="text-sm text-gray-500">Not assigned to a collection</p>
+                )}
+              </div>
+            </div>
+
+            <!-- Management Info -->
+            <div class="bg-white shadow rounded-lg">
+              <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-lg font-medium text-gray-900">Management</h2>
+              </div>
+              <div class="px-6 py-4 space-y-3">
+                <div>
+                  <dt class="text-sm font-medium text-gray-500">Managed By</dt>
+                  <dd class="mt-1 text-sm text-gray-900">{resource.managed_by || '-'}</dd>
+                </div>
+                <div>
+                  <dt class="text-sm font-medium text-gray-500">Import Source</dt>
+                  <dd class="mt-1 text-sm text-gray-900 capitalize">{resource.import_source?.replace('_', ' ') || '-'}</dd>
+                </div>
+                <div>
+                  <dt class="text-sm font-medium text-gray-500">Credential Linked</dt>
+                  <dd class="mt-1">
+                    <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      canRefresh ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {canRefresh ? 'Yes' : 'No'}
+                    </span>
+                  </dd>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="bg-white shadow rounded-lg">
+              <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-lg font-medium text-gray-900">Quick Actions</h2>
+              </div>
+              <div class="px-6 py-4 space-y-3">
+                {/* Link Credential - show if no credential linked */}
+                {!canRefresh && (
+                  <button
+                    type="button"
+                    onclick="showLinkCredentialDialog()"
+                    class="w-full inline-flex items-center justify-center px-4 py-2 border border-blue-300 rounded-md shadow-sm text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100"
+                  >
+                    <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                    </svg>
+                    Link Credential
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onclick="moveToCollection()"
+                  class="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                  </svg>
+                  Move to Collection
+                </button>
+                <a
+                  href={`https://my.vultr.com/${resource.resource_type === 'instance' ? 'subs' : resource.resource_type}/${resource.vultr_resource_id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                  </svg>
+                  View in Vultr
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
+    )}
+
+    <!-- Remove Resource Dialog -->
+    <dialog id="remove-dialog" class="rounded-lg shadow-xl backdrop:bg-gray-900/50 max-w-md w-full">
+      <div class="bg-white px-4 pt-5 pb-4 sm:p-6">
+        <div class="sm:flex sm:items-start">
+          <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+            <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+          </div>
+          <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+            <h3 class="text-lg leading-6 font-medium text-gray-900">Remove Resource</h3>
+            <div class="mt-2">
+              <p class="text-sm text-gray-500">
+                Are you sure you want to remove <strong>{resource?.resource_name}</strong> from management?
+                This will not delete the resource from Vultr, only stop tracking it in this application.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse gap-3">
+          <button
+            type="button"
+            onclick="confirmRemove()"
+            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
+          >
+            Remove
+          </button>
+          <button
+            type="button"
+            onclick="document.getElementById('remove-dialog').close()"
+            class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:w-auto sm:text-sm"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Link Credential Dialog -->
+    <dialog id="link-credential-dialog" class="rounded-lg shadow-xl backdrop:bg-gray-900/50 max-w-md w-full p-0">
+      <div class="bg-white rounded-lg">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="text-lg font-medium text-gray-900">Link Vultr Credential</h3>
+          <p class="mt-1 text-sm text-gray-500">
+            Select a credential to enable data refresh from Vultr API
+          </p>
+        </div>
+        <div class="px-6 py-4">
+          <div id="credentials-loading" class="text-center py-4">
+            <svg class="animate-spin h-6 w-6 text-blue-500 mx-auto" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="mt-2 text-sm text-gray-500">Loading credentials...</p>
+          </div>
+          <div id="credentials-list" class="hidden space-y-2">
+            <!-- Credentials will be populated here -->
+          </div>
+          <div id="credentials-empty" class="hidden text-center py-4">
+            <svg class="mx-auto h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+            </svg>
+            <p class="mt-2 text-sm text-gray-500">No credentials found</p>
+            <a href="/credentials" class="mt-2 inline-flex items-center text-sm text-blue-600 hover:text-blue-800">
+              Add a credential
+              <svg class="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+              </svg>
+            </a>
+          </div>
+        </div>
+        <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-3 rounded-b-lg">
+          <button
+            type="button"
+            onclick="document.getElementById('link-credential-dialog').close()"
+            class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            id="link-credential-btn"
+            onclick="linkSelectedCredential()"
+            disabled
+            class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Link & Refresh
+          </button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Reinstall OS Confirmation Dialog -->
+    <dialog id="reinstall-dialog" class="rounded-lg shadow-xl backdrop:bg-gray-900/50 max-w-md w-full">
+      <div class="bg-white px-4 pt-5 pb-4 sm:p-6">
+        <div class="sm:flex sm:items-start">
+          <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+            <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+          </div>
+          <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+            <h3 class="text-lg leading-6 font-medium text-gray-900">Reinstall Operating System</h3>
+            <div class="mt-2">
+              <p class="text-sm text-gray-500">
+                <strong class="text-red-600">Warning:</strong> This action will completely erase all data on the server and reinstall the operating system from scratch.
+              </p>
+              <ul class="mt-3 text-sm text-gray-500 list-disc list-inside space-y-1">
+                <li>All files and data will be permanently deleted</li>
+                <li>SSH keys and configurations will be reset</li>
+                <li>Installed software will need to be reinstalled</li>
+                <li>This process may take several minutes</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse gap-3">
+          <button
+            type="button"
+            onclick="confirmReinstall()"
+            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
+          >
+            Reinstall OS
+          </button>
+          <button
+            type="button"
+            onclick="document.getElementById('reinstall-dialog').close()"
+            class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:w-auto sm:text-sm"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </dialog>
+  </div>
+
+  <script is:inline define:vars={{ resourceId: id, canRefresh: canRefresh }}>
+    // Refresh resource data from Vultr API
+    window.refreshResource = async function() {
+      const btn = document.getElementById('refresh-btn');
+      const icon = document.getElementById('refresh-icon');
+      const text = document.getElementById('refresh-text');
+
+      if (btn) {
+        btn.disabled = true;
+        btn.classList.add('opacity-75');
+      }
+      if (icon) {
+        icon.classList.add('animate-spin');
+      }
+      if (text) {
+        text.textContent = 'Refreshing...';
+      }
+
+      try {
+        const response = await fetch(`/api/resources/managed/${resourceId}/refresh`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.detail || 'Failed to refresh resource');
+        }
+
+        const data = await response.json();
+
+        // Update the last sync time display
+        const syncTime = document.getElementById('last-sync-time');
+        if (syncTime) {
+          syncTime.textContent = 'Just now';
+        }
+
+        // Reload the page to show updated data
+        window.location.reload();
+      } catch (error) {
+        console.error('Refresh error:', error);
+        alert('Failed to refresh resource: ' + error.message);
+
+        // Reset button state
+        if (btn) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-75');
+        }
+        if (icon) {
+          icon.classList.remove('animate-spin');
+        }
+        if (text) {
+          text.textContent = 'Refresh Data';
+        }
+      }
+    }
+
+    window.showRemoveDialog = function() {
+      document.getElementById('remove-dialog').showModal();
+    }
+
+    window.confirmRemove = async function() {
+      try {
+        const response = await fetch(`/api/resources/managed/${resourceId}`, {
+          method: 'DELETE',
+          credentials: 'include'
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to remove resource');
+        }
+
+        // Redirect to resources page
+        window.location.href = '/resources';
+      } catch (error) {
+        console.error('Remove error:', error);
+        alert('Failed to remove resource: ' + error.message);
+      }
+    }
+
+    window.moveToCollection = function() {
+      // TODO: Implement move to collection modal
+      alert('Move to collection feature coming soon');
+    }
+
+    // Toggle raw data visibility
+    window.toggleRawData = function() {
+      const content = document.getElementById('raw-data-content');
+      const chevron = document.getElementById('raw-data-chevron');
+
+      if (content.classList.contains('hidden')) {
+        content.classList.remove('hidden');
+        chevron.classList.add('rotate-180');
+      } else {
+        content.classList.add('hidden');
+        chevron.classList.remove('rotate-180');
+      }
+    }
+
+    // Link Credential Dialog Functions
+    let selectedCredentialId = null;
+
+    window.showLinkCredentialDialog = async function() {
+      const dialog = document.getElementById('link-credential-dialog');
+      const loading = document.getElementById('credentials-loading');
+      const list = document.getElementById('credentials-list');
+      const empty = document.getElementById('credentials-empty');
+      const linkBtn = document.getElementById('link-credential-btn');
+
+      // Reset state
+      loading.classList.remove('hidden');
+      list.classList.add('hidden');
+      empty.classList.add('hidden');
+      linkBtn.disabled = true;
+      selectedCredentialId = null;
+
+      dialog.showModal();
+
+      // Fetch credentials
+      try {
+        const response = await fetch('/api/vultr-credentials', {
+          credentials: 'include'
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch credentials');
+        }
+
+        const data = await response.json();
+        const credentials = data.items || data;
+
+        loading.classList.add('hidden');
+
+        if (credentials.length === 0) {
+          empty.classList.remove('hidden');
+          return;
+        }
+
+        // Build credentials list
+        list.innerHTML = credentials.map(cred => `
+          <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors ${cred.is_active ? '' : 'opacity-50'}">
+            <input
+              type="radio"
+              name="credential"
+              value="${cred.id}"
+              ${!cred.is_active ? 'disabled' : ''}
+              class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+              onchange="selectCredential('${cred.id}')"
+            >
+            <div class="ml-3 flex-1">
+              <div class="flex items-center justify-between">
+                <span class="text-sm font-medium text-gray-900">${cred.label}</span>
+                ${cred.is_active
+                  ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Active</span>'
+                  : '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500">Inactive</span>'
+                }
+              </div>
+              <p class="text-xs text-gray-500 mt-1">
+                Last used: ${cred.last_used_at ? new Date(cred.last_used_at).toLocaleDateString() : 'Never'}
+              </p>
+            </div>
+          </label>
+        `).join('');
+
+        list.classList.remove('hidden');
+      } catch (error) {
+        console.error('Failed to load credentials:', error);
+        loading.classList.add('hidden');
+        list.innerHTML = `
+          <div class="text-center py-4 text-red-600">
+            <p class="text-sm">Failed to load credentials</p>
+            <p class="text-xs mt-1">${error.message}</p>
+          </div>
+        `;
+        list.classList.remove('hidden');
+      }
+    }
+
+    window.selectCredential = function(credentialId) {
+      selectedCredentialId = credentialId;
+      const linkBtn = document.getElementById('link-credential-btn');
+      linkBtn.disabled = false;
+    }
+
+    window.linkSelectedCredential = async function() {
+      if (!selectedCredentialId) return;
+
+      const linkBtn = document.getElementById('link-credential-btn');
+      linkBtn.disabled = true;
+      linkBtn.innerHTML = `
+        <svg class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Linking...
+      `;
+
+      try {
+        // Link the credential
+        const linkResponse = await fetch(`/api/resources/managed/${resourceId}/link-credential`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ credential_id: selectedCredentialId })
+        });
+
+        if (!linkResponse.ok) {
+          const error = await linkResponse.json();
+          throw new Error(error.detail || 'Failed to link credential');
+        }
+
+        // Close dialog and reload to show updated data
+        document.getElementById('link-credential-dialog').close();
+        window.location.reload();
+      } catch (error) {
+        console.error('Link credential error:', error);
+        alert('Failed to link credential: ' + error.message);
+
+        // Reset button
+        linkBtn.disabled = false;
+        linkBtn.textContent = 'Link & Refresh';
+      }
+    }
+
+    // Power Action Functions
+    window.performPowerAction = async function(action) {
+      const actionLabels = {
+        start: 'Starting',
+        stop: 'Stopping',
+        reboot: 'Rebooting'
+      };
+
+      const confirmMessages = {
+        start: 'Are you sure you want to start this instance?',
+        stop: 'Are you sure you want to stop this instance? Running processes will be terminated.',
+        reboot: 'Are you sure you want to reboot this instance? This will briefly interrupt services.'
+      };
+
+      if (!confirm(confirmMessages[action])) {
+        return;
+      }
+
+      // Get the button that was clicked and disable it
+      const btnId = action === 'start' ? 'start-btn' : (action === 'stop' ? 'stop-btn' : 'reboot-btn');
+      const btn = document.getElementById(btnId);
+      const originalHtml = btn ? btn.innerHTML : '';
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `
+          <svg class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          ${actionLabels[action]}...
+        `;
+      }
+
+      try {
+        const response = await fetch(`/api/resources/managed/${resourceId}/power-action`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ action: action })
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.detail || `Failed to ${action} instance`);
+        }
+
+        const data = await response.json();
+
+        // Show success message
+        alert(data.message || `Instance ${action} command sent successfully`);
+
+        // Reload the page to show updated status
+        window.location.reload();
+      } catch (error) {
+        console.error(`Power action ${action} error:`, error);
+        alert(`Failed to ${action} instance: ` + error.message);
+
+        // Reset button state
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+        }
+      }
+    }
+
+    window.showReinstallDialog = function() {
+      document.getElementById('reinstall-dialog').showModal();
+    }
+
+    window.confirmReinstall = async function() {
+      const dialog = document.getElementById('reinstall-dialog');
+      const btn = dialog.querySelector('button[onclick="confirmReinstall()"]');
+      const originalText = btn ? btn.textContent : '';
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `
+          <svg class="animate-spin h-4 w-4 mr-2 inline" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          Reinstalling...
+        `;
+      }
+
+      try {
+        const response = await fetch(`/api/resources/managed/${resourceId}/power-action`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ action: 'reinstall' })
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.detail || 'Failed to reinstall instance');
+        }
+
+        const data = await response.json();
+        dialog.close();
+
+        // Show success message
+        alert(data.message || 'Instance reinstall initiated. This may take several minutes.');
+
+        // Reload the page to show updated status
+        window.location.reload();
+      } catch (error) {
+        console.error('Reinstall error:', error);
+        alert('Failed to reinstall instance: ' + error.message);
+
+        // Reset button state
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
+      }
+    }
+  </script>
+</Layout>

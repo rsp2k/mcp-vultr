@@ -1,0 +1,1139 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+// Server-side authentication check
+const authToken = Astro.cookies.get('auth_token')?.value;
+
+if (!authToken) {
+  return Astro.redirect('/login');
+}
+
+// Verify authentication by fetching user context
+let authContext: any = {};
+try {
+  const baseUrl = 'http://vultr-backend:8000';
+  const response = await fetch(`${baseUrl}/api/auth/me`, {
+    headers: {
+      'Authorization': `Bearer ${authToken}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  if (!response.ok) {
+    return Astro.redirect('/login');
+  }
+  const userData = await response.json();
+  authContext = {
+    isAuthenticated: true,
+    user: userData
+  };
+} catch (error) {
+  console.error('Auth check failed:', error);
+  return Astro.redirect('/login');
+}
+
+// Fetch managed resources, credentials, collections, and projects in parallel
+const baseUrl = 'http://vultr-backend:8000';
+const headers = {
+  'Authorization': `Bearer ${authToken}`,
+  'Content-Type': 'application/json'
+};
+
+let managedResources: any[] = [];
+let credentials: any[] = [];
+let collections: any[] = [];
+let projects: any[] = [];
+
+try {
+  const [resourcesRes, credentialsRes, collectionsRes, projectsRes] = await Promise.all([
+    fetch(`${baseUrl}/api/resources/managed?limit=100`, { headers }),
+    fetch(`${baseUrl}/api/vultr-credentials?limit=100`, { headers }),
+    fetch(`${baseUrl}/api/collections?limit=100`, { headers }),
+    fetch(`${baseUrl}/api/projects/`, { headers })
+  ]);
+
+  if (resourcesRes.ok) {
+    const data = await resourcesRes.json();
+    managedResources = data.items || [];
+  }
+  if (credentialsRes.ok) {
+    const data = await credentialsRes.json();
+    credentials = data.items || [];
+  }
+  if (collectionsRes.ok) {
+    const data = await collectionsRes.json();
+    collections = data.collections || [];
+  }
+  if (projectsRes.ok) {
+    projects = await projectsRes.json();
+  }
+} catch (error) {
+  console.error('Failed to fetch data:', error);
+}
+
+// Group resources by type for statistics
+const resourcesByType = managedResources.reduce((acc: Record<string, number>, r: any) => {
+  acc[r.resource_type] = (acc[r.resource_type] || 0) + 1;
+  return acc;
+}, {});
+
+// Create a map of collection IDs to names for display
+const collectionMap = collections.reduce((acc: Record<string, string>, c: any) => {
+  acc[c.id] = c.name;
+  return acc;
+}, {});
+---
+
+<Layout title="Resources">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Page Header -->
+    <div class="md:flex md:items-center md:justify-between mb-8">
+      <div class="flex-1 min-w-0">
+        <h1 class="text-3xl font-bold text-gray-900">Resources</h1>
+        <p class="mt-2 text-sm text-gray-500">
+          View and manage your Vultr resources across all collections
+        </p>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="border-b border-gray-200 mb-6">
+      <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+        <button
+          id="tab-managed"
+          onclick="switchTab('managed')"
+          class="tab-button border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+          aria-current="page"
+        >
+          Managed Resources
+          <span class="ml-2 bg-blue-100 text-blue-600 py-0.5 px-2.5 rounded-full text-xs font-medium">
+            {managedResources.length}
+          </span>
+        </button>
+        <button
+          id="tab-import"
+          onclick="switchTab('import')"
+          class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+        >
+          Import Resources
+        </button>
+      </nav>
+    </div>
+
+    <!-- Managed Resources Tab Content -->
+    <div id="content-managed" class="tab-content">
+      <!-- Quick Stats -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-lg shadow p-4">
+          <div class="text-2xl font-bold text-gray-900">{managedResources.length}</div>
+          <div class="text-sm text-gray-500">Total Resources</div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+          <div class="text-2xl font-bold text-gray-900">{resourcesByType['instance'] || 0}</div>
+          <div class="text-sm text-gray-500">Instances</div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+          <div class="text-2xl font-bold text-gray-900">{resourcesByType['database'] || 0}</div>
+          <div class="text-sm text-gray-500">Databases</div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+          <div class="text-2xl font-bold text-gray-900">{Object.keys(resourcesByType).length}</div>
+          <div class="text-sm text-gray-500">Resource Types</div>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="bg-white shadow rounded-lg p-4 mb-6">
+        <div class="flex flex-wrap gap-4">
+          <div class="flex-1 min-w-[200px]">
+            <label for="search-resources" class="sr-only">Search resources</label>
+            <div class="relative">
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+              </div>
+              <input
+                type="text"
+                id="search-resources"
+                placeholder="Search resources..."
+                oninput="filterManagedResources()"
+                class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              />
+            </div>
+          </div>
+          <div>
+            <select id="type-filter" onchange="filterManagedResources()" class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
+              <option value="all">All Types</option>
+              <option value="instance">Instances</option>
+              <option value="database">Databases</option>
+              <option value="load_balancer">Load Balancers</option>
+              <option value="kubernetes">Kubernetes</option>
+              <option value="block_storage">Block Storage</option>
+              <option value="object_storage">Object Storage</option>
+            </select>
+          </div>
+          <div>
+            <select id="collection-filter" onchange="filterManagedResources()" class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
+              <option value="all">All Collections</option>
+              {collections.map((c: any) => (
+                <option value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resources Table -->
+      <div class="bg-white shadow rounded-lg overflow-hidden">
+        {managedResources.length === 0 ? (
+          <div class="text-center py-12">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">No managed resources</h3>
+            <p class="mt-1 text-sm text-gray-500">Get started by importing resources from your Vultr account.</p>
+            <div class="mt-6">
+              <button
+                onclick="switchTab('import')"
+                class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                </svg>
+                Import Resources
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Region</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Collection</th>
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
+                  <th scope="col" class="relative px-6 py-3">
+                    <span class="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="resources-table-body" class="bg-white divide-y divide-gray-200">
+                {managedResources.map((resource: any) => (
+                  <tr
+                    class="resource-row hover:bg-gray-50 cursor-pointer"
+                    data-name={resource.resource_name.toLowerCase()}
+                    data-type={resource.resource_type}
+                    data-collection-id={resource.service_collection_id}
+                    onclick={`window.location.href='/resources/${resource.id}'`}
+                  >
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <div class="flex items-center">
+                        <div class="flex-shrink-0 h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
+                          {resource.resource_type === 'instance' && (
+                            <svg class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+                            </svg>
+                          )}
+                          {resource.resource_type === 'database' && (
+                            <svg class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>
+                            </svg>
+                          )}
+                          {resource.resource_type === 'load_balancer' && (
+                            <svg class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
+                            </svg>
+                          )}
+                          {!['instance', 'database', 'load_balancer'].includes(resource.resource_type) && (
+                            <svg class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                            </svg>
+                          )}
+                        </div>
+                        <div class="ml-4">
+                          <div class="text-sm font-medium text-gray-900">{resource.resource_name}</div>
+                          <div class="text-xs text-gray-500">{resource.vultr_resource_id}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 capitalize">
+                        {resource.resource_type.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        resource.status === 'active' ? 'bg-green-100 text-green-800' :
+                        resource.status === 'stopped' ? 'bg-yellow-100 text-yellow-800' :
+                        resource.status === 'error' ? 'bg-red-100 text-red-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {resource.status || 'Unknown'}
+                      </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {resource.region || '-'}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <a
+                        href={`/collections/${resource.service_collection_id}`}
+                        onclick="event.stopPropagation()"
+                        class="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                      >
+                        {collectionMap[resource.service_collection_id] || 'Unknown'}
+                      </a>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {resource.monthly_cost && resource.monthly_cost !== 'None' && resource.monthly_cost !== 'null'
+                        ? `$${resource.monthly_cost}/mo`
+                        : '-'}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onclick="event.stopPropagation(); showResourceActions('${resource.id}')"
+                        class="text-gray-400 hover:text-gray-600"
+                      >
+                        <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path>
+                        </svg>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+
+    <!-- Import Tab Content -->
+    <div id="content-import" class="tab-content hidden">
+      <!-- Step 1: Select Credential -->
+      <div class="bg-white shadow rounded-lg p-6 mb-6">
+        <div class="flex items-center mb-4">
+          <div class="flex-shrink-0 h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
+            <span class="text-blue-600 font-semibold">1</span>
+          </div>
+          <h2 class="ml-3 text-lg font-medium text-gray-900">Select Vultr Credential</h2>
+        </div>
+
+        {credentials.length === 0 ? (
+          <div class="text-center py-8">
+            <p class="text-gray-500 mb-4">No credentials available</p>
+            <a href="/credentials" class="text-blue-600 hover:text-blue-800 font-medium">
+              Create a credential first →
+            </a>
+          </div>
+        ) : (
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {credentials.map((cred: any) => (
+              <div
+                class="border border-gray-200 rounded-lg p-4 hover:border-blue-500 hover:shadow-md transition-all cursor-pointer credential-card"
+                data-credential-id={cred.id}
+                data-credential-label={cred.label}
+                onclick={`selectCredential('${cred.id}', '${cred.label}')`}
+              >
+                <h3 class="font-medium text-gray-900">{cred.label}</h3>
+                {cred.description && (
+                  <p class="text-sm text-gray-500 mt-1">{cred.description}</p>
+                )}
+                <div class="mt-3 flex items-center text-xs text-gray-400">
+                  <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                  Last used: {cred.last_used_at ? new Date(cred.last_used_at).toLocaleDateString() : 'Never'}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <!-- Step 2: Resource Discovery (Initially Hidden) -->
+      <div id="discovery-section" class="bg-white shadow rounded-lg p-6 mb-6 hidden">
+        <div class="flex items-center mb-4">
+          <div class="flex-shrink-0 h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
+            <span class="text-blue-600 font-semibold">2</span>
+          </div>
+          <h2 class="ml-3 text-lg font-medium text-gray-900">Discover Resources</h2>
+        </div>
+
+        <div class="mb-4">
+          <p class="text-sm text-gray-600 mb-3">
+            Selected credential: <span id="selected-credential-label" class="font-medium text-gray-900"></span>
+          </p>
+          <button
+            id="discover-button"
+            onclick="discoverResources()"
+            class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+            Discover Resources
+          </button>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loading-state" class="hidden py-8 text-center">
+          <svg class="animate-spin h-8 w-8 mx-auto text-blue-600" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <p class="mt-3 text-gray-600">Discovering resources from Vultr...</p>
+        </div>
+
+        <!-- Resources Display -->
+        <div id="resources-display" class="hidden">
+          <div class="mb-4 flex items-center justify-between">
+            <div>
+              <h3 class="text-lg font-medium text-gray-900">Discovered Resources</h3>
+              <p class="text-sm text-gray-500">Total: <span id="total-resources">0</span> resources</p>
+            </div>
+            <div class="flex space-x-2">
+              <select id="resource-type-filter" onchange="filterDiscoveredResources()" class="border-gray-300 rounded-md shadow-sm text-sm">
+                <option value="all">All Types</option>
+                <option value="instance">Instances</option>
+                <option value="load_balancer">Load Balancers</option>
+                <option value="database">Databases</option>
+                <option value="kubernetes">Kubernetes</option>
+                <option value="block_storage">Block Storage</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="resources-list" class="space-y-4">
+            <!-- Resources will be inserted here by JavaScript -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Import to Collection (Initially Hidden) -->
+      <div id="import-section" class="bg-white shadow rounded-lg p-6 hidden">
+        <div class="flex items-center mb-4">
+          <div class="flex-shrink-0 h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
+            <span class="text-blue-600 font-semibold">3</span>
+          </div>
+          <h2 class="ml-3 text-lg font-medium text-gray-900">Import Selected Resources</h2>
+        </div>
+
+        <p class="text-sm text-gray-600 mb-4">
+          Selected resources: <span id="selected-count" class="font-medium text-gray-900">0</span>
+        </p>
+
+        <button
+          id="import-button"
+          onclick="showCollectionSelector()"
+          disabled
+          class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-300 disabled:cursor-not-allowed"
+        >
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+          </svg>
+          Import to Collection
+        </button>
+      </div>
+    </div>
+
+    <!-- Collection Selection Modal -->
+    <dialog id="collection-modal" class="rounded-lg shadow-xl backdrop:bg-gray-900/50 max-w-2xl w-full">
+      <div class="bg-white px-4 pt-5 pb-4 sm:p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-medium leading-6 text-gray-900">Select Collection</h3>
+          <button type="button" onclick="document.getElementById('collection-modal').close()" class="text-gray-400 hover:text-gray-500">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <p class="text-sm text-gray-600 mb-4">
+          Select a collection to import the <span id="modal-selected-count" class="font-medium text-gray-900">0</span> selected resources into.
+        </p>
+
+        <!-- Create New Collection Section -->
+        <div id="create-collection-section" class="mb-4">
+          <!-- Toggle Button -->
+          <button
+            id="toggle-create-form-btn"
+            type="button"
+            onclick="toggleCreateCollectionForm()"
+            class="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+            <span>Create New Collection</span>
+          </button>
+
+          <!-- Inline Create Form (hidden by default) -->
+          <div id="create-collection-form" class="hidden mt-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div class="space-y-4">
+              <!-- Project Selection -->
+              <div>
+                <label for="new-collection-project" class="block text-sm font-medium text-gray-700 mb-1">
+                  Project <span class="text-red-500">*</span>
+                </label>
+                {projects.length === 0 ? (
+                  <div class="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-md p-3">
+                    <div class="flex items-center gap-2">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                      </svg>
+                      <span>No projects available. <a href="/projects" class="underline font-medium">Create a project first</a></span>
+                    </div>
+                  </div>
+                ) : (
+                  <select
+                    id="new-collection-project"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  >
+                    <option value="">Select a project...</option>
+                    {projects.map((project: any) => (
+                      <option value={project.id}>{project.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <!-- Collection Name -->
+              <div>
+                <label for="new-collection-name" class="block text-sm font-medium text-gray-700 mb-1">
+                  Collection Name <span class="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="new-collection-name"
+                  placeholder="e.g., Production Servers"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                />
+              </div>
+
+              <!-- Description (optional) -->
+              <div>
+                <label for="new-collection-description" class="block text-sm font-medium text-gray-700 mb-1">
+                  Description <span class="text-gray-400">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  id="new-collection-description"
+                  placeholder="Brief description of this collection"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                />
+              </div>
+
+              <!-- Environment -->
+              <div>
+                <label for="new-collection-environment" class="block text-sm font-medium text-gray-700 mb-1">
+                  Environment
+                </label>
+                <select
+                  id="new-collection-environment"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                >
+                  <option value="development">Development</option>
+                  <option value="testing">Testing</option>
+                  <option value="staging">Staging</option>
+                  <option value="production">Production</option>
+                </select>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onclick="cancelCreateCollection()"
+                  class="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  id="create-collection-btn"
+                  onclick="createAndSelectCollection()"
+                  disabled={projects.length === 0}
+                  class="flex-1 px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  Create & Select
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Divider -->
+        {(collections.length > 0 || projects.length > 0) && (
+          <div class="relative my-4">
+            <div class="absolute inset-0 flex items-center">
+              <div class="w-full border-t border-gray-200"></div>
+            </div>
+            <div class="relative flex justify-center text-xs uppercase">
+              <span class="bg-white px-2 text-gray-500">or select existing</span>
+            </div>
+          </div>
+        )}
+
+        {collections.length === 0 ? (
+          <div class="text-center py-6 text-gray-500">
+            <svg class="mx-auto h-12 w-12 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+            </svg>
+            <p>No existing collections</p>
+            <p class="text-sm mt-1">Create one above to get started</p>
+          </div>
+        ) : (
+          <div id="collections-list" class="space-y-2 max-h-64 overflow-y-auto">
+            {collections.map((collection: any) => (
+              <div
+                class="border border-gray-200 rounded-lg p-4 hover:border-blue-500 hover:bg-blue-50 transition-all cursor-pointer collection-card"
+                data-collection-id={collection.id}
+                onclick={`selectCollection('${collection.id}', '${collection.name}')`}
+              >
+                <div class="flex items-start justify-between">
+                  <div class="flex-1">
+                    <h4 class="font-medium text-gray-900">{collection.name}</h4>
+                    {collection.description && (
+                      <p class="text-sm text-gray-500 mt-1">{collection.description}</p>
+                    )}
+                    <div class="mt-2 flex items-center space-x-4 text-xs text-gray-400">
+                      <span>Environment: {collection.environment}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div class="mt-5 sm:mt-6">
+          <button type="button" onclick="document.getElementById('collection-modal').close()"
+                  class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Import Progress Modal -->
+    <dialog id="import-progress-modal" class="rounded-lg shadow-xl backdrop:bg-gray-900/50 max-w-md w-full">
+      <div class="bg-white px-4 pt-5 pb-4 sm:p-6 text-center">
+        <svg class="animate-spin h-8 w-8 mx-auto text-blue-600 mb-4" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p class="text-gray-600">Importing resources...</p>
+      </div>
+    </dialog>
+
+    <!-- Import Results Modal -->
+    <dialog id="import-results-modal" class="rounded-lg shadow-xl backdrop:bg-gray-900/50 max-w-2xl w-full">
+      <div class="bg-white px-4 pt-5 pb-4 sm:p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-medium leading-6 text-gray-900">Import Complete</h3>
+          <button type="button" onclick="closeImportResults()" class="text-gray-400 hover:text-gray-500">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div id="import-results-content"></div>
+
+        <div class="mt-5 sm:mt-6">
+          <button type="button" onclick="closeImportResults()"
+                  class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm">
+            Close
+          </button>
+        </div>
+      </div>
+    </dialog>
+  </div>
+
+  <script is:inline>
+    // Tab switching
+    window.switchTab = function(tab) {
+      // Update tab buttons
+      document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('border-blue-500', 'text-blue-600');
+        btn.classList.add('border-transparent', 'text-gray-500');
+      });
+      document.getElementById(`tab-${tab}`).classList.remove('border-transparent', 'text-gray-500');
+      document.getElementById(`tab-${tab}`).classList.add('border-blue-500', 'text-blue-600');
+
+      // Update tab content
+      document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.add('hidden');
+      });
+      document.getElementById(`content-${tab}`).classList.remove('hidden');
+    }
+
+    // Managed resources filtering
+    window.filterManagedResources = function() {
+      const searchTerm = document.getElementById('search-resources').value.toLowerCase();
+      const typeFilter = document.getElementById('type-filter').value;
+      const collectionFilter = document.getElementById('collection-filter').value;
+
+      document.querySelectorAll('.resource-row').forEach(row => {
+        const name = row.dataset.name;
+        const type = row.dataset.type;
+        const collectionId = row.dataset.collectionId;
+
+        const matchesSearch = !searchTerm || name.includes(searchTerm);
+        const matchesType = typeFilter === 'all' || type === typeFilter;
+        const matchesCollection = collectionFilter === 'all' || collectionId === collectionFilter;
+
+        if (matchesSearch && matchesType && matchesCollection) {
+          row.classList.remove('hidden');
+        } else {
+          row.classList.add('hidden');
+        }
+      });
+    }
+
+    window.showResourceActions = function(resourceId) {
+      // TODO: Implement resource actions dropdown
+      console.log('Show actions for resource:', resourceId);
+    }
+
+    // Import functionality (from original import-resources.astro)
+    let selectedCredentialId = null;
+    let selectedCredentialLabel = null;
+    let discoveredResources = {};
+    let selectedResources = new Set();
+    let selectedCollectionId = null;
+    let selectedCollectionName = null;
+
+    window.selectCredential = function(credentialId, credentialLabel) {
+      selectedCredentialId = credentialId;
+      selectedCredentialLabel = credentialLabel;
+
+      // Update UI
+      document.getElementById('selected-credential-label').textContent = credentialLabel;
+      document.getElementById('discovery-section').classList.remove('hidden');
+
+      // Highlight selected credential
+      document.querySelectorAll('.credential-card').forEach(card => {
+        if (card.dataset.credentialId === credentialId) {
+          card.classList.add('border-blue-500', 'bg-blue-50');
+        } else {
+          card.classList.remove('border-blue-500', 'bg-blue-50');
+        }
+      });
+
+      // Scroll to discovery section
+      document.getElementById('discovery-section').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    window.discoverResources = async function() {
+      if (!selectedCredentialId) {
+        alert('Please select a credential first');
+        return;
+      }
+
+      // Show loading state
+      document.getElementById('loading-state').classList.remove('hidden');
+      document.getElementById('resources-display').classList.add('hidden');
+      document.getElementById('discover-button').disabled = true;
+
+      try {
+        const response = await fetch(`/api/resources/vultr/discover?credential_id=${selectedCredentialId}`, {
+          credentials: 'include'
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to discover resources');
+        }
+
+        const data = await response.json();
+        discoveredResources = data.resources;
+
+        // Update UI
+        document.getElementById('total-resources').textContent = data.total_resources;
+        renderDiscoveredResources();
+
+        // Show resources display
+        document.getElementById('loading-state').classList.add('hidden');
+        document.getElementById('resources-display').classList.remove('hidden');
+        document.getElementById('import-section').classList.remove('hidden');
+
+      } catch (error) {
+        console.error('Discovery error:', error);
+        alert('Failed to discover resources: ' + error.message);
+        document.getElementById('loading-state').classList.add('hidden');
+      } finally {
+        document.getElementById('discover-button').disabled = false;
+      }
+    }
+
+    window.renderDiscoveredResources = function() {
+      const filter = document.getElementById('resource-type-filter').value;
+      const container = document.getElementById('resources-list');
+      container.innerHTML = '';
+
+      // Flatten all resources into a single array
+      let allResources = [];
+      for (const [category, resources] of Object.entries(discoveredResources)) {
+        if (filter === 'all' || category === filter + 's' || category === filter) {
+          allResources.push(...resources.map(r => ({ ...r, category })));
+        }
+      }
+
+      if (allResources.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-center py-8">No resources found</p>';
+        return;
+      }
+
+      // Render resource cards
+      allResources.forEach(resource => {
+        const card = document.createElement('div');
+        card.className = 'border border-gray-200 rounded-lg p-4 hover:border-blue-500 transition-all resource-card';
+        card.dataset.vultrId = resource.vultr_id;
+        card.dataset.resourceType = resource.type;
+
+        const isSelected = selectedResources.has(resource.vultr_id);
+        if (isSelected) {
+          card.classList.add('border-green-500', 'bg-green-50');
+        }
+
+        card.innerHTML = `
+          <div class="flex items-start justify-between">
+            <div class="flex-1">
+              <div class="flex items-center">
+                <input
+                  type="checkbox"
+                  ${isSelected ? 'checked' : ''}
+                  onclick="toggleResource('${resource.vultr_id}', '${resource.type}', '${resource.name}')"
+                  class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-3"
+                />
+                <h4 class="font-medium text-gray-900">${resource.name}</h4>
+              </div>
+              <div class="ml-7 mt-2 grid grid-cols-2 gap-2 text-sm">
+                <div><span class="text-gray-500">Type:</span> <span class="text-gray-900">${resource.type}</span></div>
+                <div><span class="text-gray-500">Status:</span> <span class="text-gray-900">${resource.status || 'N/A'}</span></div>
+                ${resource.region ? `<div><span class="text-gray-500">Region:</span> <span class="text-gray-900">${resource.region}</span></div>` : ''}
+                ${resource.monthly_cost ? `<div><span class="text-gray-500">Cost:</span> <span class="text-gray-900">$${resource.monthly_cost}/mo</span></div>` : ''}
+              </div>
+            </div>
+            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+              ${resource.type}
+            </span>
+          </div>
+        `;
+
+        container.appendChild(card);
+      });
+    }
+
+    window.toggleResource = function(vultrId, resourceType, resourceName) {
+      if (selectedResources.has(vultrId)) {
+        selectedResources.delete(vultrId);
+      } else {
+        selectedResources.add(vultrId);
+      }
+
+      // Update selected count
+      document.getElementById('selected-count').textContent = selectedResources.size;
+      document.getElementById('import-button').disabled = selectedResources.size === 0;
+
+      // Re-render to update visual state
+      renderDiscoveredResources();
+    }
+
+    window.filterDiscoveredResources = function() {
+      renderDiscoveredResources();
+    }
+
+    window.showCollectionSelector = function() {
+      if (selectedResources.size === 0) {
+        alert('Please select at least one resource');
+        return;
+      }
+
+      // Update the modal selected count
+      document.getElementById('modal-selected-count').textContent = selectedResources.size;
+
+      // Show the collection selector modal
+      document.getElementById('collection-modal').showModal();
+    }
+
+    window.selectCollection = function(collectionId, collectionName) {
+      selectedCollectionId = collectionId;
+      selectedCollectionName = collectionName;
+
+      // Close the collection selector modal
+      document.getElementById('collection-modal').close();
+
+      // Start the import process
+      performImport();
+    }
+
+    // Toggle the create collection form visibility
+    window.toggleCreateCollectionForm = function() {
+      const form = document.getElementById('create-collection-form');
+      const toggleBtn = document.getElementById('toggle-create-form-btn');
+
+      if (form.classList.contains('hidden')) {
+        form.classList.remove('hidden');
+        toggleBtn.classList.add('hidden');
+        // Focus the name input
+        document.getElementById('new-collection-name')?.focus();
+      } else {
+        form.classList.add('hidden');
+        toggleBtn.classList.remove('hidden');
+      }
+    }
+
+    // Cancel creating a collection and hide the form
+    window.cancelCreateCollection = function() {
+      const form = document.getElementById('create-collection-form');
+      const toggleBtn = document.getElementById('toggle-create-form-btn');
+
+      // Clear form inputs
+      const projectSelect = document.getElementById('new-collection-project');
+      if (projectSelect) projectSelect.value = '';
+      document.getElementById('new-collection-name').value = '';
+      document.getElementById('new-collection-description').value = '';
+      document.getElementById('new-collection-environment').value = 'development';
+
+      // Hide form, show toggle button
+      form.classList.add('hidden');
+      toggleBtn.classList.remove('hidden');
+    }
+
+    // Create a new collection and immediately select it for import
+    window.createAndSelectCollection = async function() {
+      const projectSelect = document.getElementById('new-collection-project');
+      const nameInput = document.getElementById('new-collection-name');
+      const descriptionInput = document.getElementById('new-collection-description');
+      const environmentSelect = document.getElementById('new-collection-environment');
+      const createBtn = document.getElementById('create-collection-btn');
+
+      // Get values
+      const projectId = projectSelect?.value;
+      const name = nameInput.value.trim();
+      const description = descriptionInput.value.trim();
+      const environment = environmentSelect.value;
+
+      // Validate required fields
+      if (!projectId) {
+        alert('Please select a project');
+        projectSelect?.focus();
+        return;
+      }
+
+      if (!name) {
+        alert('Please enter a collection name');
+        nameInput.focus();
+        return;
+      }
+
+      // Disable button and show loading state
+      const originalText = createBtn.textContent;
+      createBtn.disabled = true;
+      createBtn.textContent = 'Creating...';
+
+      try {
+        const response = await fetch('/api/collections', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            name: name,
+            description: description || null,
+            project_id: projectId,
+            environment: environment
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.detail || 'Failed to create collection');
+        }
+
+        const newCollection = await response.json();
+
+        // Add the new collection to the list dynamically
+        addCollectionToList(newCollection);
+
+        // Reset and hide the form
+        cancelCreateCollection();
+
+        // Select the newly created collection and proceed with import
+        selectCollection(newCollection.id, newCollection.name);
+
+      } catch (error) {
+        console.error('Failed to create collection:', error);
+        alert('Failed to create collection: ' + error.message);
+        createBtn.disabled = false;
+        createBtn.textContent = originalText;
+      }
+    }
+
+    // Dynamically add a new collection card to the list
+    function addCollectionToList(collection) {
+      const listContainer = document.getElementById('collections-list');
+      if (!listContainer) return;
+
+      // Create the collection card element
+      const card = document.createElement('div');
+      card.className = 'border border-gray-200 rounded-lg p-4 hover:border-blue-500 hover:bg-blue-50 transition-all cursor-pointer collection-card';
+      card.dataset.collectionId = collection.id;
+      card.onclick = () => selectCollection(collection.id, collection.name);
+
+      card.innerHTML = `
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h4 class="font-medium text-gray-900">${collection.name}</h4>
+            ${collection.description ? `<p class="text-sm text-gray-500 mt-1">${collection.description}</p>` : ''}
+            <div class="mt-2 flex items-center space-x-4 text-xs text-gray-400">
+              <span>Environment: ${collection.environment}</span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Insert at the top of the list
+      listContainer.insertBefore(card, listContainer.firstChild);
+    }
+
+    async function performImport() {
+      if (!selectedCollectionId || selectedResources.size === 0) {
+        alert('Missing collection or resources');
+        return;
+      }
+
+      // Show progress modal
+      document.getElementById('import-progress-modal').showModal();
+
+      try {
+        // Build the resources array from selected resources
+        const resourcesToImport = [];
+        for (const vultrId of selectedResources) {
+          // Find the resource in discoveredResources
+          for (const [category, resources] of Object.entries(discoveredResources)) {
+            const resource = resources.find(r => r.vultr_id === vultrId);
+            if (resource) {
+              resourcesToImport.push(resource);
+              break;
+            }
+          }
+        }
+
+        // Submit the import request
+        const response = await fetch(`/api/resources/managed/batch-import?collection_id=${selectedCollectionId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include',
+          body: JSON.stringify({ resources: resourcesToImport })
+        });
+
+        // Close progress modal
+        document.getElementById('import-progress-modal').close();
+
+        if (!response.ok) {
+          throw new Error('Failed to import resources');
+        }
+
+        const result = await response.json();
+
+        // Show results modal
+        displayImportResults(result);
+
+      } catch (error) {
+        console.error('Import error:', error);
+        document.getElementById('import-progress-modal').close();
+        alert('Failed to import resources: ' + error.message);
+      }
+    }
+
+    function displayImportResults(result) {
+      const summary = result.summary;
+      const content = document.getElementById('import-results-content');
+
+      let html = `
+        <div class="space-y-4">
+          <!-- Summary Stats -->
+          <div class="grid grid-cols-3 gap-4">
+            <div class="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+              <div class="text-2xl font-bold text-green-600">${summary.created}</div>
+              <div class="text-sm text-green-600">Created</div>
+            </div>
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
+              <div class="text-2xl font-bold text-yellow-600">${summary.skipped}</div>
+              <div class="text-sm text-yellow-600">Skipped</div>
+            </div>
+            <div class="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+              <div class="text-2xl font-bold text-red-600">${summary.failed}</div>
+              <div class="text-sm text-red-600">Failed</div>
+            </div>
+          </div>
+      `;
+
+      // Created resources
+      if (result.created_resources.length > 0) {
+        html += `
+          <div>
+            <h4 class="font-medium text-green-700 mb-2">✓ Successfully Imported</h4>
+            <ul class="space-y-1 text-sm">
+              ${result.created_resources.map(r => `
+                <li class="text-gray-600">• ${r.name} (${r.type})</li>
+              `).join('')}
+            </ul>
+          </div>
+        `;
+      }
+
+      // Skipped resources
+      if (result.skipped_resources.length > 0) {
+        html += `
+          <div>
+            <h4 class="font-medium text-yellow-700 mb-2">⊘ Skipped Resources</h4>
+            <ul class="space-y-1 text-sm">
+              ${result.skipped_resources.map(r => {
+                // If we have collection info, create a link to that collection
+                if (r.existing_collection_id && r.existing_collection_name) {
+                  return `<li class="text-gray-600">• ${r.name}: <span class="text-yellow-600">Already managed in </span><a href="/collections/${r.existing_collection_id}" class="text-blue-600 hover:text-blue-800 underline">${r.existing_collection_name}</a></li>`;
+                }
+                return `<li class="text-gray-600">• ${r.name}: <span class="text-yellow-600">${r.reason}</span></li>`;
+              }).join('')}
+            </ul>
+          </div>
+        `;
+      }
+
+      // Failed resources
+      if (result.failed_resources.length > 0) {
+        html += `
+          <div>
+            <h4 class="font-medium text-red-700 mb-2">✗ Failed Imports</h4>
+            <ul class="space-y-1 text-sm">
+              ${result.failed_resources.map(r => `
+                <li class="text-gray-600">• ${r.name}: <span class="text-red-600">${r.reason}</span></li>
+              `).join('')}
+            </ul>
+          </div>
+        `;
+      }
+
+      html += `</div>`;
+
+      content.innerHTML = html;
+      document.getElementById('import-results-modal').showModal();
+    }
+
+    window.closeImportResults = function() {
+      document.getElementById('import-results-modal').close();
+
+      // Switch to managed tab and reload the page to show new resources
+      window.location.href = '/resources';
+    }
+  </script>
+</Layout>

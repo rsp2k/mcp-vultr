@@ -26,6 +26,8 @@ from app.api.collections import router as collections_router
 from app.api.dashboard import router as dashboard_router
 from app.api.workflows import router as workflows_router
 from app.api.projects import router as projects_router
+from app.api.resources import router as resources_router
+from app.api.vultr_credentials import router as vultr_credentials_router
 from app.core.exceptions import ServiceCollectionException
 
 # Configure structured logging
@@ -202,6 +204,8 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix="/api")
     app.include_router(projects_router, prefix="/api")
     app.include_router(collections_router, prefix="/api")
+    app.include_router(resources_router, prefix="/api")
+    app.include_router(vultr_credentials_router, prefix="/api")
     app.include_router(dashboard_router, prefix="/api")
     app.include_router(workflows_router, prefix="/api")
 
