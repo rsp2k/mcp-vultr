@@ -72,21 +72,55 @@ def create_retry_decorator(
     )
 
 
+# Exception classes for retry logic
+class RetryableError(Exception):
+    """Base class for retryable errors."""
+
+    pass
+
+
+class RateLimitError(RetryableError):
+    """Error for rate limit exceeded scenarios."""
+
+    pass
+
+
+class NetworkError(RetryableError):
+    """Error for network-related issues."""
+
+    pass
+
+
 # Common retry decorators for different scenarios
 
-# API calls (retry on rate limits, timeouts, 5xx errors)
+# API calls (retry ONLY on rate limits, timeouts, network errors - NOT validation errors)
 retry_api_call = create_retry_decorator(
-    max_attempts=3, min_wait=1.0, max_wait=30.0, multiplier=2.0, jitter=True
+    max_attempts=3,
+    min_wait=1.0,
+    max_wait=30.0,
+    multiplier=2.0,
+    jitter=True,
+    exception_types=(RateLimitError, NetworkError),
 )
 
 # Rate limit retries (more aggressive, longer waits)
 retry_rate_limit = create_retry_decorator(
-    max_attempts=5, min_wait=5.0, max_wait=120.0, multiplier=2.0, jitter=True
+    max_attempts=5,
+    min_wait=5.0,
+    max_wait=120.0,
+    multiplier=2.0,
+    jitter=True,
+    exception_types=(RateLimitError,),
 )
 
 # Network retries (quick retries for network issues)
 retry_network = create_retry_decorator(
-    max_attempts=3, min_wait=0.5, max_wait=10.0, multiplier=1.5, jitter=True
+    max_attempts=3,
+    min_wait=0.5,
+    max_wait=10.0,
+    multiplier=1.5,
+    jitter=True,
+    exception_types=(NetworkError,),
 )
 
 
@@ -168,21 +202,3 @@ async def retry_async(
             await asyncio.sleep(delay)
 
     raise last_exception
-
-
-class RetryableError(Exception):
-    """Base class for retryable errors."""
-
-    pass
-
-
-class RateLimitError(RetryableError):
-    """Error for rate limit exceeded scenarios."""
-
-    pass
-
-
-class NetworkError(RetryableError):
-    """Error for network-related issues."""
-
-    pass
