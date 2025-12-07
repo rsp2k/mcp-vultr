@@ -129,6 +129,13 @@ class User(Base):
         cascade="all, delete-orphan"
     )
 
+    # Vultr credentials
+    vultr_credentials = relationship(
+        "VultrCredential",
+        back_populates="owner",
+        cascade="all, delete-orphan"
+    )
+
     # Project relationships
     owned_projects = relationship(
         "Project",

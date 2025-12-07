@@ -214,7 +214,10 @@ async def get_service_collection(
     current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get Service Collection by ID."""
+    """Get Service Collection by ID with resource counts."""
+    from sqlalchemy import select, func
+    from app.models.resource import PlannedResource, ManagedResource
+
     # Check both project and collection access using RBAC helper
     collection, project = await CollectionAccessControl.check_collection_project_access(
         collection_id,
@@ -224,7 +227,28 @@ async def get_service_collection(
         required_collection_permission="read"
     )
 
-    return collection.to_dict()
+    # Get resource counts
+    planned_count_query = select(func.count()).select_from(PlannedResource).where(
+        PlannedResource.service_collection_id == collection_id
+    )
+    planned_result = await db.execute(planned_count_query)
+    planned_count = planned_result.scalar_one()
+
+    managed_count_query = select(func.count()).select_from(ManagedResource).where(
+        ManagedResource.service_collection_id == collection_id
+    )
+    managed_result = await db.execute(managed_count_query)
+    managed_count = managed_result.scalar_one()
+
+    # Add resource counts to response
+    collection_dict = collection.to_dict()
+    collection_dict['resource_counts'] = {
+        'planned': planned_count,
+        'managed': managed_count,
+        'total': planned_count + managed_count
+    }
+
+    return collection_dict
 
 
 @router.put("/{collection_id}", response_model=Dict[str, Any])

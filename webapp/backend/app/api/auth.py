@@ -208,23 +208,24 @@ async def require_admin(current_user: User = Depends(require_auth)) -> User:
 async def login(
     login_data: LoginRequest,
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db)
 ):
     """Authenticate user and return access token."""
     client_ip = request.client.host if request.client else "unknown"
-    
+
     # Find user by email
     result = await db.execute(
         select(User).where(User.email == login_data.email)
     )
     user = result.scalar_one_or_none()
-    
+
     if not user or not user.check_password(login_data.password):
         # Log failed login attempt
         if user:
             user.record_failed_login(client_ip)
             await db.commit()
-        
+
         # Create audit log for failed login
         audit_entry = AuditLogEntry.create_entry(
             action=AuditAction.LOGIN_FAILED,
@@ -235,12 +236,12 @@ async def login(
         )
         db.add(audit_entry)
         await db.commit()
-        
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
         )
-    
+
     # Check if user is active
     if not user.is_active:
         audit_entry = AuditLogEntry.create_entry(
@@ -252,12 +253,12 @@ async def login(
         )
         db.add(audit_entry)
         await db.commit()
-        
+
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is not active"
         )
-    
+
     # Check for too many recent failed attempts
     if user.recent_failed_logins >= 5:
         audit_entry = AuditLogEntry.create_entry(
@@ -269,15 +270,15 @@ async def login(
         )
         db.add(audit_entry)
         await db.commit()
-        
+
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many failed login attempts. Please try again later."
         )
-    
+
     # Record successful login
     user.record_login(client_ip)
-    
+
     # Create audit log for successful login
     audit_entry = AuditLogEntry.log_user_action(
         user_id=str(user.id),
@@ -287,7 +288,7 @@ async def login(
     )
     db.add(audit_entry)
     await db.commit()
-    
+
     # Generate JWT token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
@@ -295,7 +296,17 @@ async def login(
         expires_delta=access_token_expires
     )
     expires_in = ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert to seconds
-    
+
+    # Set auth token as httpOnly cookie for server-side authentication
+    response.set_cookie(
+        key="auth_token",
+        value=access_token,
+        httponly=True,
+        secure=settings.environment == "production",
+        samesite="lax",
+        max_age=expires_in
+    )
+
     return LoginResponse(
         access_token=access_token,
         expires_in=expires_in,

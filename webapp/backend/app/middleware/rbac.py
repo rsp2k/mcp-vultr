@@ -318,8 +318,13 @@ class CollectionAccessControl:
 
         # Get the collection using raw SQL to avoid enum issues
         collection_sql = text("""
-            SELECT id, name, description, environment, project_id,
-                   created_by, created_at, updated_at, tags, settings
+            SELECT id, name, description, environment, status, project_id,
+                   created_by, owner_email, vultr_service_user,
+                   allowed_regions, cost_budget_monthly,
+                   members, permissions,
+                   approval_required, auto_approve_operations, restricted_operations,
+                   tags, configuration,
+                   created_at, updated_at, archived_at
             FROM service_collections
             WHERE id = :collection_id
         """)
@@ -334,12 +339,23 @@ class CollectionAccessControl:
                 "name": row.name,
                 "description": row.description,
                 "environment": row.environment,
+                "status": row.status,
                 "project_id": row.project_id,
                 "created_by": row.created_by,
+                "owner_email": row.owner_email,
+                "vultr_service_user": row.vultr_service_user,
+                "allowed_regions": row.allowed_regions or [],
+                "cost_budget_monthly": row.cost_budget_monthly,
+                "members": row.members or [],
+                "permissions": row.permissions or {},
+                "approval_required": row.approval_required,
+                "auto_approve_operations": row.auto_approve_operations or [],
+                "restricted_operations": row.restricted_operations or [],
+                "tags": row.tags or {},
+                "configuration": row.configuration or {},
                 "created_at": row.created_at,
                 "updated_at": row.updated_at,
-                "tags": row.tags,
-                "settings": row.settings
+                "archived_at": row.archived_at
             }
             collection = ServiceCollection(**collection_data)
 
