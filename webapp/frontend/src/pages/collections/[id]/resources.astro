@@ -1,0 +1,742 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+
+const { id } = Astro.params;
+const authContext = Astro.locals.auth;
+
+if (!authContext.isAuthenticated) {
+  return Astro.redirect('/auth/login');
+}
+
+const authToken = Astro.cookies.get('auth_token')?.value;
+const baseUrl = 'http://vultr-backend:8000';
+const headers = {
+  'Authorization': `Bearer ${authToken}`,
+  'Content-Type': 'application/json'
+};
+
+let collection = null;
+let plannedResources = [];
+let managedResources = [];
+let resourceSummary = null;
+let error = null;
+
+try {
+  // Fetch collection data
+  const collectionRes = await fetch(`${baseUrl}/api/collections/${id}`, { headers });
+
+  if (!collectionRes.ok) {
+    if (collectionRes.status === 404) {
+      error = 'Collection not found';
+    } else if (collectionRes.status === 403) {
+      error = 'Access denied';
+    } else {
+      error = `Failed to load collection: ${collectionRes.statusText}`;
+    }
+  } else {
+    collection = await collectionRes.json();
+
+    // Fetch planned resources
+    const plannedRes = await fetch(
+      `${baseUrl}/api/resources/planned?collection_id=${id}&limit=100`,
+      { headers }
+    );
+    if (plannedRes.ok) {
+      const plannedData = await plannedRes.json();
+      plannedResources = plannedData.items || [];
+    }
+
+    // Fetch managed resources
+    const managedRes = await fetch(
+      `${baseUrl}/api/resources/managed?collection_id=${id}&limit=100`,
+      { headers }
+    );
+    if (managedRes.ok) {
+      const managedData = await managedRes.json();
+      managedResources = managedData.items || [];
+    }
+
+    // Fetch resource summary
+    const summaryRes = await fetch(
+      `${baseUrl}/api/resources/summary?collection_id=${id}`,
+      { headers }
+    );
+    if (summaryRes.ok) {
+      resourceSummary = await summaryRes.json();
+    }
+  }
+} catch (err) {
+  console.error('Error fetching resources:', err);
+  error = 'Failed to load resource data';
+}
+
+if (error || !collection) {
+  return Astro.redirect(`/collections/${id}?error=` + encodeURIComponent(error || 'Unknown error'));
+}
+
+// Permission checks
+const currentUserEmail = authContext.user?.email;
+const isOwner = currentUserEmail === collection.owner_email;
+const canCreate = isOwner || collection.can_user_access?.(currentUserEmail, 'create');
+const canUpdate = isOwner || collection.can_user_access?.(currentUserEmail, 'update');
+const canApprove = isOwner || collection.can_user_access?.(currentUserEmail, 'approve');
+
+// Resource type labels
+const resourceTypeLabels = {
+  'instance': 'Compute Instance',
+  'domain': 'DNS Domain',
+  'dns_record': 'DNS Record',
+  'firewall_group': 'Firewall Group',
+  'firewall_rule': 'Firewall Rule',
+  'ssh_key': 'SSH Key',
+  'snapshot': 'Snapshot',
+  'block_storage': 'Block Storage',
+  'load_balancer': 'Load Balancer',
+  'vpc': 'VPC Network',
+  'object_storage': 'Object Storage'
+};
+
+// Resource status colors
+const statusColors = {
+  'planned': 'bg-gray-100 text-gray-800',
+  'creating': 'bg-blue-100 text-blue-800',
+  'active': 'bg-green-100 text-green-800',
+  'error': 'bg-red-100 text-red-800',
+  'deleting': 'bg-yellow-100 text-yellow-800',
+  'deleted': 'bg-gray-100 text-gray-500'
+};
+---
+
+<Layout title={`${collection.name} - Resources`}>
+  <div class="py-6">
+    <!-- Page Header -->
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div class="md:flex md:items-center md:justify-between mb-8">
+        <div class="min-w-0 flex-1">
+          <nav class="flex mb-2" aria-label="Breadcrumb">
+            <ol class="inline-flex items-center space-x-1 text-sm text-gray-500">
+              <li><a href="/collections" class="hover:text-gray-700">Collections</a></li>
+              <li><span class="mx-2">/</span></li>
+              <li><a href={`/collections/${id}`} class="hover:text-gray-700">{collection.name}</a></li>
+              <li><span class="mx-2">/</span></li>
+              <li class="text-gray-900">Resources</li>
+            </ol>
+          </nav>
+          <h1 class="text-2xl font-bold leading-7 text-gray-900 sm:truncate sm:text-3xl">
+            Resources
+          </h1>
+          <p class="mt-1 text-sm text-gray-500">
+            Manage infrastructure resources for {collection.name}
+          </p>
+        </div>
+      </div>
+
+      <!-- Resource Summary Cards -->
+      {resourceSummary && (
+        <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+          <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+                  </svg>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Planned Resources</dt>
+                    <dd class="text-lg font-semibold text-gray-900">{resourceSummary.total_planned}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
+                  </svg>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Managed Resources</dt>
+                    <dd class="text-lg font-semibold text-gray-900">{resourceSummary.total_managed}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Estimated Cost</dt>
+                    <dd class="text-lg font-semibold text-gray-900">${resourceSummary.total_estimated_cost}/mo</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
+                  </svg>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Actual Cost</dt>
+                    <dd class="text-lg font-semibold text-gray-900">${resourceSummary.total_actual_cost}/mo</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <!-- Tabs -->
+      <div class="border-b border-gray-200 mb-6">
+        <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+          <button
+            onclick="switchTab('planned')"
+            id="tab-planned"
+            class="tab-button border-primary-500 text-primary-600 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium"
+            aria-current="page">
+            Planned Resources ({plannedResources.length})
+          </button>
+          <button
+            onclick="switchTab('managed')"
+            id="tab-managed"
+            class="tab-button border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium">
+            Managed Resources ({managedResources.length})
+          </button>
+        </nav>
+      </div>
+
+      <!-- Planned Resources Tab -->
+      <div id="planned-tab-content" class="tab-content">
+        <div class="mb-4 flex justify-between items-center">
+          <h2 class="text-lg font-semibold text-gray-900">Planned Resources</h2>
+          {canCreate && (
+            <button
+              onclick="openCreatePlannedModal()"
+              class="btn-primary">
+              <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              Plan New Resource
+            </button>
+          )}
+        </div>
+
+        {plannedResources.length === 0 ? (
+          <div class="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-300">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+            </svg>
+            <h3 class="mt-2 text-sm font-semibold text-gray-900">No planned resources</h3>
+            <p class="mt-1 text-sm text-gray-500">Get started by planning your first infrastructure resource.</p>
+            {canCreate && (
+              <div class="mt-6">
+                <button onclick="openCreatePlannedModal()" class="btn-primary">
+                  <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  Plan New Resource
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div class="bg-white shadow overflow-hidden sm:rounded-md">
+            <ul class="divide-y divide-gray-200">
+              {plannedResources.map((resource) => (
+                <li>
+                  <div class="px-4 py-4 sm:px-6 hover:bg-gray-50">
+                    <div class="flex items-center justify-between">
+                      <div class="flex-1">
+                        <div class="flex items-center justify-between">
+                          <p class="text-sm font-medium text-primary-600 truncate">{resource.resource_name}</p>
+                          <div class="ml-2 flex-shrink-0 flex">
+                            <span class={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${resource.approved_by ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                              {resource.approved_by ? 'Approved' : 'Pending Approval'}
+                            </span>
+                          </div>
+                        </div>
+                        <div class="mt-2 flex justify-between">
+                          <div class="sm:flex">
+                            <p class="flex items-center text-sm text-gray-500">
+                              <span class="mr-2 text-gray-400">Type:</span>
+                              {resourceTypeLabels[resource.resource_type] || resource.resource_type}
+                            </p>
+                            {resource.estimated_monthly_cost && (
+                              <p class="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
+                                <span class="mr-2 text-gray-400">Est. Cost:</span>
+                                ${resource.estimated_monthly_cost}/mo
+                              </p>
+                            )}
+                          </div>
+                          <div class="flex items-center space-x-2">
+                            {canApprove && !resource.approved_by && (
+                              <button
+                                onclick={`approvePlannedResource('${resource.id}')`}
+                                class="text-green-600 hover:text-green-900 text-sm font-medium">
+                                Approve
+                              </button>
+                            )}
+                            {canUpdate && (
+                              <button
+                                onclick={`editPlannedResource('${resource.id}')`}
+                                class="text-primary-600 hover:text-primary-900 text-sm font-medium">
+                                Edit
+                              </button>
+                            )}
+                            <button
+                              onclick={`deletePlannedResource('${resource.id}')`}
+                              class="text-red-600 hover:text-red-900 text-sm font-medium">
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      <!-- Managed Resources Tab -->
+      <div id="managed-tab-content" class="tab-content hidden">
+        <div class="mb-4 flex justify-between items-center">
+          <h2 class="text-lg font-semibold text-gray-900">Managed Resources</h2>
+          {canCreate && (
+            <button
+              onclick="openImportManagedModal()"
+              class="btn-primary">
+              <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              Import Resource
+            </button>
+          )}
+        </div>
+
+        {managedResources.length === 0 ? (
+          <div class="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-300">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
+            </svg>
+            <h3 class="mt-2 text-sm font-semibold text-gray-900">No managed resources</h3>
+            <p class="mt-1 text-sm text-gray-500">Import existing Vultr resources to track and manage them.</p>
+            {canCreate && (
+              <div class="mt-6">
+                <button onclick="openImportManagedModal()" class="btn-primary">
+                  <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                  </svg>
+                  Import Resource
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div class="bg-white shadow overflow-hidden sm:rounded-md">
+            <ul class="divide-y divide-gray-200">
+              {managedResources.map((resource) => (
+                <li>
+                  <div class="px-4 py-4 sm:px-6 hover:bg-gray-50">
+                    <div class="flex items-center justify-between">
+                      <div class="flex-1">
+                        <div class="flex items-center justify-between">
+                          <p class="text-sm font-medium text-primary-600 truncate">{resource.resource_name}</p>
+                          <div class="ml-2 flex-shrink-0 flex">
+                            <span class={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColors[resource.status] || 'bg-gray-100 text-gray-800'}`}>
+                              {resource.status}
+                            </span>
+                          </div>
+                        </div>
+                        <div class="mt-2 flex justify-between">
+                          <div class="sm:flex">
+                            <p class="flex items-center text-sm text-gray-500">
+                              <span class="mr-2 text-gray-400">Type:</span>
+                              {resourceTypeLabels[resource.resource_type] || resource.resource_type}
+                            </p>
+                            <p class="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
+                              <span class="mr-2 text-gray-400">Vultr ID:</span>
+                              {resource.vultr_resource_id}
+                            </p>
+                            {resource.monthly_cost && (
+                              <p class="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
+                                <span class="mr-2 text-gray-400">Cost:</span>
+                                ${resource.monthly_cost}/mo
+                              </p>
+                            )}
+                          </div>
+                          <div class="flex items-center space-x-2">
+                            <button
+                              onclick={`syncManagedResource('${resource.id}')`}
+                              class="text-blue-600 hover:text-blue-900 text-sm font-medium">
+                              Sync
+                            </button>
+                            {canUpdate && (
+                              <button
+                                onclick={`editManagedResource('${resource.id}')`}
+                                class="text-primary-600 hover:text-primary-900 text-sm font-medium">
+                                Edit
+                              </button>
+                            )}
+                            <button
+                              onclick={`unmanageManagedResource('${resource.id}')`}
+                              class="text-red-600 hover:text-red-900 text-sm font-medium">
+                              Unmanage
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+
+    <!-- Create Planned Resource Modal -->
+    <dialog id="create-planned-modal" class="rounded-lg shadow-xl p-6 max-w-2xl w-full">
+      <h3 class="text-lg font-semibold mb-4">Plan New Resource</h3>
+      <form id="create-planned-form">
+        <div class="space-y-4">
+          <div>
+            <label for="planned-name" class="block text-sm font-medium text-gray-700">Resource Name</label>
+            <input type="text" id="planned-name" name="resource_name" required
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                   placeholder="my-web-server">
+            <p class="mt-1 text-xs text-gray-500">Alphanumeric, hyphens, and underscores only</p>
+          </div>
+
+          <div>
+            <label for="planned-type" class="block text-sm font-medium text-gray-700">Resource Type</label>
+            <select id="planned-type" name="resource_type" required
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+              <option value="">Select type...</option>
+              <option value="instance">Compute Instance</option>
+              <option value="domain">DNS Domain</option>
+              <option value="firewall_group">Firewall Group</option>
+              <option value="block_storage">Block Storage</option>
+              <option value="load_balancer">Load Balancer</option>
+              <option value="vpc">VPC Network</option>
+              <option value="object_storage">Object Storage</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="planned-cost" class="block text-sm font-medium text-gray-700">Estimated Monthly Cost (USD)</label>
+            <input type="text" id="planned-cost" name="estimated_monthly_cost"
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                   placeholder="10.00">
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Configuration (JSON)</label>
+            <textarea id="planned-config" name="resource_config" rows="6"
+                      class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 font-mono text-sm"
+                      placeholder='{"region": "ewr", "plan": "vc2-1c-1gb"}'>{}</textarea>
+            <p class="mt-1 text-xs text-gray-500">Enter resource configuration as JSON</p>
+          </div>
+        </div>
+
+        <div class="mt-6 flex justify-end space-x-3">
+          <button type="button" onclick="closeCreatePlannedModal()" class="btn-secondary">
+            Cancel
+          </button>
+          <button type="submit" class="btn-primary">
+            Create Planned Resource
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Import Managed Resource Modal -->
+    <dialog id="import-managed-modal" class="rounded-lg shadow-xl p-6 max-w-2xl w-full">
+      <h3 class="text-lg font-semibold mb-4">Import Managed Resource</h3>
+      <form id="import-managed-form">
+        <div class="space-y-4">
+          <div>
+            <label for="managed-vultr-id" class="block text-sm font-medium text-gray-700">Vultr Resource ID</label>
+            <input type="text" id="managed-vultr-id" name="vultr_resource_id" required
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                   placeholder="cb676a46-66fd-4dfb-b839-443f2e6c0b60">
+          </div>
+
+          <div>
+            <label for="managed-name" class="block text-sm font-medium text-gray-700">Resource Name</label>
+            <input type="text" id="managed-name" name="resource_name" required
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                   placeholder="production-web-server">
+          </div>
+
+          <div>
+            <label for="managed-type" class="block text-sm font-medium text-gray-700">Resource Type</label>
+            <select id="managed-type" name="resource_type" required
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+              <option value="">Select type...</option>
+              <option value="instance">Compute Instance</option>
+              <option value="domain">DNS Domain</option>
+              <option value="firewall_group">Firewall Group</option>
+              <option value="block_storage">Block Storage</option>
+              <option value="load_balancer">Load Balancer</option>
+              <option value="vpc">VPC Network</option>
+              <option value="object_storage">Object Storage</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="managed-cost" class="block text-sm font-medium text-gray-700">Monthly Cost (USD)</label>
+            <input type="text" id="managed-cost" name="monthly_cost"
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                   placeholder="10.00">
+          </div>
+        </div>
+
+        <div class="mt-6 flex justify-end space-x-3">
+          <button type="button" onclick="closeImportManagedModal()" class="btn-secondary">
+            Cancel
+          </button>
+          <button type="submit" class="btn-primary">
+            Import Resource
+          </button>
+        </div>
+      </form>
+    </dialog>
+  </div>
+</Layout>
+
+<script define:vars={{ collectionId: id, authToken }}>
+  function getAuthHeaders() {
+    return {
+      'Authorization': `Bearer ${authToken}`,
+      'Content-Type': 'application/json'
+    };
+  }
+
+  // Tab switching
+  window.switchTab = function(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.tab-button').forEach(btn => {
+      btn.classList.remove('border-primary-500', 'text-primary-600');
+      btn.classList.add('border-transparent', 'text-gray-500');
+    });
+    document.getElementById(`tab-${tabName}`).classList.remove('border-transparent', 'text-gray-500');
+    document.getElementById(`tab-${tabName}`).classList.add('border-primary-500', 'text-primary-600');
+
+    // Update tab content
+    document.querySelectorAll('.tab-content').forEach(content => {
+      content.classList.add('hidden');
+    });
+    document.getElementById(`${tabName}-tab-content`).classList.remove('hidden');
+  };
+
+  // Create Planned Resource
+  window.openCreatePlannedModal = function() {
+    document.getElementById('create-planned-modal')?.showModal();
+  };
+
+  window.closeCreatePlannedModal = function() {
+    document.getElementById('create-planned-modal')?.close();
+    document.getElementById('create-planned-form')?.reset();
+  };
+
+  document.getElementById('create-planned-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const formData = new FormData(e.target);
+    const resourceData = {
+      service_collection_id: collectionId,
+      resource_name: formData.get('resource_name'),
+      resource_type: formData.get('resource_type'),
+      estimated_monthly_cost: formData.get('estimated_monthly_cost') || null,
+      resource_config: JSON.parse(formData.get('resource_config') || '{}'),
+      depends_on: [],
+      approval_required: true
+    };
+
+    try {
+      const response = await fetch('/api/resources/planned', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(resourceData)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to create planned resource');
+      }
+
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to create planned resource:', error);
+      alert('Failed to create planned resource: ' + error.message);
+    }
+  });
+
+  // Import Managed Resource
+  window.openImportManagedModal = function() {
+    document.getElementById('import-managed-modal')?.showModal();
+  };
+
+  window.closeImportManagedModal = function() {
+    document.getElementById('import-managed-modal')?.close();
+    document.getElementById('import-managed-form')?.reset();
+  };
+
+  document.getElementById('import-managed-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const formData = new FormData(e.target);
+    const resourceData = {
+      service_collection_id: collectionId,
+      vultr_resource_id: formData.get('vultr_resource_id'),
+      resource_name: formData.get('resource_name'),
+      resource_type: formData.get('resource_type'),
+      monthly_cost: formData.get('monthly_cost') || null,
+      configuration: {},
+      metadata: {},
+      import_source: 'manual'
+    };
+
+    try {
+      const response = await fetch('/api/resources/managed', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(resourceData)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to import resource');
+      }
+
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to import resource:', error);
+      alert('Failed to import resource: ' + error.message);
+    }
+  });
+
+  // Approve Planned Resource
+  window.approvePlannedResource = async function(resourceId) {
+    if (!confirm('Approve this planned resource?')) return;
+
+    try {
+      const response = await fetch(`/api/resources/planned/${resourceId}/approve`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({})
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to approve resource');
+      }
+
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to approve resource:', error);
+      alert('Failed to approve resource: ' + error.message);
+    }
+  };
+
+  // Delete Planned Resource
+  window.deletePlannedResource = async function(resourceId) {
+    if (!confirm('Delete this planned resource? This cannot be undone.')) return;
+
+    try {
+      const response = await fetch(`/api/resources/planned/${resourceId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to delete resource');
+      }
+
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to delete resource:', error);
+      alert('Failed to delete resource: ' + error.message);
+    }
+  };
+
+  // Sync Managed Resource
+  window.syncManagedResource = async function(resourceId) {
+    try {
+      const response = await fetch(`/api/resources/managed/${resourceId}/sync`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ force_sync: false, update_cost: true })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to sync resource');
+      }
+
+      alert('Resource synced successfully!');
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to sync resource:', error);
+      alert('Failed to sync resource: ' + error.message);
+    }
+  };
+
+  // Unmanage Managed Resource
+  window.unmanageManagedResource = async function(resourceId) {
+    if (!confirm('Remove this resource from management? The resource will remain in Vultr.')) return;
+
+    try {
+      const response = await fetch(`/api/resources/managed/${resourceId}?remove_from_vultr=false`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to unmanage resource');
+      }
+
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to unmanage resource:', error);
+      alert('Failed to unmanage resource: ' + error.message);
+    }
+  };
+
+  // Placeholder functions for edit operations
+  window.editPlannedResource = function(resourceId) {
+    alert('Edit functionality coming soon!');
+  };
+
+  window.editManagedResource = function(resourceId) {
+    alert('Edit functionality coming soon!');
+  };
+</script>

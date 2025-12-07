@@ -605,26 +605,20 @@ if (authContext.isAuthenticated) {
       formError.classList.add('hidden');
 
       try {
-        // Get current project from cookie
-        const cookies = document.cookie.split(';').reduce((acc, cookie) => {
-          const [key, value] = cookie.trim().split('=');
-          acc[key] = value;
-          return acc;
-        }, {});
+        // Get current project from nanostore
+        const { currentProject } = await import('../stores/projectStore');
+        const project = currentProject.get();
 
-        const currentProjectCookie = cookies.currentProject;
-        if (!currentProjectCookie) {
+        if (!project) {
           throw new Error('No project selected. Please select a project first.');
         }
-
-        const currentProject = JSON.parse(decodeURIComponent(currentProjectCookie));
 
         // Prepare request data
         const requestData = {
           name: formData.get('name'),
           description: formData.get('description') || '',
           environment: formData.get('environment'),
-          project_id: currentProject.id
+          project_id: project.id
         };
 
         // Submit form to backend (PUT for edit, POST for create)

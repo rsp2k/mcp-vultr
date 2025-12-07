@@ -183,12 +183,12 @@ if (authContext.isAuthenticated) {
                 </div>
               </div>
 
-              <!-- Click to select -->
-              <button
-                @click.stop={`selectProject(${JSON.stringify(project)})`}
+              <!-- Click to view details -->
+              <a
+                href={`/projects/${project.id}`}
                 class="absolute inset-0 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-lg">
-                <span class="sr-only">Select project {project.name}</span>
-              </button>
+                <span class="sr-only">View project details for {project.name}</span>
+              </a>
             </div>
           ))}
         </div>
