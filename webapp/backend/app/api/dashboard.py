@@ -31,7 +31,7 @@ async def get_dashboard_overview(
         collection_ids = list(current_user.service_collection_memberships.keys())
         if collection_ids:
             collection_conditions.append(
-                ServiceCollection.id.in_([collection_ids])
+                ServiceCollection.id.in_(collection_ids)
             )
         collection_conditions.append(ServiceCollection.owner_email == current_user.email)
     
