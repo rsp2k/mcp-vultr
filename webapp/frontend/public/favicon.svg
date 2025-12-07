@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Modern layered collection design -->
+  <defs>
+    <linearGradient id="layer1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0EA5E9;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0284C7;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="layer2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#14B8A6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0D9488;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="layer3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#06B6D4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0891B2;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle for better visibility -->
+  <circle cx="32" cy="32" r="30" fill="#F1F5F9" opacity="0.95"/>
+
+  <!-- Layered stacks representing service collections -->
+  <!-- Back layer (smallest) -->
+  <rect x="24" y="14" width="24" height="6" rx="2" fill="url(#layer1)" opacity="0.6"/>
+
+  <!-- Middle layer -->
+  <rect x="18" y="24" width="28" height="7" rx="2" fill="url(#layer2)" opacity="0.8"/>
+
+  <!-- Front layer (largest, most prominent) -->
+  <rect x="12" y="36" width="32" height="8" rx="2" fill="url(#layer3)"/>
+
+  <!-- Accent dots to suggest connected resources -->
+  <circle cx="28" cy="40" r="1.5" fill="white" opacity="0.7"/>
+  <circle cx="36" cy="40" r="1.5" fill="white" opacity="0.7"/>
+
+  <!-- Subtle shadow for depth -->
+  <ellipse cx="28" cy="52" rx="18" ry="2" fill="#0F172A" opacity="0.1"/>
+</svg>
