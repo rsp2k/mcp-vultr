@@ -401,6 +401,156 @@ function getMobileNavClasses(path: string): string {
       </div>
     </div>
 
+    <!-- Token refresh and API utilities (must load before other scripts) -->
+    <script is:inline>
+      // Global API fetch wrapper with automatic token refresh
+      // This provides a seamless experience when access tokens expire
+
+      // State for coordinating refresh attempts
+      let isRefreshing = false;
+      let refreshPromise = null;
+
+      /**
+       * Attempt to refresh the access token using the refresh token cookie
+       * Returns true if refresh succeeded, false otherwise
+       */
+      async function refreshAccessToken() {
+        // If already refreshing, wait for that to complete
+        if (isRefreshing && refreshPromise) {
+          return refreshPromise;
+        }
+
+        isRefreshing = true;
+
+        refreshPromise = (async () => {
+          try {
+            const response = await fetch('/api/auth/refresh', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({})
+            });
+
+            if (response.ok) {
+              console.log('[API] Token refresh successful');
+              return true;
+            }
+
+            console.warn('[API] Token refresh failed:', response.status);
+            return false;
+          } catch (error) {
+            console.error('[API] Token refresh error:', error);
+            return false;
+          } finally {
+            isRefreshing = false;
+            refreshPromise = null;
+          }
+        })();
+
+        return refreshPromise;
+      }
+
+      /**
+       * Redirect to login page
+       */
+      function redirectToLogin(preserveReturnUrl = true) {
+        const currentPath = window.location.pathname + window.location.search;
+        const loginUrl = preserveReturnUrl && currentPath !== '/login'
+          ? `/login?redirect=${encodeURIComponent(currentPath)}`
+          : '/login';
+
+        if (document.startViewTransition) {
+          document.startViewTransition(() => { window.location.href = loginUrl; });
+        } else {
+          window.location.href = loginUrl;
+        }
+      }
+
+      /**
+       * Global fetch wrapper with automatic token refresh
+       *
+       * Usage:
+       *   const response = await apiFetch('/api/collections');
+       *   const data = await response.json();
+       *
+       * Features:
+       * - Automatically includes credentials (cookies)
+       * - Detects 401 responses and attempts token refresh
+       * - Retries original request after successful refresh
+       * - Redirects to login on unrecoverable auth failure
+       */
+      window.apiFetch = async function(url, options = {}, retryOnAuthFailure = true) {
+        const fetchOptions = {
+          ...options,
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+          }
+        };
+
+        const response = await fetch(url, fetchOptions);
+
+        // If not a 401, return the response as-is
+        if (response.status !== 401) {
+          return response;
+        }
+
+        // Don't retry refresh endpoint to avoid infinite loops
+        if (url.includes('/api/auth/refresh') || !retryOnAuthFailure) {
+          redirectToLogin();
+          throw new Error('Authentication required');
+        }
+
+        console.log('[API] Got 401, attempting token refresh...');
+
+        // Attempt to refresh the token
+        const refreshed = await refreshAccessToken();
+
+        if (refreshed) {
+          // Retry the original request
+          console.log('[API] Retrying original request after token refresh');
+          return fetch(url, fetchOptions);
+        }
+
+        // Refresh failed - redirect to login
+        redirectToLogin();
+        throw new Error('Session expired. Please log in again.');
+      };
+
+      // Convenience methods
+      window.apiGet = (url) => window.apiFetch(url, { method: 'GET' });
+      window.apiPost = (url, data) => window.apiFetch(url, { method: 'POST', body: data ? JSON.stringify(data) : undefined });
+      window.apiPut = (url, data) => window.apiFetch(url, { method: 'PUT', body: data ? JSON.stringify(data) : undefined });
+      window.apiPatch = (url, data) => window.apiFetch(url, { method: 'PATCH', body: data ? JSON.stringify(data) : undefined });
+      window.apiDelete = (url) => window.apiFetch(url, { method: 'DELETE' });
+
+      /**
+       * Logout the current user (clears all tokens)
+       */
+      window.logout = async function() {
+        try {
+          await window.apiFetch('/api/auth/logout', { method: 'POST' }, false);
+        } catch (error) {
+          console.warn('[API] Logout request failed:', error);
+        }
+        redirectToLogin(false);
+      };
+
+      /**
+       * Logout from all devices
+       */
+      window.revokeAllSessions = async function() {
+        try {
+          const response = await window.apiFetch('/api/auth/revoke-all-tokens', { method: 'POST' });
+          return response.ok;
+        } catch (error) {
+          console.error('[API] Failed to revoke all sessions:', error);
+          return false;
+        }
+      };
+    </script>
+
     <!-- Project switching and utilities -->
     <script type="module" define:vars={{ serverProject: currentProject, serverProjects: projects }}>
       // Import PassKey utilities first
@@ -408,7 +558,8 @@ function getMobileNavClasses(path: string): string {
       // Import project store
       import { currentProject } from '/src/stores/projectStore';
 
-      // Utility function to get authentication headers
+      // Utility function to get authentication headers (legacy support)
+      // New code should use window.apiFetch() instead
       function getAuthHeaders() {
         const token = document.cookie
           .split('; ')
@@ -419,6 +570,9 @@ function getMobileNavClasses(path: string): string {
           'Authorization': token ? `Bearer ${token}` : ''
         };
       }
+
+      // Make getAuthHeaders globally available for backward compatibility
+      window.getAuthHeaders = getAuthHeaders;
 
       // Initialize project store from server-side data
       if (serverProject) {

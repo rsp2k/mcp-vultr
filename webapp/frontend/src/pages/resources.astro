@@ -403,27 +403,154 @@ const collectionMap = collections.reduce((acc: Record<string, string>, c: any) =
           <p class="mt-3 text-gray-600">Discovering resources from Vultr...</p>
         </div>
 
-        <!-- Resources Display -->
+        <!-- Resources Display with Vertical Tabs -->
         <div id="resources-display" class="hidden">
-          <div class="mb-4 flex items-center justify-between">
-            <div>
-              <h3 class="text-lg font-medium text-gray-900">Discovered Resources</h3>
-              <p class="text-sm text-gray-500">Total: <span id="total-resources">0</span> resources</p>
-            </div>
-            <div class="flex space-x-2">
-              <select id="resource-type-filter" onchange="filterDiscoveredResources()" class="border-gray-300 rounded-md shadow-sm text-sm">
-                <option value="all">All Types</option>
-                <option value="instance">Instances</option>
-                <option value="load_balancer">Load Balancers</option>
-                <option value="database">Databases</option>
-                <option value="kubernetes">Kubernetes</option>
-                <option value="block_storage">Block Storage</option>
-              </select>
-            </div>
+          <div class="mb-4">
+            <h3 class="text-lg font-medium text-gray-900">Discovered Resources</h3>
+            <p class="text-sm text-gray-500">Total: <span id="total-resources">0</span> resources</p>
           </div>
 
-          <div id="resources-list" class="space-y-4">
-            <!-- Resources will be inserted here by JavaScript -->
+          <div class="flex gap-6">
+            <!-- Vertical Tabs (Left Side) -->
+            <div id="resource-type-tabs" class="w-48 flex-shrink-0">
+              <nav class="space-y-1" role="tablist" aria-label="Resource types">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected="true"
+                  data-tab="all"
+                  onclick="selectResourceTab('all')"
+                  class="resource-tab resource-tab-active w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all"
+                >
+                  <span class="flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+                    </svg>
+                    All Resources
+                  </span>
+                  <span id="tab-count-all" class="inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full bg-gray-200 text-gray-700">0</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  data-tab="instance"
+                  onclick="selectResourceTab('instance')"
+                  class="resource-tab w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all text-gray-600 hover:bg-gray-100"
+                >
+                  <span class="flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+                    </svg>
+                    Instances
+                  </span>
+                  <span id="tab-count-instance" class="inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">0</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  data-tab="block_storage"
+                  onclick="selectResourceTab('block_storage')"
+                  class="resource-tab w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all text-gray-600 hover:bg-gray-100"
+                >
+                  <span class="flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>
+                    </svg>
+                    Block Storage
+                  </span>
+                  <span id="tab-count-block_storage" class="inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">0</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  data-tab="dns_domain"
+                  onclick="selectResourceTab('dns_domain')"
+                  class="resource-tab w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all text-gray-600 hover:bg-gray-100"
+                >
+                  <span class="flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path>
+                    </svg>
+                    DNS Domains
+                  </span>
+                  <span id="tab-count-dns_domain" class="inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">0</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  data-tab="load_balancer"
+                  onclick="selectResourceTab('load_balancer')"
+                  class="resource-tab w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all text-gray-600 hover:bg-gray-100"
+                >
+                  <span class="flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                    </svg>
+                    Load Balancers
+                  </span>
+                  <span id="tab-count-load_balancer" class="inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">0</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  data-tab="database"
+                  onclick="selectResourceTab('database')"
+                  class="resource-tab w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all text-gray-600 hover:bg-gray-100"
+                >
+                  <span class="flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                    </svg>
+                    Databases
+                  </span>
+                  <span id="tab-count-database" class="inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">0</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  data-tab="kubernetes"
+                  onclick="selectResourceTab('kubernetes')"
+                  class="resource-tab w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all text-gray-600 hover:bg-gray-100"
+                >
+                  <span class="flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                    </svg>
+                    Kubernetes
+                  </span>
+                  <span id="tab-count-kubernetes" class="inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">0</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  data-tab="object_storage"
+                  onclick="selectResourceTab('object_storage')"
+                  class="resource-tab w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all text-gray-600 hover:bg-gray-100"
+                >
+                  <span class="flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
+                    </svg>
+                    Object Storage
+                  </span>
+                  <span id="tab-count-object_storage" class="inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">0</span>
+                </button>
+              </nav>
+            </div>
+
+            <!-- Resources List (Right Side) -->
+            <div class="flex-1 min-w-0">
+              <div id="resources-list" class="space-y-3">
+                <!-- Resources will be inserted here by JavaScript -->
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -785,28 +912,99 @@ const collectionMap = collections.reduce((acc: Record<string, string>, c: any) =
       }
     }
 
+    // Track currently selected tab
+    let currentResourceTab = 'all';
+
+    // Map category names from API to tab names
+    // Note: API returns 'domains' key, not 'dns_domains'
+    const categoryToTab = {
+      'instances': 'instance',
+      'block_storage': 'block_storage',
+      'domains': 'dns_domain',           // API returns 'domains'
+      'dns_domains': 'dns_domain',       // Keep for backwards compatibility
+      'load_balancers': 'load_balancer',
+      'databases': 'database',
+      'kubernetes': 'kubernetes',
+      'object_storage': 'object_storage'
+    };
+
+    window.selectResourceTab = function(tabName) {
+      currentResourceTab = tabName;
+
+      // Update tab button states
+      document.querySelectorAll('.resource-tab').forEach(tab => {
+        const isActive = tab.dataset.tab === tabName;
+        tab.classList.toggle('resource-tab-active', isActive);
+        tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+
+        if (isActive) {
+          tab.classList.remove('text-gray-600', 'hover:bg-gray-100');
+        } else {
+          tab.classList.add('text-gray-600', 'hover:bg-gray-100');
+        }
+      });
+
+      // Re-render resources with new filter
+      renderDiscoveredResources();
+    }
+
+    window.updateTabCounts = function() {
+      // Count resources by type
+      const counts = { all: 0 };
+
+      for (const [category, resources] of Object.entries(discoveredResources)) {
+        const tabKey = categoryToTab[category] || category;
+        counts[tabKey] = (counts[tabKey] || 0) + resources.length;
+        counts.all += resources.length;
+      }
+
+      // Update tab count badges
+      for (const [tabKey, count] of Object.entries(counts)) {
+        const countEl = document.getElementById(`tab-count-${tabKey}`);
+        if (countEl) {
+          countEl.textContent = count;
+          // Show/hide tabs based on whether they have resources
+          const tab = countEl.closest('.resource-tab');
+          if (tab && tabKey !== 'all') {
+            tab.style.display = count > 0 ? 'flex' : 'none';
+          }
+        }
+      }
+    }
+
     window.renderDiscoveredResources = function() {
-      const filter = document.getElementById('resource-type-filter').value;
+      const filter = currentResourceTab;
       const container = document.getElementById('resources-list');
       container.innerHTML = '';
 
-      // Flatten all resources into a single array
+      // Update tab counts
+      updateTabCounts();
+
+      // Flatten all resources into a single array based on current tab
       let allResources = [];
       for (const [category, resources] of Object.entries(discoveredResources)) {
-        if (filter === 'all' || category === filter + 's' || category === filter) {
+        const tabKey = categoryToTab[category] || category;
+        if (filter === 'all' || tabKey === filter) {
           allResources.push(...resources.map(r => ({ ...r, category })));
         }
       }
 
       if (allResources.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 text-center py-8">No resources found</p>';
+        container.innerHTML = `
+          <div class="text-center py-12">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+            </svg>
+            <p class="mt-2 text-sm text-gray-500">No resources found in this category</p>
+          </div>
+        `;
         return;
       }
 
       // Render resource cards
       allResources.forEach(resource => {
         const card = document.createElement('div');
-        card.className = 'border border-gray-200 rounded-lg p-4 hover:border-blue-500 transition-all resource-card';
+        card.className = 'border border-gray-200 rounded-lg p-4 hover:border-blue-500 transition-all resource-card cursor-pointer';
         card.dataset.vultrId = resource.vultr_id;
         card.dataset.resourceType = resource.type;
 
@@ -815,6 +1013,18 @@ const collectionMap = collections.reduce((acc: Record<string, string>, c: any) =
           card.classList.add('border-green-500', 'bg-green-50');
         }
 
+        // Get type badge color based on resource type
+        const typeColors = {
+          'instance': 'bg-blue-100 text-blue-800',
+          'block_storage': 'bg-purple-100 text-purple-800',
+          'dns_domain': 'bg-amber-100 text-amber-800',
+          'load_balancer': 'bg-cyan-100 text-cyan-800',
+          'database': 'bg-green-100 text-green-800',
+          'kubernetes': 'bg-indigo-100 text-indigo-800',
+          'object_storage': 'bg-pink-100 text-pink-800'
+        };
+        const badgeColor = typeColors[resource.type] || 'bg-gray-100 text-gray-800';
+
         card.innerHTML = `
           <div class="flex items-start justify-between">
             <div class="flex-1">
@@ -822,23 +1032,29 @@ const collectionMap = collections.reduce((acc: Record<string, string>, c: any) =
                 <input
                   type="checkbox"
                   ${isSelected ? 'checked' : ''}
-                  onclick="toggleResource('${resource.vultr_id}', '${resource.type}', '${resource.name}')"
+                  onclick="event.stopPropagation(); toggleResource('${resource.vultr_id}', '${resource.type}', '${resource.name}')"
                   class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-3"
                 />
                 <h4 class="font-medium text-gray-900">${resource.name}</h4>
               </div>
-              <div class="ml-7 mt-2 grid grid-cols-2 gap-2 text-sm">
-                <div><span class="text-gray-500">Type:</span> <span class="text-gray-900">${resource.type}</span></div>
+              <div class="ml-7 mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                 <div><span class="text-gray-500">Status:</span> <span class="text-gray-900">${resource.status || 'N/A'}</span></div>
                 ${resource.region ? `<div><span class="text-gray-500">Region:</span> <span class="text-gray-900">${resource.region}</span></div>` : ''}
                 ${resource.monthly_cost ? `<div><span class="text-gray-500">Cost:</span> <span class="text-gray-900">$${resource.monthly_cost}/mo</span></div>` : ''}
               </div>
             </div>
-            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-              ${resource.type}
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${badgeColor}">
+              ${resource.type.replace(/_/g, ' ')}
             </span>
           </div>
         `;
+
+        // Click on card toggles selection
+        card.onclick = function(e) {
+          if (e.target.type !== 'checkbox') {
+            toggleResource(resource.vultr_id, resource.type, resource.name);
+          }
+        };
 
         container.appendChild(card);
       });
@@ -1152,4 +1368,41 @@ const collectionMap = collections.reduce((acc: Record<string, string>, c: any) =
       window.location.href = '/resources';
     }
   </script>
+
+  <style>
+    /* Vertical Tab Styles */
+    .resource-tab {
+      background-color: transparent;
+      border: 1px solid transparent;
+    }
+
+    .resource-tab:hover:not(.resource-tab-active) {
+      background-color: rgb(243 244 246);
+    }
+
+    .resource-tab-active {
+      background-color: rgb(239 246 255);
+      border-color: rgb(191 219 254);
+      color: rgb(29 78 216);
+    }
+
+    .resource-tab-active svg {
+      color: rgb(59 130 246);
+    }
+
+    .resource-tab-active span:last-child {
+      background-color: rgb(191 219 254);
+      color: rgb(29 78 216);
+    }
+
+    /* Smooth transitions for resources list */
+    #resources-list {
+      transition: opacity 0.15s ease-in-out;
+    }
+
+    /* Resource card hover effect */
+    .resource-card:hover {
+      box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    }
+  </style>
 </Layout>
