@@ -21,6 +21,7 @@ from app.core.database import get_db
 from app.core.config import get_settings
 from app.core.fastmcp_auth import get_current_user_from_fastmcp, get_auth_metadata, auth_provider
 from app.models import User, UserRole, UserStatus, AuditLogEntry, AuditAction, AuditSeverity
+from app.models.refresh_token import RefreshToken, REFRESH_TOKEN_EXPIRE_DAYS
 
 logger = structlog.get_logger()
 settings = get_settings()
@@ -75,8 +76,10 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     """Login response model."""
     access_token: str
+    refresh_token: Optional[str] = None
     token_type: str = "bearer"
     expires_in: int
+    refresh_expires_in: Optional[int] = None
     user: Dict[str, Any]
 
 
@@ -289,13 +292,22 @@ async def login(
     db.add(audit_entry)
     await db.commit()
 
-    # Generate JWT token
+    # Generate JWT access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": str(user.id), "email": user.email},
         expires_delta=access_token_expires
     )
     expires_in = ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert to seconds
+
+    # Generate refresh token
+    refresh_token_obj, raw_refresh_token = RefreshToken.create(
+        user_id=user.id,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=client_ip
+    )
+    db.add(refresh_token_obj)
+    refresh_expires_in = REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60  # Convert to seconds
 
     # Set auth token as httpOnly cookie for server-side authentication
     response.set_cookie(
@@ -307,9 +319,24 @@ async def login(
         max_age=expires_in
     )
 
+    # Set refresh token as httpOnly cookie (longer lived)
+    response.set_cookie(
+        key="refresh_token",
+        value=raw_refresh_token,
+        httponly=True,
+        secure=settings.environment == "production",
+        samesite="lax",
+        max_age=refresh_expires_in,
+        path="/api/auth"  # Only send to auth endpoints for security
+    )
+
+    await db.commit()
+
     return LoginResponse(
         access_token=access_token,
+        refresh_token=raw_refresh_token,
         expires_in=expires_in,
+        refresh_expires_in=refresh_expires_in,
         user=user.to_dict()
     )
 
@@ -318,11 +345,23 @@ async def login(
 async def logout(
     current_user: User = Depends(require_auth),
     request: Request = None,
+    response: Response = None,
     db: AsyncSession = Depends(get_db)
 ):
-    """Logout current user."""
+    """Logout current user and revoke refresh token."""
     client_ip = request.client.host if request and request.client else "unknown"
-    
+
+    # Revoke refresh token if present in cookie
+    refresh_token = request.cookies.get("refresh_token") if request else None
+    if refresh_token:
+        token_hash = RefreshToken.hash_token(refresh_token)
+        result = await db.execute(
+            select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+        )
+        token_obj = result.scalar_one_or_none()
+        if token_obj:
+            token_obj.revoke(reason="logout")
+
     # Create audit log for logout
     audit_entry = AuditLogEntry.log_user_action(
         user_id=str(current_user.id),
@@ -332,8 +371,220 @@ async def logout(
     )
     db.add(audit_entry)
     await db.commit()
-    
+
+    # Clear cookies
+    if response:
+        response.delete_cookie(key="auth_token")
+        response.delete_cookie(key="refresh_token", path="/api/auth")
+
     return {"message": "Logged out successfully"}
+
+
+class RefreshTokenRequest(BaseModel):
+    """Refresh token request model."""
+    refresh_token: Optional[str] = None  # Can also be sent via cookie
+
+
+class RefreshTokenResponse(BaseModel):
+    """Refresh token response model."""
+    access_token: str
+    refresh_token: Optional[str] = None  # New refresh token if rotated
+    token_type: str = "bearer"
+    expires_in: int
+    refresh_expires_in: Optional[int] = None
+
+
+@router.post("/refresh", response_model=RefreshTokenResponse)
+async def refresh_access_token(
+    request: Request,
+    response: Response,
+    refresh_data: RefreshTokenRequest = RefreshTokenRequest(),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Refresh the access token using a valid refresh token.
+
+    The refresh token can be provided in the request body or via cookie.
+    If the refresh token is old enough, a new refresh token will be issued
+    (token rotation for enhanced security).
+    """
+    # Get refresh token from body or cookie
+    raw_refresh_token = refresh_data.refresh_token or request.cookies.get("refresh_token")
+
+    if not raw_refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token required"
+        )
+
+    # Find the refresh token
+    token_hash = RefreshToken.hash_token(raw_refresh_token)
+    result = await db.execute(
+        select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+    )
+    token_obj = result.scalar_one_or_none()
+
+    if not token_obj:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token"
+        )
+
+    # Check if token is valid
+    if token_obj.is_revoked:
+        # Token was revoked - possible token theft, revoke entire family
+        await db.execute(
+            select(RefreshToken).where(
+                RefreshToken.family_id == token_obj.family_id,
+                RefreshToken.is_revoked == False
+            )
+        )
+        family_tokens = (await db.execute(
+            select(RefreshToken).where(RefreshToken.family_id == token_obj.family_id)
+        )).scalars().all()
+
+        for ft in family_tokens:
+            if not ft.is_revoked:
+                ft.revoke(reason="security_family_revocation")
+
+        await db.commit()
+
+        logger.warning("Attempted use of revoked refresh token - revoking token family",
+                      user_id=str(token_obj.user_id),
+                      family_id=str(token_obj.family_id))
+
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token has been revoked"
+        )
+
+    if token_obj.is_expired:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token has expired"
+        )
+
+    # Get the user
+    result = await db.execute(
+        select(User).where(User.id == token_obj.user_id, User.status == UserStatus.ACTIVE)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive"
+        )
+
+    # Record token use
+    token_obj.record_use()
+
+    # Generate new access token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": str(user.id), "email": user.email},
+        expires_delta=access_token_expires
+    )
+    expires_in = ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+    # Set new access token cookie
+    response.set_cookie(
+        key="auth_token",
+        value=access_token,
+        httponly=True,
+        secure=settings.environment == "production",
+        samesite="lax",
+        max_age=expires_in
+    )
+
+    # Check if we should rotate the refresh token
+    new_refresh_token = None
+    refresh_expires_in = None
+    client_ip = request.client.host if request.client else "unknown"
+
+    if token_obj.should_rotate:
+        # Rotate: revoke old token and create new one with same family
+        token_obj.revoke(reason="rotation")
+        token_obj.rotated_at = datetime.utcnow()
+
+        # Create new refresh token in same family
+        new_token_obj, new_refresh_token = RefreshToken.create(
+            user_id=user.id,
+            user_agent=request.headers.get("user-agent"),
+            ip_address=client_ip,
+            family_id=token_obj.family_id  # Keep same family
+        )
+        db.add(new_token_obj)
+        refresh_expires_in = REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+
+        # Set new refresh token cookie
+        response.set_cookie(
+            key="refresh_token",
+            value=new_refresh_token,
+            httponly=True,
+            secure=settings.environment == "production",
+            samesite="lax",
+            max_age=refresh_expires_in,
+            path="/api/auth"
+        )
+
+        logger.info("Refresh token rotated",
+                   user_id=str(user.id),
+                   family_id=str(token_obj.family_id))
+
+    await db.commit()
+
+    return RefreshTokenResponse(
+        access_token=access_token,
+        refresh_token=new_refresh_token,
+        expires_in=expires_in,
+        refresh_expires_in=refresh_expires_in
+    )
+
+
+@router.post("/revoke-all-tokens")
+async def revoke_all_refresh_tokens(
+    current_user: User = Depends(require_auth),
+    request: Request = None,
+    response: Response = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Revoke all refresh tokens for the current user (logout everywhere)."""
+    client_ip = request.client.host if request and request.client else "unknown"
+
+    # Revoke all user's refresh tokens
+    result = await db.execute(
+        select(RefreshToken).where(
+            RefreshToken.user_id == current_user.id,
+            RefreshToken.is_revoked == False
+        )
+    )
+    active_tokens = result.scalars().all()
+
+    revoked_count = 0
+    for token in active_tokens:
+        token.revoke(reason="revoke_all")
+        revoked_count += 1
+
+    # Create audit log
+    audit_entry = AuditLogEntry.log_user_action(
+        user_id=str(current_user.id),
+        action=AuditAction.LOGOUT,
+        message=f"User {current_user.email} revoked all refresh tokens ({revoked_count} tokens)",
+        source_ip=client_ip
+    )
+    db.add(audit_entry)
+    await db.commit()
+
+    # Clear cookies
+    if response:
+        response.delete_cookie(key="auth_token")
+        response.delete_cookie(key="refresh_token", path="/api/auth")
+
+    return {
+        "message": f"Revoked {revoked_count} refresh tokens",
+        "revoked_count": revoked_count
+    }
 
 
 @router.get("/me")
@@ -1051,7 +1302,7 @@ async def github_callback(
     )
     user = result.scalar_one()
 
-    # Generate JWT token for the webapp session
+    # Generate JWT access token for the webapp session
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     jwt_token = create_access_token(
         data={"sub": str(user.id), "email": user.email},
@@ -1059,12 +1310,27 @@ async def github_callback(
     )
     expires_in = ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert to seconds
 
+    # Generate refresh token for GitHub OAuth users
+    user_agent = request.headers.get("user-agent") if request else None
+    refresh_token_obj, raw_refresh_token = RefreshToken.create(
+        user_id=user.id,
+        user_agent=user_agent,
+        ip_address=client_ip,
+        device_info="GitHub OAuth"
+    )
+    db.add(refresh_token_obj)
+    refresh_expires_in = REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+
+    await db.commit()
+
     logger.info("GitHub OAuth login successful",
                user_id=str(user.id), email=user.email)
 
     return LoginResponse(
         access_token=jwt_token,
+        refresh_token=raw_refresh_token,
         expires_in=expires_in,
+        refresh_expires_in=refresh_expires_in,
         user=user.to_dict()
     )
 
@@ -1083,12 +1349,35 @@ async def github_callback_get(
     try:
         result = await github_callback(callback_data, request, db)
 
-        # For a browser redirect, redirect to the login page with return parameter
-        # The login page will extract the token and redirect to dashboard with cookie set
-        return RedirectResponse(
-            url=f"/login?return=%2Fdashboard%3Ftoken%3D{result.access_token}",
+        # Create response with redirect
+        response = RedirectResponse(
+            url="/dashboard",
             status_code=status.HTTP_302_FOUND
         )
+
+        # Set auth token cookie
+        response.set_cookie(
+            key="auth_token",
+            value=result.access_token,
+            httponly=True,
+            secure=settings.environment == "production",
+            samesite="lax",
+            max_age=result.expires_in
+        )
+
+        # Set refresh token cookie if present
+        if result.refresh_token:
+            response.set_cookie(
+                key="refresh_token",
+                value=result.refresh_token,
+                httponly=True,
+                secure=settings.environment == "production",
+                samesite="lax",
+                max_age=result.refresh_expires_in,
+                path="/api/auth"
+            )
+
+        return response
 
     except HTTPException as e:
         # In a browser context, redirect to login with error
