@@ -255,7 +255,7 @@ const { title = "Profile" } = Astro.props;
             <div x-show="connectedAccounts.length > 0" class="mb-6">
               <h4 class="text-sm font-medium text-gray-900 mb-3">OAuth Accounts</h4>
               <div class="space-y-2">
-                <template x-for="account in connectedAccounts">
+                <template x-for="account in connectedAccounts" :key="account.id">
                   <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div class="flex items-center space-x-3">
                       <div class="flex-shrink-0">
@@ -276,7 +276,7 @@ const { title = "Profile" } = Astro.props;
             <div x-show="passkeys.length > 0" class="mb-6">
               <h4 class="text-sm font-medium text-gray-900 mb-3">PassKeys</h4>
               <div class="space-y-2">
-                <template x-for="passkey in passkeys">
+                <template x-for="passkey in passkeys" :key="passkey.id">
                   <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div class="flex items-center space-x-3">
                       <div class="flex-shrink-0">
