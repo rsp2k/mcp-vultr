@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1122,6 +1123,604 @@ async def refresh_managed_resource(
         )
     except httpx.HTTPError as e:
         logger.error(f"HTTP error refreshing resource {resource.id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to communicate with Vultr API: {str(e)}"
+        )
+
+
+@router.get("/managed/{resource_id}/dns-records")
+async def get_domain_dns_records(
+    resource_id: UUID,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get DNS records for a domain resource.
+
+    This endpoint fetches DNS records from Vultr for domain-type resources.
+    Requires:
+    - User must have read access to the collection
+    - Resource must be a domain type
+    - Resource must have an associated vultr_credential_id
+    """
+
+    query = select(ManagedResource).where(ManagedResource.id == resource_id).options(
+        selectinload(ManagedResource.service_collection),
+        selectinload(ManagedResource.vultr_credential)
+    )
+
+    result = await db.execute(query)
+    resource = result.scalar_one_or_none()
+
+    if not resource:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resource not found"
+        )
+
+    # Check permissions using the collection's access control method
+    # This properly handles both owners and members
+    if not resource.service_collection.can_user_access(current_user.email, "read"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this resource's collection"
+        )
+
+    # Check resource type is domain
+    if resource.resource_type != ResourceType.DOMAIN:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="DNS records can only be fetched for domain resources"
+        )
+
+    # Get the credential for API access
+    if not resource.vultr_credential_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No Vultr credential linked to this resource. Link a credential first."
+        )
+
+    credential = resource.vultr_credential
+    if not credential:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Linked credential not found"
+        )
+
+    # Decrypt API key
+    try:
+        from app.core.encryption import decrypt_value
+        api_key = decrypt_value(credential.encrypted_api_key, credential.encryption_key_id)
+    except Exception as e:
+        logger.error(f"Failed to decrypt API key: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to decrypt API key"
+        )
+
+    domain_name = resource.vultr_resource_id
+
+    # Handle test API key - return mock DNS records
+    if api_key.startswith("TEST_VULTR_API_KEY"):
+        logger.info(f"Using mock DNS records for test API key - domain {domain_name}")
+        return {
+            "domain": domain_name,
+            "records": [
+                {"id": "rec-1", "type": "A", "name": "", "data": "192.168.1.1", "ttl": 300, "priority": -1},
+                {"id": "rec-2", "type": "A", "name": "www", "data": "192.168.1.1", "ttl": 300, "priority": -1},
+                {"id": "rec-3", "type": "MX", "name": "", "data": "mail.example.com", "ttl": 3600, "priority": 10},
+                {"id": "rec-4", "type": "TXT", "name": "", "data": "v=spf1 include:_spf.google.com ~all", "ttl": 3600, "priority": -1},
+                {"id": "rec-5", "type": "NS", "name": "", "data": "ns1.vultr.com", "ttl": 86400, "priority": -1},
+                {"id": "rec-6", "type": "NS", "name": "", "data": "ns2.vultr.com", "ttl": 86400, "priority": -1},
+            ],
+            "total_records": 6,
+            "fetched_at": datetime.utcnow().isoformat()
+        }
+
+    # Fetch DNS records from Vultr API
+    api_url = f"https://api.vultr.com/v2/domains/{domain_name}/records"
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                api_url,
+                headers={"Authorization": f"Bearer {api_key}"}
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                records = data.get("records", [])
+
+                # Format records for response
+                formatted_records = [
+                    {
+                        "id": record.get("id"),
+                        "type": record.get("type"),
+                        "name": record.get("name", ""),
+                        "data": record.get("data"),
+                        "ttl": record.get("ttl"),
+                        "priority": record.get("priority", -1)
+                    }
+                    for record in records
+                ]
+
+                return {
+                    "domain": domain_name,
+                    "records": formatted_records,
+                    "total_records": len(formatted_records),
+                    "fetched_at": datetime.utcnow().isoformat()
+                }
+
+            elif response.status_code == 404:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Domain '{domain_name}' not found in Vultr"
+                )
+
+            elif response.status_code == 401:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Vultr API authentication failed. Check the credential."
+                )
+
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Vultr API returned status {response.status_code}"
+                )
+
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Vultr API request timed out"
+        )
+    except httpx.HTTPError as e:
+        logger.error(f"HTTP error fetching DNS records: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to communicate with Vultr API: {str(e)}"
+        )
+
+
+# Pydantic models for DNS record operations
+class DNSRecordCreate(BaseModel):
+    """Schema for creating a DNS record."""
+    record_type: str = Field(..., description="Record type (A, AAAA, CNAME, MX, TXT, NS, SRV)")
+    name: str = Field(..., description="Record name (subdomain or @ for root)")
+    data: str = Field(..., description="Record data/value")
+    ttl: int = Field(default=300, ge=60, le=86400, description="TTL in seconds")
+    priority: Optional[int] = Field(None, ge=0, le=65535, description="Priority for MX/SRV records")
+
+
+class DNSRecordUpdate(BaseModel):
+    """Schema for updating a DNS record."""
+    record_type: Optional[str] = Field(None, description="Record type")
+    name: Optional[str] = Field(None, description="Record name")
+    data: Optional[str] = Field(None, description="Record data/value")
+    ttl: Optional[int] = Field(None, ge=60, le=86400, description="TTL in seconds")
+    priority: Optional[int] = Field(None, ge=0, le=65535, description="Priority for MX/SRV records")
+
+
+async def _get_resource_api_key(
+    resource_id: UUID,
+    current_user: User,
+    db: AsyncSession
+) -> tuple[ManagedResource, str]:
+    """Helper to get resource and decrypt its linked API key."""
+    # Get resource with credential
+    query = select(ManagedResource).options(
+        selectinload(ManagedResource.vultr_credential),
+        selectinload(ManagedResource.service_collection)
+    ).where(ManagedResource.id == resource_id)
+
+    result = await db.execute(query)
+    resource = result.scalar_one_or_none()
+
+    if not resource:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resource not found"
+        )
+
+    # Verify access through collection
+    collection = resource.service_collection
+    if collection:
+        user_role = current_user.get_collection_role(str(collection.id))
+        is_owner = collection.owner_email == current_user.email
+
+        if not current_user.is_admin and not is_owner and user_role not in ["owner", "editor"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You need editor access to modify DNS records"
+            )
+
+    if not resource.vultr_credential_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No Vultr credential linked to this resource"
+        )
+
+    credential = resource.vultr_credential
+    if not credential:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Linked credential not found"
+        )
+
+    # Decrypt API key
+    try:
+        from app.core.encryption import decrypt_value
+        api_key = decrypt_value(credential.encrypted_api_key, credential.encryption_key_id)
+    except Exception as e:
+        logger.error(f"Failed to decrypt API key: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to decrypt API key"
+        )
+
+    return resource, api_key
+
+
+@router.post("/managed/{resource_id}/dns-records")
+async def create_dns_record(
+    resource_id: UUID,
+    record_data: DNSRecordCreate,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new DNS record for a domain resource."""
+    resource, api_key = await _get_resource_api_key(resource_id, current_user, db)
+
+    if resource.resource_type != ResourceType.DOMAIN:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="DNS records can only be managed for domain resources"
+        )
+
+    domain_name = resource.vultr_resource_id
+
+    # Build payload
+    payload = {
+        "type": record_data.record_type.upper(),
+        "name": record_data.name,
+        "data": record_data.data,
+        "ttl": record_data.ttl
+    }
+
+    if record_data.priority is not None:
+        payload["priority"] = record_data.priority
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"https://api.vultr.com/v2/domains/{domain_name}/records",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json=payload
+            )
+
+            if response.status_code == 201:
+                data = response.json()
+                record = data.get("record", {})
+                return {
+                    "success": True,
+                    "record": {
+                        "id": record.get("id"),
+                        "type": record.get("type"),
+                        "name": record.get("name", ""),
+                        "data": record.get("data"),
+                        "ttl": record.get("ttl"),
+                        "priority": record.get("priority", -1)
+                    },
+                    "message": f"DNS record created successfully"
+                }
+
+            elif response.status_code == 400:
+                error_data = response.json()
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=error_data.get("error", "Invalid record data")
+                )
+
+            elif response.status_code == 401:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Vultr API authentication failed"
+                )
+
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Vultr API returned status {response.status_code}"
+                )
+
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Vultr API request timed out"
+        )
+    except httpx.HTTPError as e:
+        logger.error(f"HTTP error creating DNS record: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to communicate with Vultr API: {str(e)}"
+        )
+
+
+@router.patch("/managed/{resource_id}/dns-records/{record_id}")
+async def update_dns_record(
+    resource_id: UUID,
+    record_id: str,
+    record_data: DNSRecordUpdate,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update an existing DNS record."""
+    resource, api_key = await _get_resource_api_key(resource_id, current_user, db)
+
+    if resource.resource_type != ResourceType.DOMAIN:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="DNS records can only be managed for domain resources"
+        )
+
+    domain_name = resource.vultr_resource_id
+
+    # Build payload with only provided fields
+    payload = {}
+    if record_data.record_type is not None:
+        payload["type"] = record_data.record_type.upper()
+    if record_data.name is not None:
+        payload["name"] = record_data.name
+    if record_data.data is not None:
+        payload["data"] = record_data.data
+    if record_data.ttl is not None:
+        payload["ttl"] = record_data.ttl
+    if record_data.priority is not None:
+        payload["priority"] = record_data.priority
+
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields to update"
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.patch(
+                f"https://api.vultr.com/v2/domains/{domain_name}/records/{record_id}",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json=payload
+            )
+
+            if response.status_code == 204:
+                return {
+                    "success": True,
+                    "message": "DNS record updated successfully"
+                }
+
+            elif response.status_code == 400:
+                error_data = response.json()
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=error_data.get("error", "Invalid record data")
+                )
+
+            elif response.status_code == 404:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="DNS record not found"
+                )
+
+            elif response.status_code == 401:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Vultr API authentication failed"
+                )
+
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Vultr API returned status {response.status_code}"
+                )
+
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Vultr API request timed out"
+        )
+    except httpx.HTTPError as e:
+        logger.error(f"HTTP error updating DNS record: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to communicate with Vultr API: {str(e)}"
+        )
+
+
+@router.delete("/managed/{resource_id}/dns-records/{record_id}")
+async def delete_dns_record(
+    resource_id: UUID,
+    record_id: str,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a DNS record."""
+    resource, api_key = await _get_resource_api_key(resource_id, current_user, db)
+
+    if resource.resource_type != ResourceType.DOMAIN:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="DNS records can only be managed for domain resources"
+        )
+
+    domain_name = resource.vultr_resource_id
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.delete(
+                f"https://api.vultr.com/v2/domains/{domain_name}/records/{record_id}",
+                headers={"Authorization": f"Bearer {api_key}"}
+            )
+
+            if response.status_code == 204:
+                return {
+                    "success": True,
+                    "message": "DNS record deleted successfully"
+                }
+
+            elif response.status_code == 404:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="DNS record not found"
+                )
+
+            elif response.status_code == 401:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Vultr API authentication failed"
+                )
+
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Vultr API returned status {response.status_code}"
+                )
+
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Vultr API request timed out"
+        )
+    except httpx.HTTPError as e:
+        logger.error(f"HTTP error deleting DNS record: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to communicate with Vultr API: {str(e)}"
+        )
+
+
+@router.get("/managed/{resource_id}/domain-info")
+async def get_domain_info(
+    resource_id: UUID,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get domain information including DNSSEC status."""
+    resource, api_key = await _get_resource_api_key(resource_id, current_user, db)
+
+    if resource.resource_type != ResourceType.DOMAIN:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This endpoint is only for domain resources"
+        )
+
+    domain_name = resource.vultr_resource_id
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"https://api.vultr.com/v2/domains/{domain_name}",
+                headers={"Authorization": f"Bearer {api_key}"}
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                domain = data.get("domain", {})
+                return {
+                    "domain": domain.get("domain"),
+                    "date_created": domain.get("date_created"),
+                    "dns_sec": domain.get("dns_sec", "disabled")
+                }
+
+            elif response.status_code == 404:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Domain not found in Vultr"
+                )
+
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Vultr API returned status {response.status_code}"
+                )
+
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Vultr API request timed out"
+        )
+    except httpx.HTTPError as e:
+        logger.error(f"HTTP error getting domain info: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to communicate with Vultr API: {str(e)}"
+        )
+
+
+@router.patch("/managed/{resource_id}/domain-settings")
+async def update_domain_settings(
+    resource_id: UUID,
+    dns_sec: str = Body(..., embed=True, description="DNSSEC status: 'enabled' or 'disabled'"),
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update domain settings (DNSSEC)."""
+    resource, api_key = await _get_resource_api_key(resource_id, current_user, db)
+
+    if resource.resource_type != ResourceType.DOMAIN:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This endpoint is only for domain resources"
+        )
+
+    if dns_sec not in ["enabled", "disabled"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="dns_sec must be 'enabled' or 'disabled'"
+        )
+
+    domain_name = resource.vultr_resource_id
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.put(
+                f"https://api.vultr.com/v2/domains/{domain_name}",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={"dns_sec": dns_sec}
+            )
+
+            if response.status_code == 204:
+                return {
+                    "success": True,
+                    "message": f"DNSSEC {'enabled' if dns_sec == 'enabled' else 'disabled'} successfully"
+                }
+
+            elif response.status_code == 400:
+                error_data = response.json()
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=error_data.get("error", "Invalid request")
+                )
+
+            elif response.status_code == 404:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Domain not found in Vultr"
+                )
+
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Vultr API returned status {response.status_code}"
+                )
+
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Vultr API request timed out"
+        )
+    except httpx.HTTPError as e:
+        logger.error(f"HTTP error updating domain settings: {e}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to communicate with Vultr API: {str(e)}"
