@@ -1,6 +1,6 @@
 """Tests for the core VultrDNSServer functionality."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -32,9 +32,9 @@ class TestVultrDNSServer:
         """Test successful API request."""
         server = VultrDNSServer(mock_api_key)
 
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json = AsyncMock(return_value={"test": "data"})
+        mock_response.json.return_value = {"test": "data"}
 
         with patch("httpx.AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.request.return_value = (
@@ -49,9 +49,9 @@ class TestVultrDNSServer:
         """Test API request with 201 Created status."""
         server = VultrDNSServer(mock_api_key)
 
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.status_code = 201
-        mock_response.json = AsyncMock(return_value={"created": "resource"})
+        mock_response.json.return_value = {"created": "resource"}
 
         with patch("httpx.AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.request.return_value = (

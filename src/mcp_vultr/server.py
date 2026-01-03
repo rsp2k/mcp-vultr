@@ -1916,15 +1916,41 @@ class VultrDNSServer:
     # Startup Scripts Methods
     # =============================================================================
 
+    def _decode_script_content(self, script_data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Decode base64 encoded script content from Vultr API response.
+
+        The Vultr API returns script content as base64 encoded strings.
+        This method decodes it back to plain text for easier use.
+
+        Args:
+            script_data: Script dictionary from API response
+
+        Returns:
+            Script dictionary with decoded content
+        """
+        import base64
+
+        if "script" in script_data and script_data["script"]:
+            try:
+                decoded = base64.b64decode(script_data["script"]).decode("utf-8")
+                script_data = dict(script_data)  # Make a copy
+                script_data["script"] = decoded
+            except Exception:
+                # If decoding fails, leave as-is (might already be plain text)
+                pass
+        return script_data
+
     async def list_startup_scripts(self) -> list[dict[str, Any]]:
         """
         List all startup scripts.
 
         Returns:
-            List of startup scripts
+            List of startup scripts with decoded script content
         """
         result = await self._make_request("GET", "/startup-scripts")
-        return result.get("startup_scripts", [])
+        scripts = result.get("startup_scripts", [])
+        return [self._decode_script_content(s) for s in scripts]
 
     async def get_startup_script(self, script_id: str) -> dict[str, Any]:
         """
@@ -1934,10 +1960,11 @@ class VultrDNSServer:
             script_id: The startup script ID
 
         Returns:
-            Startup script details
+            Startup script details with decoded script content
         """
         result = await self._make_request("GET", f"/startup-scripts/{script_id}")
-        return result.get("startup_script", {})
+        script = result.get("startup_script", {})
+        return self._decode_script_content(script)
 
     async def create_startup_script(
         self, name: str, script: str, script_type: str = "boot"
@@ -1947,13 +1974,17 @@ class VultrDNSServer:
 
         Args:
             name: Name for the startup script
-            script: The script content
+            script: The script content (plain text - will be base64 encoded automatically)
             script_type: Type of script ('boot' or 'pxe')
 
         Returns:
             Created startup script details
         """
-        data = {"name": name, "script": script, "type": script_type}
+        import base64
+
+        # Vultr API requires base64 encoded script content
+        script_b64 = base64.b64encode(script.encode("utf-8")).decode("utf-8")
+        data = {"name": name, "script": script_b64, "type": script_type}
         result = await self._make_request("POST", "/startup-scripts", data=data)
         return result.get("startup_script", {})
 
@@ -1966,16 +1997,19 @@ class VultrDNSServer:
         Args:
             script_id: The startup script ID
             name: New name for the script
-            script: New script content
+            script: New script content (plain text - will be base64 encoded automatically)
 
         Returns:
             Updated startup script details
         """
+        import base64
+
         data = {}
         if name is not None:
             data["name"] = name
         if script is not None:
-            data["script"] = script
+            # Vultr API requires base64 encoded script content
+            data["script"] = base64.b64encode(script.encode("utf-8")).decode("utf-8")
 
         result = await self._make_request(
             "PATCH", f"/startup-scripts/{script_id}", data=data
