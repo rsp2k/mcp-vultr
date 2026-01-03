@@ -10,6 +10,7 @@ from app.models.connected_account import (
     ConnectedAccount, PassKey, AuthenticationSession,
     ProviderType, PassKeyAuthenticatorType
 )
+from app.models.refresh_token import RefreshToken, REFRESH_TOKEN_EXPIRE_DAYS
 
 __all__ = [
     # Core models
@@ -30,6 +31,8 @@ __all__ = [
     "ConnectedAccount",
     "PassKey",
     "AuthenticationSession",
+    "RefreshToken",
+    "REFRESH_TOKEN_EXPIRE_DAYS",
 
     # Enums for Service Collections
     "CollectionEnvironment",
