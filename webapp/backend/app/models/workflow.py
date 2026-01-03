@@ -142,6 +142,16 @@ class WorkflowOperation(Base):
         # This would need to query other operations
         return True
     
+    @property
+    def requested_by_email(self) -> Optional[str]:
+        """Get requester email from user relationship."""
+        return self.requested_by.email if self.requested_by else None
+
+    @property
+    def assigned_to_email(self) -> Optional[str]:
+        """Get assignee email from user relationship."""
+        return self.assigned_to.email if self.assigned_to else None
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
@@ -150,8 +160,11 @@ class WorkflowOperation(Base):
             "status": self.status.value,
             "project_id": str(self.project_id),
             "service_collection_id": str(self.service_collection_id),
+            "service_collection_name": self.service_collection.name if self.service_collection else None,
             "requested_by_id": str(self.requested_by_id),
+            "requested_by_email": self.requested_by_email,
             "assigned_to_id": str(self.assigned_to_id) if self.assigned_to_id else None,
+            "assigned_to_email": self.assigned_to_email,
             "request_context": self.request_context,
             "resource_type": self.resource_type,
             "resource_config": self.resource_config,

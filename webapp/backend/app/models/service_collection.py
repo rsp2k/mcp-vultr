@@ -153,6 +153,10 @@ class ServiceCollection(Base):
         
         return None
     
+    def get_user_role(self, user_email: str) -> Optional[str]:
+        """Alias for get_member_role for API compatibility."""
+        return self.get_member_role(user_email)
+
     def can_user_access(self, user_email: str, operation: str = "read") -> bool:
         """Check if user can perform operation on this collection."""
         role = self.get_member_role(user_email)

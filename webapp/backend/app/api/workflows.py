@@ -1,5 +1,6 @@
 """Workflow and approval API routes."""
 
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
@@ -7,7 +8,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_, or_, cast, literal
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
@@ -24,6 +26,7 @@ from app.schemas.workflow import (
     ApprovalDecision, WorkflowOperationUpdate
 )
 from app.core.audit import audit_log
+from app.models.audit_log import AuditAction
 from app.workers.workflow_processor import execute_workflow_operation
 
 logger = logging.getLogger(__name__)
@@ -45,9 +48,11 @@ async def list_workflow_operations(
     
     query = select(WorkflowOperation).options(
         selectinload(WorkflowOperation.service_collection),
-        selectinload(WorkflowOperation.approval_requests)
+        selectinload(WorkflowOperation.approval_requests),
+        selectinload(WorkflowOperation.requested_by),
+        selectinload(WorkflowOperation.assigned_to)
     )
-    
+
     # Apply filters
     filters = []
     
@@ -66,14 +71,19 @@ async def list_workflow_operations(
         filters.append(WorkflowOperation.service_collection_id == collection_id)
     else:
         # Filter to collections user has access to
+        # Use JSONB @> operator for PostgreSQL JSON array containment check
+        member_json = json.dumps([{"email": current_user.email}])
         user_collections = select(ServiceCollection.id).where(
             or_(
                 ServiceCollection.created_by == current_user.email,
-                ServiceCollection.members.contains([{"email": current_user.email}])
+                ServiceCollection.owner_email == current_user.email,
+                cast(ServiceCollection.members, JSONB).contains(
+                    cast(literal(member_json), JSONB)
+                )
             )
         )
         filters.append(WorkflowOperation.service_collection_id.in_(user_collections))
-    
+
     if status:
         filters.append(WorkflowOperation.status == status)
         
@@ -81,7 +91,11 @@ async def list_workflow_operations(
         filters.append(WorkflowOperation.operation_type == operation_type)
         
     if requested_by:
-        filters.append(WorkflowOperation.requested_by == requested_by)
+        # Filter by requester email through the user relationship
+        # This requires a subquery since we can't directly filter on relationship attributes
+        from app.models.user import User as UserModel
+        user_subquery = select(UserModel.id).where(UserModel.email == requested_by)
+        filters.append(WorkflowOperation.requested_by_id.in_(user_subquery))
     
     if filters:
         query = query.where(and_(*filters))
@@ -96,11 +110,104 @@ async def list_workflow_operations(
     operations = result.scalars().all()
     
     await audit_log(
-        db, current_user.email, "workflow.operations.list",
-        {"collection_id": str(collection_id) if collection_id else None, "count": len(operations)}
+        AuditAction.WORKFLOW_OPERATION_CREATED,
+        current_user.email,
+        f"Listed {len(operations)} workflow operations",
+        metadata={"collection_id": str(collection_id) if collection_id else None, "count": len(operations)}
     )
     
     return [op.to_dict() for op in operations]
+
+
+@router.get("/stats")
+async def get_workflow_stats(
+    collection_id: Optional[UUID] = Query(None, description="Filter by service collection"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Get workflow operation statistics for the current user."""
+    from sqlalchemy import func
+
+    # Base query for operations the user can access
+    base_filters = []
+
+    if collection_id:
+        # Verify user has access to collection
+        collection_query = select(ServiceCollection).where(ServiceCollection.id == collection_id)
+        result = await db.execute(collection_query)
+        collection = result.scalar_one_or_none()
+
+        if not collection or not collection.can_user_access(current_user.email, "read"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Service collection not found or access denied"
+            )
+        base_filters.append(WorkflowOperation.service_collection_id == collection_id)
+    else:
+        # Filter to collections user has access to
+        # Use JSONB @> operator for PostgreSQL JSON array containment check
+        member_json = json.dumps([{"email": current_user.email}])
+        user_collections = select(ServiceCollection.id).where(
+            or_(
+                ServiceCollection.created_by == current_user.email,
+                ServiceCollection.owner_email == current_user.email,
+                cast(ServiceCollection.members, JSONB).contains(
+                    cast(literal(member_json), JSONB)
+                )
+            )
+        )
+        base_filters.append(WorkflowOperation.service_collection_id.in_(user_collections))
+
+    # Count operations by status
+    stats_query = select(
+        WorkflowOperation.status,
+        func.count(WorkflowOperation.id).label('count')
+    )
+    if base_filters:
+        stats_query = stats_query.where(and_(*base_filters))
+    stats_query = stats_query.group_by(WorkflowOperation.status)
+
+    result = await db.execute(stats_query)
+    status_counts = {row.status.value: row.count for row in result}
+
+    # Get pending approvals count for the user
+    pending_approvals_query = select(func.count(ApprovalRequest.id)).where(
+        and_(
+            ApprovalRequest.status == ApprovalStatus.PENDING,
+            ApprovalRequest.approver_email == current_user.email
+        )
+    )
+    result = await db.execute(pending_approvals_query)
+    pending_approvals = result.scalar() or 0
+
+    # Calculate failed rate (last 30 days)
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    recent_query = select(WorkflowOperation.status).where(
+        and_(
+            *base_filters,
+            WorkflowOperation.created_at >= thirty_days_ago,
+            WorkflowOperation.status.in_([OperationStatus.COMPLETED, OperationStatus.FAILED])
+        )
+    )
+    result = await db.execute(recent_query)
+    recent_ops = result.scalars().all()
+    total_recent = len(recent_ops)
+    failed_recent = sum(1 for s in recent_ops if s == OperationStatus.FAILED)
+    failed_rate = (failed_recent / total_recent * 100) if total_recent > 0 else 0
+
+    return {
+        "queued": status_counts.get("queued", 0),
+        "pending_approval": status_counts.get("pending_approval", 0),
+        "approved": status_counts.get("approved", 0),
+        "executing": status_counts.get("executing", 0),
+        "completed": status_counts.get("completed", 0),
+        "failed": status_counts.get("failed", 0),
+        "cancelled": status_counts.get("cancelled", 0),
+        "rejected": status_counts.get("rejected", 0),
+        "pending_user_approvals": pending_approvals,
+        "failed_rate_30d": round(failed_rate, 1),
+        "total_operations": sum(status_counts.values())
+    }
 
 
 @router.get("/operations/{operation_id}")
@@ -113,18 +220,20 @@ async def get_workflow_operation(
     
     query = select(WorkflowOperation).options(
         selectinload(WorkflowOperation.service_collection),
-        selectinload(WorkflowOperation.approval_requests)
+        selectinload(WorkflowOperation.approval_requests),
+        selectinload(WorkflowOperation.requested_by),
+        selectinload(WorkflowOperation.assigned_to)
     ).where(WorkflowOperation.id == operation_id)
-    
+
     result = await db.execute(query)
     operation = result.scalar_one_or_none()
-    
+
     if not operation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Workflow operation not found"
         )
-    
+
     # Check access
     if not operation.service_collection.can_user_access(current_user.email, "viewer"):
         raise HTTPException(
@@ -133,8 +242,10 @@ async def get_workflow_operation(
         )
     
     await audit_log(
-        db, current_user.email, "workflow.operation.view",
-        {"operation_id": str(operation_id)}
+        AuditAction.WORKFLOW_OPERATION_STARTED,
+        current_user.email,
+        f"Viewed workflow operation {operation_id}",
+        metadata={"operation_id": str(operation_id)}
     )
     
     return operation.to_dict()
@@ -173,7 +284,8 @@ async def create_workflow_operation(
     operation = WorkflowOperation(
         operation_type=operation_data.operation_type,
         service_collection_id=operation_data.service_collection_id,
-        requested_by=current_user.email,
+        project_id=collection.project_id,  # Get project_id from collection
+        requested_by_id=current_user.id,  # Use user UUID, not email
         request_context=operation_data.request_context or {},
         resource_type=operation_data.resource_type,
         resource_config=operation_data.resource_config,
@@ -202,8 +314,10 @@ async def create_workflow_operation(
     await db.refresh(operation, ["service_collection", "approval_requests"])
     
     await audit_log(
-        db, current_user.email, "workflow.operation.create",
-        {
+        AuditAction.WORKFLOW_OPERATION_CREATED,
+        current_user.email,
+        f"Created workflow operation {operation.id} ({operation.operation_type.value})",
+        metadata={
             "operation_id": str(operation.id),
             "operation_type": operation.operation_type.value,
             "collection_id": str(operation.service_collection_id),
@@ -225,24 +339,26 @@ async def update_workflow_operation(
     
     query = select(WorkflowOperation).options(
         selectinload(WorkflowOperation.service_collection),
-        selectinload(WorkflowOperation.approval_requests)
+        selectinload(WorkflowOperation.approval_requests),
+        selectinload(WorkflowOperation.requested_by),
+        selectinload(WorkflowOperation.assigned_to)
     ).where(WorkflowOperation.id == operation_id)
-    
+
     result = await db.execute(query)
     operation = result.scalar_one_or_none()
-    
+
     if not operation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Workflow operation not found"
         )
-    
+
     # Check permissions
     user_role = operation.service_collection.get_user_role(current_user.email)
-    
+
     # Only requester or managers/admins can update
     can_update = (
-        operation.requested_by == current_user.email or
+        operation.requested_by_id == current_user.id or
         user_role in ["manager", "admin"]
     )
     
@@ -270,8 +386,10 @@ async def update_workflow_operation(
     await db.refresh(operation, ["service_collection", "approval_requests"])
     
     await audit_log(
-        db, current_user.email, "workflow.operation.update",
-        {"operation_id": str(operation_id), "updates": update_dict}
+        AuditAction.WORKFLOW_OPERATION_STARTED,
+        current_user.email,
+        f"Updated workflow operation {operation_id}",
+        metadata={"operation_id": str(operation_id), "updates": update_dict}
     )
     
     return operation.to_dict()
@@ -303,7 +421,7 @@ async def delete_workflow_operation(
     
     # Only requester or managers/admins can delete
     can_delete = (
-        operation.requested_by == current_user.email or
+        operation.requested_by_id == current_user.id or
         user_role in ["manager", "admin"]
     )
     
@@ -324,8 +442,10 @@ async def delete_workflow_operation(
     await db.commit()
     
     await audit_log(
-        db, current_user.email, "workflow.operation.delete",
-        {"operation_id": str(operation_id)}
+        AuditAction.WORKFLOW_OPERATION_CANCELLED,
+        current_user.email,
+        f"Deleted workflow operation {operation_id}",
+        metadata={"operation_id": str(operation_id)}
     )
     
     return {"message": "Operation deleted successfully"}
@@ -352,10 +472,15 @@ async def list_approval_requests(
     filters = []
     
     # Filter to approvals for collections user has access to
+    # Use JSONB @> operator for PostgreSQL JSON array containment check
+    member_json = json.dumps([{"email": current_user.email}])
     user_collections = select(ServiceCollection.id).where(
         or_(
             ServiceCollection.created_by == current_user.email,
-            ServiceCollection.members.contains([{"email": current_user.email}])
+            ServiceCollection.owner_email == current_user.email,
+            cast(ServiceCollection.members, JSONB).contains(
+                cast(literal(member_json), JSONB)
+            )
         )
     )
     
@@ -387,8 +512,10 @@ async def list_approval_requests(
     approvals = result.scalars().all()
     
     await audit_log(
-        db, current_user.email, "workflow.approvals.list",
-        {"count": len(approvals)}
+        AuditAction.APPROVAL_REQUESTED,
+        current_user.email,
+        f"Listed {len(approvals)} approval requests",
+        metadata={"count": len(approvals)}
     )
     
     return [approval.to_dict() for approval in approvals]
@@ -458,8 +585,10 @@ async def decide_approval(
     await db.commit()
     
     await audit_log(
-        db, current_user.email, "workflow.approval.decide",
-        {
+        AuditAction.APPROVAL_GRANTED if decision.approve else AuditAction.APPROVAL_REJECTED,
+        current_user.email,
+        f"{'Approved' if decision.approve else 'Rejected'} approval request {approval_id}",
+        metadata={
             "approval_id": str(approval_id),
             "operation_id": str(operation.id),
             "decision": "approved" if decision.approve else "rejected",
@@ -480,21 +609,27 @@ async def execute_operation(
     
     query = select(WorkflowOperation).options(
         selectinload(WorkflowOperation.service_collection),
-        selectinload(WorkflowOperation.approval_requests)
+        selectinload(WorkflowOperation.approval_requests),
+        selectinload(WorkflowOperation.requested_by),
+        selectinload(WorkflowOperation.assigned_to)
     ).where(WorkflowOperation.id == operation_id)
-    
+
     result = await db.execute(query)
     operation = result.scalar_one_or_none()
-    
+
     if not operation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Workflow operation not found"
         )
-    
-    # Check permissions
+
+    # Check permissions - managers/admins or the requester can execute
     user_role = operation.service_collection.get_user_role(current_user.email)
-    if user_role not in ["manager", "admin"]:
+    can_execute = (
+        operation.requested_by_id == current_user.id or
+        user_role in ["manager", "admin"]
+    )
+    if not can_execute:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions to execute operations"
@@ -511,11 +646,241 @@ async def execute_operation(
     await execute_workflow_operation.defer(str(operation_id))
     
     await audit_log(
-        db, current_user.email, "workflow.operation.execute",
-        {"operation_id": str(operation_id)}
+        AuditAction.WORKFLOW_OPERATION_STARTED,
+        current_user.email,
+        f"Queued workflow operation {operation_id} for execution",
+        metadata={"operation_id": str(operation_id)}
     )
     
     return {"message": "Operation queued for execution"}
+
+
+@router.post("/operations/{operation_id}/approve")
+async def approve_operation(
+    operation_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Approve a pending workflow operation."""
+
+    query = select(WorkflowOperation).options(
+        selectinload(WorkflowOperation.service_collection),
+        selectinload(WorkflowOperation.approval_requests),
+        selectinload(WorkflowOperation.requested_by),
+        selectinload(WorkflowOperation.assigned_to)
+    ).where(WorkflowOperation.id == operation_id)
+
+    result = await db.execute(query)
+    operation = result.scalar_one_or_none()
+
+    if not operation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workflow operation not found"
+        )
+
+    # Check permissions - approvers, managers, admins can approve
+    user_role = operation.service_collection.get_user_role(current_user.email)
+    if user_role not in ["approver", "manager", "admin", "owner"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to approve operations"
+        )
+
+    # Check if operation is pending approval
+    if operation.status != OperationStatus.PENDING_APPROVAL:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Operation is not pending approval. Status: {operation.status.value}"
+        )
+
+    # Update operation status
+    operation.status = OperationStatus.APPROVED
+    await db.commit()
+
+    await audit_log(
+        AuditAction.APPROVAL_GRANTED,
+        current_user.email,
+        f"Approved workflow operation {operation_id}",
+        metadata={"operation_id": str(operation_id)}
+    )
+
+    return {"message": "Operation approved", "operation": operation.to_dict()}
+
+
+@router.post("/operations/{operation_id}/reject")
+async def reject_operation(
+    operation_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Reject a pending workflow operation."""
+
+    query = select(WorkflowOperation).options(
+        selectinload(WorkflowOperation.service_collection),
+        selectinload(WorkflowOperation.approval_requests),
+        selectinload(WorkflowOperation.requested_by),
+        selectinload(WorkflowOperation.assigned_to)
+    ).where(WorkflowOperation.id == operation_id)
+
+    result = await db.execute(query)
+    operation = result.scalar_one_or_none()
+
+    if not operation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workflow operation not found"
+        )
+
+    # Check permissions - approvers, managers, admins can reject
+    user_role = operation.service_collection.get_user_role(current_user.email)
+    if user_role not in ["approver", "manager", "admin", "owner"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to reject operations"
+        )
+
+    # Check if operation is pending approval
+    if operation.status != OperationStatus.PENDING_APPROVAL:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Operation is not pending approval. Status: {operation.status.value}"
+        )
+
+    # Update operation status
+    operation.status = OperationStatus.REJECTED
+    await db.commit()
+
+    await audit_log(
+        AuditAction.APPROVAL_REJECTED,
+        current_user.email,
+        f"Rejected workflow operation {operation_id}",
+        metadata={"operation_id": str(operation_id)}
+    )
+
+    return {"message": "Operation rejected", "operation": operation.to_dict()}
+
+
+@router.post("/operations/{operation_id}/cancel")
+async def cancel_operation(
+    operation_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Cancel a workflow operation."""
+
+    query = select(WorkflowOperation).options(
+        selectinload(WorkflowOperation.service_collection),
+        selectinload(WorkflowOperation.requested_by),
+        selectinload(WorkflowOperation.assigned_to)
+    ).where(WorkflowOperation.id == operation_id)
+
+    result = await db.execute(query)
+    operation = result.scalar_one_or_none()
+
+    if not operation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workflow operation not found"
+        )
+
+    # Check permissions - requester, managers, admins can cancel
+    user_role = operation.service_collection.get_user_role(current_user.email)
+    can_cancel = (
+        operation.requested_by_id == current_user.id or
+        user_role in ["manager", "admin", "owner"]
+    )
+    if not can_cancel:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to cancel operations"
+        )
+
+    # Check if operation can be cancelled
+    cancellable_statuses = [
+        OperationStatus.QUEUED,
+        OperationStatus.PENDING_APPROVAL,
+        OperationStatus.APPROVED
+    ]
+    if operation.status not in cancellable_statuses:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Operation cannot be cancelled. Status: {operation.status.value}"
+        )
+
+    # Update operation status
+    operation.status = OperationStatus.CANCELLED
+    await db.commit()
+
+    await audit_log(
+        AuditAction.WORKFLOW_OPERATION_CANCELLED,
+        current_user.email,
+        f"Cancelled workflow operation {operation_id}",
+        metadata={"operation_id": str(operation_id)}
+    )
+
+    return {"message": "Operation cancelled", "operation": operation.to_dict()}
+
+
+@router.post("/operations/{operation_id}/retry")
+async def retry_operation(
+    operation_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Retry a failed workflow operation."""
+
+    query = select(WorkflowOperation).options(
+        selectinload(WorkflowOperation.service_collection),
+        selectinload(WorkflowOperation.requested_by),
+        selectinload(WorkflowOperation.assigned_to)
+    ).where(WorkflowOperation.id == operation_id)
+
+    result = await db.execute(query)
+    operation = result.scalar_one_or_none()
+
+    if not operation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workflow operation not found"
+        )
+
+    # Check permissions - requester, managers, admins can retry
+    user_role = operation.service_collection.get_user_role(current_user.email)
+    can_retry = (
+        operation.requested_by_id == current_user.id or
+        user_role in ["manager", "admin", "owner"]
+    )
+    if not can_retry:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to retry operations"
+        )
+
+    # Check if operation is failed
+    if operation.status != OperationStatus.FAILED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Only failed operations can be retried. Status: {operation.status.value}"
+        )
+
+    # Reset operation status to approved for re-execution
+    operation.status = OperationStatus.APPROVED
+    operation.error_message = None
+    operation.execution_logs = (operation.execution_logs or "") + f"\nRetried at {datetime.utcnow().isoformat()}\n"
+    await db.commit()
+
+    # Queue for execution
+    await execute_workflow_operation.defer(str(operation_id))
+
+    await audit_log(
+        AuditAction.WORKFLOW_OPERATION_STARTED,
+        current_user.email,
+        f"Retried workflow operation {operation_id}",
+        metadata={"operation_id": str(operation_id)}
+    )
+
+    return {"message": "Operation queued for retry", "operation": operation.to_dict()}
 
 
 @router.get("/operations/{operation_id}/logs")

@@ -72,7 +72,7 @@ async def execute_workflow_operation(operation_id: str) -> Dict[str, Any]:
             
             # Log audit entry
             await audit_log(
-                db, operation.requested_by, "workflow.operation.executed",
+                db, operation.requested_by_email or "system", "workflow.operation.executed",
                 {
                     "operation_id": operation_id,
                     "operation_type": operation.operation_type.value,

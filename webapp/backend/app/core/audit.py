@@ -56,10 +56,12 @@ async def audit_log(
         Created audit log entry
     """
     # Create audit log entry
+    # Note: AuditLogEntry uses 'message' as the column name,
+    # but we accept 'description' as the parameter for better API ergonomics
     entry = AuditLogEntry(
         action=action,
         user_id=user_id,
-        description=description,
+        message=description,  # Map description parameter to message column
         severity=severity,
         resource_type=resource_type,
         resource_id=resource_id,
@@ -70,7 +72,7 @@ async def audit_log(
         request_id=request_id,
         correlation_id=correlation_id,
         session_id=session_id,
-        ip_address=ip_address,
+        source_ip=ip_address,  # Map ip_address to source_ip column
         user_agent=user_agent,
         error_code=error_code,
         error_message=error_message,
