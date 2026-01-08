@@ -10,6 +10,7 @@ from fastmcp import Context, FastMCP
 
 from .dns_analyzer import DNSAnalyzer
 from .notification_manager import NotificationManager
+from .server import VultrValidationError, VultrResourceNotFoundError
 
 
 def create_dns_mcp(vultr_client) -> FastMCP:
@@ -190,9 +191,34 @@ def create_dns_mcp(vultr_client) -> FastMCP:
         Returns:
             Created record information
         """
-        result = await vultr_client.create_record(
-            domain, record_type, name, data, ttl, priority
-        )
+        try:
+            result = await vultr_client.create_record(
+                domain, record_type, name, data, ttl, priority
+            )
+        except VultrValidationError as e:
+            # Provide clearer error messages for common cases
+            error_msg = str(e.message).lower() if hasattr(e, 'message') else str(e).lower()
+            display_name = name if name != "@" else domain
+
+            if "duplicate" in error_msg or "exists" in error_msg or "already" in error_msg:
+                raise ValueError(
+                    f"Record already exists: {record_type} record for '{display_name}' "
+                    f"with data '{data}' already exists in {domain}. "
+                    f"Use update_record to modify it, or delete_record first."
+                ) from None
+            elif "invalid" in error_msg:
+                raise ValueError(
+                    f"Invalid record: {e.message if hasattr(e, 'message') else e}"
+                ) from None
+            else:
+                raise ValueError(
+                    f"Failed to create {record_type} record for '{display_name}': "
+                    f"{e.message if hasattr(e, 'message') else e}"
+                ) from None
+        except VultrResourceNotFoundError:
+            raise ValueError(
+                f"Domain '{domain}' not found. Create the domain first with create_domain."
+            ) from None
 
         # Notify clients that records for this domain have changed
         if ctx is not None:
