@@ -98,92 +98,93 @@ def _create_vultr_server_internal(api_key: str | None = None, enable_oauth: bool
     # Initialize Vultr client
     vultr_client = VultrDNSServer(api_key)
 
-    # Mount all modules with appropriate prefixes
+    # Mount all modules with prefixes to avoid tool name collisions
+    # Tools become: prefix_toolname (e.g., instance_create, dns_create_record)
     dns_mcp = create_dns_mcp(vultr_client)
-    mcp.mount(dns_mcp)
+    mcp.mount(dns_mcp, prefix="dns")
 
     instances_mcp = create_instances_mcp(vultr_client)
-    mcp.mount(instances_mcp)
+    mcp.mount(instances_mcp, prefix="instance")
 
     ssh_keys_mcp = create_ssh_keys_mcp(vultr_client)
-    mcp.mount(ssh_keys_mcp)
+    mcp.mount(ssh_keys_mcp, prefix="ssh_key")
 
     backups_mcp = create_backups_mcp(vultr_client)
-    mcp.mount(backups_mcp)
+    mcp.mount(backups_mcp, prefix="backup")
 
     firewall_mcp = create_firewall_mcp(vultr_client)
-    mcp.mount(firewall_mcp)
+    mcp.mount(firewall_mcp, prefix="firewall")
 
     snapshots_mcp = create_snapshots_mcp(vultr_client)
-    mcp.mount(snapshots_mcp)
+    mcp.mount(snapshots_mcp, prefix="snapshot")
 
     regions_mcp = create_regions_mcp(vultr_client)
-    mcp.mount(regions_mcp)
+    mcp.mount(regions_mcp, prefix="region")
 
     reserved_ips_mcp = create_reserved_ips_mcp(vultr_client)
-    mcp.mount(reserved_ips_mcp)
+    mcp.mount(reserved_ips_mcp, prefix="reserved_ip")
 
     container_registry_mcp = create_container_registry_mcp(vultr_client)
-    mcp.mount(container_registry_mcp)
+    mcp.mount(container_registry_mcp, prefix="registry")
 
     block_storage_mcp = create_block_storage_mcp(vultr_client)
-    mcp.mount(block_storage_mcp)
+    mcp.mount(block_storage_mcp, prefix="block_storage")
 
     vpcs_mcp = create_vpcs_mcp(vultr_client)
-    mcp.mount(vpcs_mcp)
+    mcp.mount(vpcs_mcp, prefix="vpc")
 
     iso_mcp = create_iso_mcp(vultr_client)
-    mcp.mount(iso_mcp)
+    mcp.mount(iso_mcp, prefix="iso")
 
     os_mcp = create_os_mcp(vultr_client)
-    mcp.mount(os_mcp)
+    mcp.mount(os_mcp, prefix="os")
 
     plans_mcp = create_plans_mcp(vultr_client)
-    mcp.mount(plans_mcp)
+    mcp.mount(plans_mcp, prefix="plan")
 
     startup_scripts_mcp = create_startup_scripts_mcp(vultr_client)
-    mcp.mount(startup_scripts_mcp)
+    mcp.mount(startup_scripts_mcp, prefix="startup_script")
 
     billing_mcp = create_billing_mcp(vultr_client)
-    mcp.mount(billing_mcp)
+    mcp.mount(billing_mcp, prefix="billing")
 
     bare_metal_mcp = create_bare_metal_mcp(vultr_client)
-    mcp.mount(bare_metal_mcp)
+    mcp.mount(bare_metal_mcp, prefix="bare_metal")
 
     cdn_mcp = create_cdn_mcp(vultr_client)
-    mcp.mount(cdn_mcp)
+    mcp.mount(cdn_mcp, prefix="cdn")
 
     kubernetes_mcp = create_kubernetes_mcp(vultr_client)
-    mcp.mount(kubernetes_mcp)
+    mcp.mount(kubernetes_mcp, prefix="k8s")
 
     load_balancer_mcp = create_load_balancer_mcp(vultr_client)
-    mcp.mount(load_balancer_mcp)
+    mcp.mount(load_balancer_mcp, prefix="lb")
 
     managed_databases_mcp = create_managed_databases_mcp(vultr_client)
-    mcp.mount(managed_databases_mcp)
+    mcp.mount(managed_databases_mcp, prefix="db")
 
     marketplace_mcp = create_marketplace_mcp(vultr_client)
-    mcp.mount(marketplace_mcp)
+    mcp.mount(marketplace_mcp, prefix="marketplace")
 
     object_storage_mcp = create_object_storage_mcp(vultr_client)
-    mcp.mount(object_storage_mcp)
+    mcp.mount(object_storage_mcp, prefix="object_storage")
 
     serverless_inference_mcp = create_serverless_inference_mcp(vultr_client)
-    mcp.mount(serverless_inference_mcp)
+    mcp.mount(serverless_inference_mcp, prefix="inference")
 
     storage_gateways_mcp = create_storage_gateways_mcp(vultr_client)
-    mcp.mount(storage_gateways_mcp)
+    mcp.mount(storage_gateways_mcp, prefix="storage_gateway")
 
     subaccount_mcp = create_subaccount_mcp(vultr_client)
-    mcp.mount(subaccount_mcp)
+    mcp.mount(subaccount_mcp, prefix="subaccount")
 
     users_mcp = create_users_mcp(vultr_client)
-    mcp.mount(users_mcp)
+    mcp.mount(users_mcp, prefix="user")
 
     # Service Collections - Enterprise infrastructure organization
     service_collections_store = ServiceCollectionStore()
     service_collections_mcp = create_service_collections_mcp(vultr_client, service_collections_store)
-    mcp.mount(service_collections_mcp)
+    mcp.mount(service_collections_mcp, prefix="collection")
 
     return mcp
 
