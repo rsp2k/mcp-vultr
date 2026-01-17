@@ -9,6 +9,7 @@ from typing import Any
 from fastmcp import Context, FastMCP
 
 from .notification_manager import NotificationManager
+from .server import VultrResourceNotFoundError
 
 
 def create_firewall_mcp(vultr_client) -> FastMCP:
@@ -229,7 +230,23 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
             Firewall rule information
         """
         actual_id = await get_firewall_group_id(firewall_group_id)
-        return await vultr_client.get_firewall_rule(actual_id, firewall_rule_id)
+
+        try:
+            return await vultr_client.get_firewall_rule(actual_id, firewall_rule_id)
+        except VultrResourceNotFoundError:
+            # Rule not found - provide helpful error with available rules
+            rules = await vultr_client.list_firewall_rules(actual_id)
+            if rules:
+                rule_list = ", ".join(str(r.get("id")) for r in rules)
+                raise ValueError(
+                    f"Firewall rule '{firewall_rule_id}' not found in group '{firewall_group_id}'. "
+                    f"Available rule IDs: {rule_list}. Use firewall_list_rules to see full details."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Firewall rule '{firewall_rule_id}' not found. "
+                    f"Group '{firewall_group_id}' has no rules."
+                ) from None
 
     @mcp.tool
     async def create_rule(
@@ -297,7 +314,23 @@ def create_firewall_mcp(vultr_client) -> FastMCP:
             Status message confirming deletion
         """
         actual_id = await get_firewall_group_id(firewall_group_id)
-        await vultr_client.delete_firewall_rule(actual_id, firewall_rule_id)
+
+        try:
+            await vultr_client.delete_firewall_rule(actual_id, firewall_rule_id)
+        except VultrResourceNotFoundError:
+            # Rule not found - provide helpful error with available rules
+            rules = await vultr_client.list_firewall_rules(actual_id)
+            if rules:
+                rule_list = ", ".join(str(r.get("id")) for r in rules)
+                raise ValueError(
+                    f"Firewall rule '{firewall_rule_id}' not found in group '{firewall_group_id}'. "
+                    f"Available rule IDs: {rule_list}. Use firewall_list_rules to see full details."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Firewall rule '{firewall_rule_id}' not found. "
+                    f"Group '{firewall_group_id}' has no rules."
+                ) from None
 
         # Notify clients that firewall rules for this group have changed
         if ctx is not None:
