@@ -54,6 +54,37 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
 
         raise ValueError(f"Snapshot '{identifier}' not found")
 
+    # Helper function to get instance ID from label or hostname
+    async def get_instance_id(identifier: str) -> str:
+        """
+        Get the instance ID from a label, hostname, or UUID.
+
+        Args:
+            identifier: Instance label, hostname, or UUID
+
+        Returns:
+            The instance ID (UUID)
+
+        Raises:
+            ValueError: If the instance is not found
+        """
+        # If it looks like a UUID, return it as-is
+        if is_uuid_format(identifier):
+            return identifier
+
+        # Otherwise, search for it by label or hostname
+        instances = await vultr_client.list_instances()
+        for instance in instances:
+            if (
+                instance.get("label") == identifier
+                or instance.get("hostname") == identifier
+            ):
+                return instance["id"]
+
+        raise ValueError(
+            f"Instance '{identifier}' not found (searched by label and hostname)"
+        )
+
     # Snapshot resources
     @mcp.resource("snapshots://list")
     async def list_snapshots_resource() -> list[dict[str, Any]]:
@@ -84,7 +115,7 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
         """Create a snapshot from an instance.
 
         Args:
-            instance_id: The instance ID to snapshot
+            instance_id: The instance ID, label, or hostname (e.g., "web-server", "db.example.com", or UUID)
             description: Description for the snapshot (optional)
 
         Returns:
@@ -93,7 +124,9 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
         Note: Creating a snapshot may take several minutes depending on the instance size.
         The snapshot will appear with status 'pending' initially.
         """
-        result = await vultr_client.create_snapshot(instance_id, description)
+        # Resolve label/hostname to actual instance ID
+        actual_id = await get_instance_id(instance_id)
+        result = await vultr_client.create_snapshot(actual_id, description)
 
         # Notify clients that snapshot list has changed
         if ctx is not None:

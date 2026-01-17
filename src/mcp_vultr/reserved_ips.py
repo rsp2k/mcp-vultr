@@ -43,6 +43,42 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
                 return rip["id"]
         raise ValueError(f"Reserved IP {ip_address} not found")
 
+    # Helper function to check if a string looks like a UUID
+    def is_uuid_format(s: str) -> bool:
+        """Check if a string looks like a UUID."""
+        return bool(len(s) == 36 and s.count("-") == 4)
+
+    # Helper function to get instance ID from label or hostname
+    async def get_instance_id(identifier: str) -> str:
+        """
+        Get the instance ID from a label, hostname, or UUID.
+
+        Args:
+            identifier: Instance label, hostname, or UUID
+
+        Returns:
+            The instance ID (UUID)
+
+        Raises:
+            ValueError: If the instance is not found
+        """
+        # If it looks like a UUID, return it as-is
+        if is_uuid_format(identifier):
+            return identifier
+
+        # Otherwise, search for it by label or hostname
+        instances = await vultr_client.list_instances()
+        for instance in instances:
+            if (
+                instance.get("label") == identifier
+                or instance.get("hostname") == identifier
+            ):
+                return instance["id"]
+
+        raise ValueError(
+            f"Instance '{identifier}' not found (searched by label and hostname)"
+        )
+
     # Reserved IP resources
     @mcp.resource("reserved-ips://list")
     async def list_reserved_ips_resource() -> list[dict[str, Any]]:
@@ -165,7 +201,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
 
         Args:
             reserved_ip: The reserved IP address (e.g., "192.168.1.1" or "2001:db8::1")
-            instance_id: The instance ID to attach to
+            instance_id: The instance ID, label, or hostname (e.g., "web-server", "db.example.com", or UUID)
             ctx: FastMCP context for resource change notifications
 
         Returns:
@@ -178,7 +214,9 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
             reserved_ip_uuid = await get_reserved_ip_uuid(reserved_ip)
         else:
             reserved_ip_uuid = reserved_ip
-        await vultr_client.attach_reserved_ip(reserved_ip_uuid, instance_id)
+        # Resolve instance label/hostname to actual instance ID
+        actual_instance_id = await get_instance_id(instance_id)
+        await vultr_client.attach_reserved_ip(reserved_ip_uuid, actual_instance_id)
 
         # Notify clients that reserved IP list and specific IP have changed
         if ctx is not None:
@@ -225,7 +263,7 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
 
         Args:
             ip_address: The IP address to convert
-            instance_id: The instance ID that owns the IP
+            instance_id: The instance ID, label, or hostname that owns the IP (e.g., "web-server" or UUID)
             ctx: FastMCP context for resource change notifications
             label: Optional label for the reserved IP
 
@@ -236,8 +274,10 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
         destroying the instance. The IP will be converted to a reserved IP
         and remain attached to the instance.
         """
+        # Resolve instance label/hostname to actual instance ID
+        actual_instance_id = await get_instance_id(instance_id)
         result = await vultr_client.convert_instance_ip_to_reserved(
-            ip_address, instance_id, label
+            ip_address, actual_instance_id, label
         )
 
         # Notify clients that reserved IP list has changed
