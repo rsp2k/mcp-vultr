@@ -181,7 +181,7 @@ def create_instances_mcp(vultr_client) -> FastMCP:
         """Update an existing instance.
 
         Args:
-            instance_id: The instance ID to update
+            instance_id: The instance ID, label, or hostname (e.g., "web-server", "db.example.com", or UUID)
             ctx: FastMCP context for resource change notifications
             label: New label for the instance
             tag: New tag for the instance
@@ -195,8 +195,11 @@ def create_instances_mcp(vultr_client) -> FastMCP:
         Returns:
             Updated instance information
         """
+        # Resolve label/hostname to actual instance ID
+        actual_id = await get_instance_id(instance_id)
+
         result = await vultr_client.update_instance(
-            instance_id=instance_id,
+            instance_id=actual_id,
             label=label,
             tag=tag,
             plan=plan,
