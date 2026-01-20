@@ -10,6 +10,7 @@ from fastmcp import Context, FastMCP
 
 from .kubernetes_analyzer import KubernetesAnalyzer
 from .notification_manager import NotificationManager
+from .server import VultrResourceNotFoundError
 
 
 def create_kubernetes_mcp(vultr_client) -> FastMCP:
@@ -432,7 +433,21 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         cluster_id, nodepool_id = await get_nodepool_id(
             cluster_identifier, nodepool_identifier
         )
-        return await vultr_client.get_kubernetes_node_pool(cluster_id, nodepool_id)
+        try:
+            return await vultr_client.get_kubernetes_node_pool(cluster_id, nodepool_id)
+        except VultrResourceNotFoundError:
+            nodepools = await vultr_client.list_kubernetes_node_pools(cluster_id)
+            if nodepools:
+                pool_list = ", ".join(f"{p.get('label', 'unnamed')} ({p.get('id')})" for p in nodepools)
+                raise ValueError(
+                    f"Node pool '{nodepool_identifier}' not found in cluster '{cluster_identifier}'. "
+                    f"Available node pools: {pool_list}"
+                ) from None
+            else:
+                raise ValueError(
+                    f"Node pool '{nodepool_identifier}' not found. "
+                    f"Cluster '{cluster_identifier}' has no node pools."
+                ) from None
 
     @mcp.tool()
     async def create_kubernetes_node_pool(
@@ -561,7 +576,21 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         cluster_id, nodepool_id = await get_nodepool_id(
             cluster_identifier, nodepool_identifier
         )
-        await vultr_client.delete_kubernetes_node_pool(cluster_id, nodepool_id)
+        try:
+            await vultr_client.delete_kubernetes_node_pool(cluster_id, nodepool_id)
+        except VultrResourceNotFoundError:
+            nodepools = await vultr_client.list_kubernetes_node_pools(cluster_id)
+            if nodepools:
+                pool_list = ", ".join(f"{p.get('label', 'unnamed')} ({p.get('id')})" for p in nodepools)
+                raise ValueError(
+                    f"Node pool '{nodepool_identifier}' not found in cluster '{cluster_identifier}'. "
+                    f"Available node pools: {pool_list}"
+                ) from None
+            else:
+                raise ValueError(
+                    f"Node pool '{nodepool_identifier}' not found. "
+                    f"Cluster '{cluster_identifier}' has no node pools."
+                ) from None
 
         # Notify clients that node pools for this cluster have changed
         if ctx is not None:
@@ -614,7 +643,21 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         cluster_id, nodepool_id, node_id = await get_node_id(
             cluster_identifier, nodepool_identifier, node_identifier
         )
-        return await vultr_client.get_kubernetes_node(cluster_id, nodepool_id, node_id)
+        try:
+            return await vultr_client.get_kubernetes_node(cluster_id, nodepool_id, node_id)
+        except VultrResourceNotFoundError:
+            nodes = await vultr_client.list_kubernetes_nodes(cluster_id, nodepool_id)
+            if nodes:
+                node_list = ", ".join(f"{n.get('label', 'unnamed')} ({n.get('id')})" for n in nodes)
+                raise ValueError(
+                    f"Node '{node_identifier}' not found in node pool '{nodepool_identifier}'. "
+                    f"Available nodes: {node_list}"
+                ) from None
+            else:
+                raise ValueError(
+                    f"Node '{node_identifier}' not found. "
+                    f"Node pool '{nodepool_identifier}' has no nodes."
+                ) from None
 
     @mcp.tool()
     async def delete_kubernetes_node(
@@ -639,7 +682,21 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         cluster_id, nodepool_id, node_id = await get_node_id(
             cluster_identifier, nodepool_identifier, node_identifier
         )
-        await vultr_client.delete_kubernetes_node(cluster_id, nodepool_id, node_id)
+        try:
+            await vultr_client.delete_kubernetes_node(cluster_id, nodepool_id, node_id)
+        except VultrResourceNotFoundError:
+            nodes = await vultr_client.list_kubernetes_nodes(cluster_id, nodepool_id)
+            if nodes:
+                node_list = ", ".join(f"{n.get('label', 'unnamed')} ({n.get('id')})" for n in nodes)
+                raise ValueError(
+                    f"Node '{node_identifier}' not found in node pool '{nodepool_identifier}'. "
+                    f"Available nodes: {node_list}"
+                ) from None
+            else:
+                raise ValueError(
+                    f"Node '{node_identifier}' not found. "
+                    f"Node pool '{nodepool_identifier}' has no nodes."
+                ) from None
 
         # Notify clients that node pools for this cluster have changed
         if ctx is not None:
@@ -671,7 +728,21 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
         cluster_id, nodepool_id, node_id = await get_node_id(
             cluster_identifier, nodepool_identifier, node_identifier
         )
-        await vultr_client.recycle_kubernetes_node(cluster_id, nodepool_id, node_id)
+        try:
+            await vultr_client.recycle_kubernetes_node(cluster_id, nodepool_id, node_id)
+        except VultrResourceNotFoundError:
+            nodes = await vultr_client.list_kubernetes_nodes(cluster_id, nodepool_id)
+            if nodes:
+                node_list = ", ".join(f"{n.get('label', 'unnamed')} ({n.get('id')})" for n in nodes)
+                raise ValueError(
+                    f"Node '{node_identifier}' not found in node pool '{nodepool_identifier}'. "
+                    f"Available nodes: {node_list}"
+                ) from None
+            else:
+                raise ValueError(
+                    f"Node '{node_identifier}' not found. "
+                    f"Node pool '{nodepool_identifier}' has no nodes."
+                ) from None
         return {
             "status": "success",
             "message": f"Node {node_identifier} recycling initiated",

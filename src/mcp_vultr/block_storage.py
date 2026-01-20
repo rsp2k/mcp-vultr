@@ -9,6 +9,7 @@ from typing import Any
 from fastmcp import Context, FastMCP
 
 from .notification_manager import NotificationManager
+from .server import VultrResourceNotFoundError
 
 
 def create_block_storage_mcp(vultr_client) -> FastMCP:
@@ -169,7 +170,23 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
             Success confirmation
         """
         volume_id = await get_block_storage_id(volume_identifier)
-        await vultr_client.delete_block_storage(volume_id)
+        try:
+            await vultr_client.delete_block_storage(volume_id)
+        except VultrResourceNotFoundError:
+            volumes = await vultr_client.list_block_storage()
+            if volumes:
+                vol_list = ", ".join(
+                    f"{v.get('label', 'unnamed')} ({v.get('id')})" for v in volumes
+                )
+                raise ValueError(
+                    f"Block storage '{volume_identifier}' not found. "
+                    f"Available volumes: {vol_list}."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Block storage '{volume_identifier}' not found. "
+                    f"No block storage volumes exist in this account."
+                ) from None
 
         # Notify clients that block storage list has changed
         if ctx is not None:

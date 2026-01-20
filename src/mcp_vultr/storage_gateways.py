@@ -9,6 +9,8 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+from .server import VultrResourceNotFoundError
+
 
 def create_storage_gateways_mcp(vultr_client) -> FastMCP:
     """
@@ -213,7 +215,25 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
             Success confirmation
         """
         gateway_id = await get_storage_gateway_id(gateway_identifier)
-        await vultr_client.delete_storage_gateway_export(gateway_id, export_id)
+        try:
+            await vultr_client.delete_storage_gateway_export(gateway_id, export_id)
+        except VultrResourceNotFoundError:
+            # Get gateway info to list available exports
+            gateway = await vultr_client.get_storage_gateway(gateway_id)
+            exports = gateway.get("exports", [])
+            if exports:
+                export_list = ", ".join(
+                    f"{e.get('label', 'unnamed')} (ID: {e.get('id')})" for e in exports
+                )
+                raise ValueError(
+                    f"Export ID {export_id} not found in gateway '{gateway_identifier}'. "
+                    f"Available exports: {export_list}."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Export ID {export_id} not found. "
+                    f"Gateway '{gateway_identifier}' has no exports."
+                ) from None
         return {
             "success": True,
             "message": f"Export {export_id} deleted successfully",

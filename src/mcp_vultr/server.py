@@ -6,6 +6,7 @@ for managing DNS records through the Vultr API.
 """
 
 import ipaddress
+import json
 import os
 import time
 from typing import Any
@@ -236,10 +237,60 @@ class VultrDNSServer:
         return await self._make_request("DELETE", f"/domains/{domain}")
 
     # DNS Record Management Methods
-    async def list_records(self, domain: str) -> list[dict[str, Any]]:
-        """List all DNS records for a domain."""
-        result = await self._make_request("GET", f"/domains/{domain}/records")
-        return result.get("records", [])
+    async def list_records(
+        self,
+        domain: str,
+        per_page: int | None = None,
+        cursor: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        List all DNS records for a domain with automatic pagination.
+
+        By default, fetches all records by paginating through results.
+        Use per_page and cursor for manual pagination control.
+
+        Args:
+            domain: The domain name
+            per_page: Records per page (1-500, default: 500 for auto-pagination)
+            cursor: Cursor for manual pagination (from meta.links.next)
+
+        Returns:
+            List of all DNS records for the domain
+        """
+        # If cursor is provided, return single page (manual pagination mode)
+        if cursor is not None:
+            params = {"cursor": cursor}
+            if per_page is not None:
+                params["per_page"] = min(per_page, 500)
+            result = await self._make_request(
+                "GET", f"/domains/{domain}/records", params=params
+            )
+            return result.get("records", [])
+
+        # Auto-pagination mode: fetch all records
+        all_records = []
+        page_size = per_page if per_page is not None else 500  # Max per page
+        page_size = min(page_size, 500)
+
+        params = {"per_page": page_size}
+        while True:
+            result = await self._make_request(
+                "GET", f"/domains/{domain}/records", params=params
+            )
+            records = result.get("records", [])
+            all_records.extend(records)
+
+            # Check for next page
+            meta = result.get("meta", {})
+            links = meta.get("links", {})
+            next_cursor = links.get("next")
+
+            if not next_cursor or next_cursor == "":
+                break
+
+            params["cursor"] = next_cursor
+
+        return all_records
 
     async def get_record(self, domain: str, record_id: str) -> dict[str, Any]:
         """Get a specific DNS record."""
@@ -291,6 +342,136 @@ class VultrDNSServer:
         return await self._make_request(
             "DELETE", f"/domains/{domain}/records/{record_id}"
         )
+
+    async def validate_record(
+        self,
+        record_type: str,
+        name: str,
+        data: str,
+        ttl: int | None = None,
+        priority: int | None = None,
+    ) -> dict[str, Any]:
+        """
+        Validate DNS record parameters before creation.
+
+        This method performs local validation without making API calls.
+
+        Args:
+            record_type: Record type (A, AAAA, CNAME, MX, TXT, NS, SRV)
+            name: Record name/subdomain
+            data: Record data/value
+            ttl: Time to live in seconds (optional)
+            priority: Priority for MX/SRV records (optional)
+
+        Returns:
+            Validation result dict with 'valid', 'errors', 'warnings', 'suggestions'
+        """
+        validation_result = {
+            "valid": True,
+            "errors": [],
+            "warnings": [],
+            "suggestions": [],
+        }
+
+        # Validate record type
+        valid_types = ["A", "AAAA", "CNAME", "MX", "TXT", "NS", "SRV", "CAA"]
+        record_type_upper = record_type.upper()
+        if record_type_upper not in valid_types:
+            validation_result["valid"] = False
+            validation_result["errors"].append(
+                f"Invalid record type. Must be one of: {', '.join(valid_types)}"
+            )
+
+        # Validate TTL
+        if ttl is not None:
+            if ttl < 60 or ttl > 86400:
+                validation_result["warnings"].append(
+                    "TTL should be between 60 and 86400 seconds"
+                )
+            elif ttl < 300:
+                validation_result["warnings"].append(
+                    "Low TTL values may impact DNS performance"
+                )
+
+        # Record-specific validation
+        if record_type_upper == "A":
+            try:
+                ipaddress.IPv4Address(data)
+            except ipaddress.AddressValueError:
+                validation_result["valid"] = False
+                validation_result["errors"].append("Invalid IPv4 address format")
+
+        elif record_type_upper == "AAAA":
+            try:
+                ipv6_addr = ipaddress.IPv6Address(data)
+                # Add helpful suggestions for IPv6 addresses
+                if ipv6_addr.ipv4_mapped:
+                    validation_result["suggestions"].append(
+                        "Consider using a native IPv6 address instead of IPv4-mapped format"
+                    )
+                elif ipv6_addr.compressed != data:
+                    validation_result["suggestions"].append(
+                        f"Consider using compressed format: {ipv6_addr.compressed}"
+                    )
+
+                # Check for common special addresses
+                if ipv6_addr.is_loopback:
+                    validation_result["warnings"].append(
+                        "This is the IPv6 loopback address (::1)"
+                    )
+                elif ipv6_addr.is_link_local:
+                    validation_result["warnings"].append(
+                        "This is an IPv6 link-local address (fe80::/10)"
+                    )
+                elif ipv6_addr.is_private:
+                    validation_result["warnings"].append(
+                        "This is an IPv6 private address"
+                    )
+
+            except ipaddress.AddressValueError as e:
+                validation_result["valid"] = False
+                validation_result["errors"].append(f"Invalid IPv6 address: {str(e)}")
+
+        elif record_type_upper == "CNAME":
+            if name == "@" or name == "":
+                validation_result["valid"] = False
+                validation_result["errors"].append(
+                    "CNAME records cannot be used for root domain (@)"
+                )
+
+        elif record_type_upper == "MX":
+            if priority is None:
+                validation_result["valid"] = False
+                validation_result["errors"].append(
+                    "MX records require a priority value"
+                )
+            elif priority < 0 or priority > 65535:
+                validation_result["valid"] = False
+                validation_result["errors"].append(
+                    "MX priority must be between 0 and 65535"
+                )
+
+        elif record_type_upper == "SRV":
+            if priority is None:
+                validation_result["valid"] = False
+                validation_result["errors"].append(
+                    "SRV records require a priority value"
+                )
+            srv_parts = data.split()
+            if len(srv_parts) != 3:
+                validation_result["valid"] = False
+                validation_result["errors"].append(
+                    "SRV data must be in format: 'weight port target'"
+                )
+
+        return {
+            "record_type": record_type_upper,
+            "name": name,
+            "data": data,
+            "ttl": ttl,
+            "priority": priority,
+            "validation": validation_result,
+        }
 
     # Zone File Management Methods
     async def export_zone_file(self, domain: str) -> str:
@@ -5014,14 +5195,35 @@ def create_mcp_server(api_key: str | None = None) -> Server:
             ),
             Tool(
                 name="list_dns_records",
-                description="List all DNS records for a specific domain",
+                description="List DNS records for a domain. Supports pagination and compact zone file format.",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "domain": {
                             "type": "string",
                             "description": "The domain name (e.g., 'example.com')",
-                        }
+                        },
+                        "format": {
+                            "type": "string",
+                            "enum": ["json", "zone"],
+                            "description": "Output format: 'json' (full details) or 'zone' (compact zone file format, ~10x smaller)",
+                            "default": "zone",
+                        },
+                        "per_page": {
+                            "type": "integer",
+                            "description": "Records per page (1-500, default: 100). Omit to fetch all records.",
+                            "minimum": 1,
+                            "maximum": 500,
+                        },
+                        "cursor": {
+                            "type": "string",
+                            "description": "Pagination cursor from previous response. Omit for first page.",
+                        },
+                        "record_type": {
+                            "type": "string",
+                            "enum": ["A", "AAAA", "CNAME", "MX", "TXT", "NS", "SRV"],
+                            "description": "Filter by record type (optional)",
+                        },
                     },
                     "required": ["domain"],
                 },
@@ -5180,18 +5382,18 @@ def create_mcp_server(api_key: str | None = None) -> Server:
         try:
             if name == "list_dns_domains":
                 domains = await vultr_client.list_domains()
-                return [TextContent(type="text", text=str(domains))]
+                return [TextContent(type="text", text=json.dumps(domains))]
 
             elif name == "get_dns_domain":
                 domain = arguments["domain"]
                 result = await vultr_client.get_domain(domain)
-                return [TextContent(type="text", text=str(result))]
+                return [TextContent(type="text", text=json.dumps(result))]
 
             elif name == "create_dns_domain":
                 domain = arguments["domain"]
                 ip = arguments["ip"]
                 result = await vultr_client.create_domain(domain, ip)
-                return [TextContent(type="text", text=str(result))]
+                return [TextContent(type="text", text=json.dumps(result))]
 
             elif name == "delete_dns_domain":
                 domain = arguments["domain"]
@@ -5204,14 +5406,44 @@ def create_mcp_server(api_key: str | None = None) -> Server:
 
             elif name == "list_dns_records":
                 domain = arguments["domain"]
-                records = await vultr_client.list_records(domain)
-                return [TextContent(type="text", text=str(records))]
+                output_format = arguments.get("format", "zone")
+                per_page = arguments.get("per_page")
+                cursor = arguments.get("cursor")
+                record_type_filter = arguments.get("record_type")
+
+                # Fetch records with pagination if specified
+                records = await vultr_client.list_records(domain, per_page, cursor)
+
+                # Apply record type filter if specified
+                if record_type_filter:
+                    records = [r for r in records if r.get("type") == record_type_filter]
+
+                # Format output
+                if output_format == "zone":
+                    # Compact zone file format
+                    lines = [f"; DNS records for {domain} ({len(records)} records)"]
+                    for r in records:
+                        name = r.get("name") or "@"
+                        ttl = r.get("ttl", 300)
+                        rtype = r.get("type", "A")
+                        data = r.get("data", "")
+                        priority = r.get("priority", -1)
+
+                        if rtype in ("MX", "SRV") and priority >= 0:
+                            lines.append(f"{name}\t{ttl}\tIN\t{rtype}\t{priority}\t{data}")
+                        else:
+                            lines.append(f"{name}\t{ttl}\tIN\t{rtype}\t{data}")
+
+                    return [TextContent(type="text", text="\n".join(lines))]
+                else:
+                    # Full JSON format
+                    return [TextContent(type="text", text=json.dumps(records))]
 
             elif name == "get_dns_record":
                 domain = arguments["domain"]
                 record_id = arguments["record_id"]
                 result = await vultr_client.get_record(domain, record_id)
-                return [TextContent(type="text", text=str(result))]
+                return [TextContent(type="text", text=json.dumps(result))]
 
             elif name == "create_dns_record":
                 domain = arguments["domain"]
@@ -5223,7 +5455,7 @@ def create_mcp_server(api_key: str | None = None) -> Server:
                 result = await vultr_client.create_record(
                     domain, record_type, name, data, ttl, priority
                 )
-                return [TextContent(type="text", text=str(result))]
+                return [TextContent(type="text", text=json.dumps(result))]
 
             elif name == "update_dns_record":
                 domain = arguments["domain"]
@@ -5236,7 +5468,7 @@ def create_mcp_server(api_key: str | None = None) -> Server:
                 result = await vultr_client.update_record(
                     domain, record_id, record_type, name, data, ttl, priority
                 )
-                return [TextContent(type="text", text=str(result))]
+                return [TextContent(type="text", text=json.dumps(result))]
 
             elif name == "delete_dns_record":
                 domain = arguments["domain"]
@@ -5366,7 +5598,7 @@ def create_mcp_server(api_key: str | None = None) -> Server:
                     "priority": priority,
                     "validation": validation_result,
                 }
-                return [TextContent(type="text", text=str(result))]
+                return [TextContent(type="text", text=json.dumps(result))]
 
             elif name == "analyze_dns_records":
                 domain = arguments["domain"]
@@ -5445,7 +5677,7 @@ def create_mcp_server(api_key: str | None = None) -> Server:
                     "potential_issues": issues,
                     "records_detail": records,
                 }
-                return [TextContent(type="text", text=str(result))]
+                return [TextContent(type="text", text=json.dumps(result))]
 
             else:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]

@@ -9,6 +9,7 @@ from typing import Any
 from fastmcp import Context, FastMCP
 
 from .notification_manager import NotificationManager
+from .server import VultrResourceNotFoundError
 
 
 def create_vpcs_mcp(vultr_client) -> FastMCP:
@@ -197,7 +198,23 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
             Success confirmation
         """
         vpc_id = await get_vpc_id(vpc_identifier)
-        await vultr_client.delete_vpc(vpc_id)
+        try:
+            await vultr_client.delete_vpc(vpc_id)
+        except VultrResourceNotFoundError:
+            vpcs = await vultr_client.list_vpcs()
+            if vpcs:
+                vpc_list = ", ".join(
+                    f"{v.get('description', 'unnamed')} ({v.get('id')})" for v in vpcs
+                )
+                raise ValueError(
+                    f"VPC '{vpc_identifier}' not found. "
+                    f"Available VPCs: {vpc_list}."
+                ) from None
+            else:
+                raise ValueError(
+                    f"VPC '{vpc_identifier}' not found. "
+                    f"No VPCs exist in this account."
+                ) from None
 
         # Notify clients that VPC list has changed
         if ctx is not None:
@@ -271,7 +288,23 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
             Success confirmation
         """
         vpc2_id = await get_vpc2_id(vpc2_identifier)
-        await vultr_client.delete_vpc2(vpc2_id)
+        try:
+            await vultr_client.delete_vpc2(vpc2_id)
+        except VultrResourceNotFoundError:
+            vpc2s = await vultr_client.list_vpc2s()
+            if vpc2s:
+                vpc2_list = ", ".join(
+                    f"{v.get('description', 'unnamed')} ({v.get('id')})" for v in vpc2s
+                )
+                raise ValueError(
+                    f"VPC 2.0 '{vpc2_identifier}' not found. "
+                    f"Available VPC 2.0s: {vpc2_list}."
+                ) from None
+            else:
+                raise ValueError(
+                    f"VPC 2.0 '{vpc2_identifier}' not found. "
+                    f"No VPC 2.0 networks exist in this account."
+                ) from None
         return {
             "success": True,
             "message": "VPC 2.0 deleted successfully",

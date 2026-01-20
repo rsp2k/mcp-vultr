@@ -11,6 +11,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from .database_analyzer import DatabaseAnalyzer
+from .server import VultrResourceNotFoundError
 
 
 def create_managed_databases_mcp(vultr_client) -> FastMCP:
@@ -300,7 +301,21 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             User information including permissions
         """
         actual_id = await get_database_id(database_id)
-        return await vultr_client.get_database_user(actual_id, username)
+        try:
+            return await vultr_client.get_database_user(actual_id, username)
+        except VultrResourceNotFoundError:
+            users = await vultr_client.list_database_users(actual_id)
+            if users:
+                user_list = ", ".join(u.get("username", "unknown") for u in users)
+                raise ValueError(
+                    f"User '{username}' not found in database '{database_id}'. "
+                    f"Available users: {user_list}. Use db_list_users to see full details."
+                ) from None
+            else:
+                raise ValueError(
+                    f"User '{username}' not found. "
+                    f"Database '{database_id}' has no users."
+                ) from None
 
     @mcp.tool
     async def update_user(
@@ -321,12 +336,26 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             Updated user information
         """
         actual_id = await get_database_id(database_id)
-        return await vultr_client.update_database_user(
-            database_id=actual_id,
-            username=username,
-            password=password,
-            access_level=access_level,
-        )
+        try:
+            return await vultr_client.update_database_user(
+                database_id=actual_id,
+                username=username,
+                password=password,
+                access_level=access_level,
+            )
+        except VultrResourceNotFoundError:
+            users = await vultr_client.list_database_users(actual_id)
+            if users:
+                user_list = ", ".join(u.get("username", "unknown") for u in users)
+                raise ValueError(
+                    f"User '{username}' not found in database '{database_id}'. "
+                    f"Available users: {user_list}. Use db_list_users to see full details."
+                ) from None
+            else:
+                raise ValueError(
+                    f"User '{username}' not found. "
+                    f"Database '{database_id}' has no users."
+                ) from None
 
     @mcp.tool
     async def delete_user(database_id: str, username: str) -> dict[str, str]:
@@ -340,7 +369,21 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             Status message confirming deletion
         """
         actual_id = await get_database_id(database_id)
-        await vultr_client.delete_database_user(actual_id, username)
+        try:
+            await vultr_client.delete_database_user(actual_id, username)
+        except VultrResourceNotFoundError:
+            users = await vultr_client.list_database_users(actual_id)
+            if users:
+                user_list = ", ".join(u.get("username", "unknown") for u in users)
+                raise ValueError(
+                    f"User '{username}' not found in database '{database_id}'. "
+                    f"Available users: {user_list}. Use db_list_users to see full details."
+                ) from None
+            else:
+                raise ValueError(
+                    f"User '{username}' not found. "
+                    f"Database '{database_id}' has no users."
+                ) from None
         return {"status": "success", "message": f"User {username} deleted successfully"}
 
     # Database Access Control (Valkey/Redis)
@@ -420,7 +463,21 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             Logical database information
         """
         actual_id = await get_database_id(database_id)
-        return await vultr_client.get_logical_database(actual_id, db_name)
+        try:
+            return await vultr_client.get_logical_database(actual_id, db_name)
+        except VultrResourceNotFoundError:
+            dbs = await vultr_client.list_logical_databases(actual_id)
+            if dbs:
+                db_list = ", ".join(d.get("name", "unknown") for d in dbs)
+                raise ValueError(
+                    f"Logical database '{db_name}' not found in '{database_id}'. "
+                    f"Available databases: {db_list}. Use db_list_databases to see full details."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Logical database '{db_name}' not found. "
+                    f"Database '{database_id}' has no logical databases."
+                ) from None
 
     @mcp.tool
     async def delete_logical_database(database_id: str, db_name: str) -> dict[str, str]:
@@ -434,7 +491,21 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             Status message confirming deletion
         """
         actual_id = await get_database_id(database_id)
-        await vultr_client.delete_logical_database(actual_id, db_name)
+        try:
+            await vultr_client.delete_logical_database(actual_id, db_name)
+        except VultrResourceNotFoundError:
+            dbs = await vultr_client.list_logical_databases(actual_id)
+            if dbs:
+                db_list = ", ".join(d.get("name", "unknown") for d in dbs)
+                raise ValueError(
+                    f"Logical database '{db_name}' not found in '{database_id}'. "
+                    f"Available databases: {db_list}. Use db_list_databases to see full details."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Logical database '{db_name}' not found. "
+                    f"Database '{database_id}' has no logical databases."
+                ) from None
         return {
             "status": "success",
             "message": f"Logical database {db_name} deleted successfully",
@@ -493,7 +564,21 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             Connection pool information
         """
         actual_id = await get_database_id(database_id)
-        return await vultr_client.get_connection_pool(actual_id, pool_name)
+        try:
+            return await vultr_client.get_connection_pool(actual_id, pool_name)
+        except VultrResourceNotFoundError:
+            pools = await vultr_client.list_connection_pools(actual_id)
+            if pools:
+                pool_list = ", ".join(p.get("name", "unknown") for p in pools)
+                raise ValueError(
+                    f"Connection pool '{pool_name}' not found in database '{database_id}'. "
+                    f"Available pools: {pool_list}. Use db_list_connection_pools to see full details."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Connection pool '{pool_name}' not found. "
+                    f"Database '{database_id}' has no connection pools."
+                ) from None
 
     @mcp.tool
     async def update_connection_pool(
@@ -518,14 +603,28 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             Updated connection pool information
         """
         actual_id = await get_database_id(database_id)
-        return await vultr_client.update_connection_pool(
-            database_id=actual_id,
-            pool_name=pool_name,
-            database=database,
-            username=username,
-            mode=mode,
-            size=size,
-        )
+        try:
+            return await vultr_client.update_connection_pool(
+                database_id=actual_id,
+                pool_name=pool_name,
+                database=database,
+                username=username,
+                mode=mode,
+                size=size,
+            )
+        except VultrResourceNotFoundError:
+            pools = await vultr_client.list_connection_pools(actual_id)
+            if pools:
+                pool_list = ", ".join(p.get("name", "unknown") for p in pools)
+                raise ValueError(
+                    f"Connection pool '{pool_name}' not found in database '{database_id}'. "
+                    f"Available pools: {pool_list}. Use db_list_connection_pools to see full details."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Connection pool '{pool_name}' not found. "
+                    f"Database '{database_id}' has no connection pools."
+                ) from None
 
     @mcp.tool
     async def delete_connection_pool(
@@ -541,7 +640,21 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             Status message confirming deletion
         """
         actual_id = await get_database_id(database_id)
-        await vultr_client.delete_connection_pool(actual_id, pool_name)
+        try:
+            await vultr_client.delete_connection_pool(actual_id, pool_name)
+        except VultrResourceNotFoundError:
+            pools = await vultr_client.list_connection_pools(actual_id)
+            if pools:
+                pool_list = ", ".join(p.get("name", "unknown") for p in pools)
+                raise ValueError(
+                    f"Connection pool '{pool_name}' not found in database '{database_id}'. "
+                    f"Available pools: {pool_list}. Use db_list_connection_pools to see full details."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Connection pool '{pool_name}' not found. "
+                    f"Database '{database_id}' has no connection pools."
+                ) from None
         return {
             "status": "success",
             "message": f"Connection pool {pool_name} deleted successfully",
@@ -856,7 +969,21 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             Kafka topic information
         """
         actual_id = await get_database_id(database_id)
-        return await vultr_client.get_kafka_topic(actual_id, topic_name)
+        try:
+            return await vultr_client.get_kafka_topic(actual_id, topic_name)
+        except VultrResourceNotFoundError:
+            topics = await vultr_client.list_kafka_topics(actual_id)
+            if topics:
+                topic_list = ", ".join(t.get("name", "unknown") for t in topics)
+                raise ValueError(
+                    f"Kafka topic '{topic_name}' not found in database '{database_id}'. "
+                    f"Available topics: {topic_list}. Use db_list_kafka_topics to see full details."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Kafka topic '{topic_name}' not found. "
+                    f"Database '{database_id}' has no Kafka topics."
+                ) from None
 
     @mcp.tool
     async def update_kafka_topic(
@@ -881,14 +1008,28 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             Updated topic information
         """
         actual_id = await get_database_id(database_id)
-        return await vultr_client.update_kafka_topic(
-            database_id=actual_id,
-            topic_name=topic_name,
-            partitions=partitions,
-            replication=replication,
-            retention_hours=retention_hours,
-            retention_bytes=retention_bytes,
-        )
+        try:
+            return await vultr_client.update_kafka_topic(
+                database_id=actual_id,
+                topic_name=topic_name,
+                partitions=partitions,
+                replication=replication,
+                retention_hours=retention_hours,
+                retention_bytes=retention_bytes,
+            )
+        except VultrResourceNotFoundError:
+            topics = await vultr_client.list_kafka_topics(actual_id)
+            if topics:
+                topic_list = ", ".join(t.get("name", "unknown") for t in topics)
+                raise ValueError(
+                    f"Kafka topic '{topic_name}' not found in database '{database_id}'. "
+                    f"Available topics: {topic_list}. Use db_list_kafka_topics to see full details."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Kafka topic '{topic_name}' not found. "
+                    f"Database '{database_id}' has no Kafka topics."
+                ) from None
 
     @mcp.tool
     async def delete_kafka_topic(database_id: str, topic_name: str) -> dict[str, str]:
@@ -902,7 +1043,21 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
             Status message confirming deletion
         """
         actual_id = await get_database_id(database_id)
-        await vultr_client.delete_kafka_topic(actual_id, topic_name)
+        try:
+            await vultr_client.delete_kafka_topic(actual_id, topic_name)
+        except VultrResourceNotFoundError:
+            topics = await vultr_client.list_kafka_topics(actual_id)
+            if topics:
+                topic_list = ", ".join(t.get("name", "unknown") for t in topics)
+                raise ValueError(
+                    f"Kafka topic '{topic_name}' not found in database '{database_id}'. "
+                    f"Available topics: {topic_list}. Use db_list_kafka_topics to see full details."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Kafka topic '{topic_name}' not found. "
+                    f"Database '{database_id}' has no Kafka topics."
+                ) from None
         return {
             "status": "success",
             "message": f"Kafka topic {topic_name} deleted successfully",

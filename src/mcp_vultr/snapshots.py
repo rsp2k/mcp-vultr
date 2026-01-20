@@ -9,6 +9,7 @@ from typing import Any
 from fastmcp import Context, FastMCP
 
 from .notification_manager import NotificationManager
+from .server import VultrResourceNotFoundError
 
 
 def create_snapshots_mcp(vultr_client) -> FastMCP:
@@ -201,7 +202,23 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
         Warning: This action cannot be undone!
         """
         actual_id = await get_snapshot_id(snapshot_id)
-        await vultr_client.delete_snapshot(actual_id)
+        try:
+            await vultr_client.delete_snapshot(actual_id)
+        except VultrResourceNotFoundError:
+            snapshots = await vultr_client.list_snapshots()
+            if snapshots:
+                snap_list = ", ".join(
+                    f"{s.get('description', 'unnamed')} ({s.get('id')})" for s in snapshots
+                )
+                raise ValueError(
+                    f"Snapshot '{snapshot_id}' not found. "
+                    f"Available snapshots: {snap_list}."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Snapshot '{snapshot_id}' not found. "
+                    f"No snapshots exist in this account."
+                ) from None
 
         # Notify clients that snapshot list has changed
         if ctx is not None:

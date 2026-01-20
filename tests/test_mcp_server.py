@@ -192,29 +192,31 @@ class TestMCPTools:
 
     @pytest.mark.asyncio
     async def test_list_dns_records_tool(self, mock_vultr_client):
-        """Test the list_dns_records MCP tool."""
-        # Mock the response
+        """Test the list_dns_records MCP tool with zone format (default)."""
+        # Mock the response with ttl for zone format
         mock_vultr_client.list_records.return_value = [
-            {"id": "rec1", "type": "A", "name": "www", "data": "192.168.1.1"},
-            {"id": "rec2", "type": "MX", "name": "@", "data": "mail.example.com"}
+            {"id": "rec1", "type": "A", "name": "www", "data": "192.168.1.1", "ttl": 300, "priority": -1},
+            {"id": "rec2", "type": "MX", "name": "", "data": "mail.example.com", "ttl": 300, "priority": 10}
         ]
 
         with patch("mcp_vultr.server.VultrDNSServer", return_value=mock_vultr_client):
             server = create_mcp_server("test-api-key")
 
-            # Call the tool using proper MCP request
+            # Call the tool using proper MCP request (defaults to zone format)
             result = await call_mcp_tool(server, "list_dns_records", {"domain": "example.com"})
-            
+
             # Verify the result
             assert result is not None
             assert not result.isError
             assert len(result.content) == 1
             assert result.content[0].type == "text"
+            # Zone format output
             assert "www" in result.content[0].text
             assert "MX" in result.content[0].text
-            
-            # Verify the mock was called
-            mock_vultr_client.list_records.assert_called_once_with("example.com")
+            assert "IN" in result.content[0].text  # Zone format includes IN
+
+            # Verify the mock was called with pagination args
+            mock_vultr_client.list_records.assert_called_once_with("example.com", None, None)
 
     @pytest.mark.asyncio
     async def test_create_dns_record_tool(self, mock_vultr_client):

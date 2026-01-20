@@ -9,6 +9,7 @@ from typing import Any
 from fastmcp import Context, FastMCP
 
 from .notification_manager import NotificationManager
+from .server import VultrResourceNotFoundError
 
 
 def create_reserved_ips_mcp(vultr_client) -> FastMCP:
@@ -183,7 +184,23 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
             reserved_ip_uuid = await get_reserved_ip_uuid(reserved_ip)
         else:
             reserved_ip_uuid = reserved_ip
-        await vultr_client.delete_reserved_ip(reserved_ip_uuid)
+        try:
+            await vultr_client.delete_reserved_ip(reserved_ip_uuid)
+        except VultrResourceNotFoundError:
+            ips = await vultr_client.list_reserved_ips()
+            if ips:
+                ip_list = ", ".join(
+                    f"{ip.get('subnet', 'unknown')} ({ip.get('id')})" for ip in ips
+                )
+                raise ValueError(
+                    f"Reserved IP '{reserved_ip}' not found. "
+                    f"Available reserved IPs: {ip_list}."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Reserved IP '{reserved_ip}' not found. "
+                    f"No reserved IPs exist in this account."
+                ) from None
 
         # Notify clients that reserved IP list has changed
         if ctx is not None:

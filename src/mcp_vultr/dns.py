@@ -4,6 +4,7 @@ Vultr DNS FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr DNS domains and records.
 """
 
+import json
 from typing import Any
 
 from fastmcp import Context, FastMCP
@@ -143,16 +144,48 @@ def create_dns_mcp(vultr_client) -> FastMCP:
 
     # DNS Record tools
     @mcp.tool
-    async def list_records(domain: str) -> list[dict[str, Any]]:
-        """List all DNS records for a domain.
+    async def list_records(
+        domain: str,
+        format: str = "zone",
+        record_type: str | None = None,
+        per_page: int | None = None,
+        cursor: str | None = None,
+    ) -> str:
+        """List DNS records for a domain. Supports compact zone format and filtering.
 
         Args:
             domain: The domain name to list records for
+            format: Output format - 'zone' (compact, default) or 'json' (full details)
+            record_type: Filter by type (A, AAAA, CNAME, MX, TXT, NS, SRV)
+            per_page: Records per page (1-500). Omit to fetch all records.
+            cursor: Pagination cursor from previous response
 
         Returns:
-            List of DNS records with details
+            DNS records in requested format
         """
-        return await vultr_client.list_records(domain)
+        records = await vultr_client.list_records(domain, per_page, cursor)
+
+        # Apply record type filter if specified
+        if record_type:
+            records = [r for r in records if r.get("type") == record_type]
+
+        # Format output
+        if format == "zone":
+            lines = [f"; DNS records for {domain} ({len(records)} records)"]
+            for r in records:
+                name = r.get("name") or "@"
+                ttl = r.get("ttl", 300)
+                rtype = r.get("type", "A")
+                data = r.get("data", "")
+                priority = r.get("priority", -1)
+
+                if rtype in ("MX", "SRV") and priority >= 0:
+                    lines.append(f"{name}\t{ttl}\tIN\t{rtype}\t{priority}\t{data}")
+                else:
+                    lines.append(f"{name}\t{ttl}\tIN\t{rtype}\t{data}")
+            return "\n".join(lines)
+        else:
+            return json.dumps(records)
 
     @mcp.tool
     async def get_record(domain: str, record_id: str) -> dict[str, Any]:

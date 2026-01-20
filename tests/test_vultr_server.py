@@ -216,16 +216,23 @@ class TestRecordMethods:
 
     @pytest.mark.asyncio
     async def test_list_records(self, mock_api_key):
-        """Test listing DNS records."""
+        """Test listing DNS records with pagination."""
         server = VultrDNSServer(mock_api_key)
         expected_records = [{"id": "rec1", "type": "A"}]
 
         with patch.object(server, "_make_request") as mock_request:
-            mock_request.return_value = {"records": expected_records}
+            # Mock response with no next page (meta.links.next is empty)
+            mock_request.return_value = {
+                "records": expected_records,
+                "meta": {"links": {"next": ""}}
+            }
 
             result = await server.list_records("example.com")
             assert result == expected_records
-            mock_request.assert_called_once_with("GET", "/domains/example.com/records")
+            # Now includes per_page parameter for pagination
+            mock_request.assert_called_once_with(
+                "GET", "/domains/example.com/records", params={"per_page": 500}
+            )
 
     @pytest.mark.asyncio
     async def test_list_records_empty(self, mock_api_key):
@@ -233,10 +240,66 @@ class TestRecordMethods:
         server = VultrDNSServer(mock_api_key)
 
         with patch.object(server, "_make_request") as mock_request:
-            mock_request.return_value = {}  # No records key
+            # No records key, no next page
+            mock_request.return_value = {"meta": {"links": {"next": ""}}}
 
             result = await server.list_records("example.com")
             assert result == []
+
+    @pytest.mark.asyncio
+    async def test_list_records_pagination(self, mock_api_key):
+        """Test listing DNS records with multiple pages."""
+        server = VultrDNSServer(mock_api_key)
+        page1_records = [{"id": "rec1", "type": "A"}]
+        page2_records = [{"id": "rec2", "type": "AAAA"}]
+
+        with patch.object(server, "_make_request") as mock_request:
+            # First call returns page 1 with next cursor
+            # Second call returns page 2 with no next cursor
+            mock_request.side_effect = [
+                {"records": page1_records, "meta": {"links": {"next": "cursor123"}}},
+                {"records": page2_records, "meta": {"links": {"next": ""}}},
+            ]
+
+            result = await server.list_records("example.com")
+            assert result == page1_records + page2_records
+            assert mock_request.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_validate_record_valid_a(self, mock_api_key):
+        """Test validating a valid A record."""
+        server = VultrDNSServer(mock_api_key)
+
+        result = await server.validate_record("A", "test", "192.168.1.1", ttl=300)
+        assert result["validation"]["valid"] is True
+        assert result["validation"]["errors"] == []
+
+    @pytest.mark.asyncio
+    async def test_validate_record_invalid_ipv4(self, mock_api_key):
+        """Test validating an A record with invalid IP."""
+        server = VultrDNSServer(mock_api_key)
+
+        result = await server.validate_record("A", "test", "not-an-ip")
+        assert result["validation"]["valid"] is False
+        assert "Invalid IPv4 address format" in result["validation"]["errors"]
+
+    @pytest.mark.asyncio
+    async def test_validate_record_mx_without_priority(self, mock_api_key):
+        """Test validating MX record without priority."""
+        server = VultrDNSServer(mock_api_key)
+
+        result = await server.validate_record("MX", "mail", "mail.example.com")
+        assert result["validation"]["valid"] is False
+        assert "MX records require a priority value" in result["validation"]["errors"]
+
+    @pytest.mark.asyncio
+    async def test_validate_record_cname_at_root(self, mock_api_key):
+        """Test validating CNAME at root domain."""
+        server = VultrDNSServer(mock_api_key)
+
+        result = await server.validate_record("CNAME", "@", "example.com")
+        assert result["validation"]["valid"] is False
+        assert "CNAME records cannot be used for root domain (@)" in result["validation"]["errors"]
 
     @pytest.mark.asyncio
     async def test_get_record(self, mock_api_key, sample_record_data):

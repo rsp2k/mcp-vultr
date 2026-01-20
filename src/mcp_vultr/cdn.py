@@ -9,6 +9,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from .cdn_analyzer import CDNAnalyzer
+from .server import VultrResourceNotFoundError
 
 
 def create_cdn_mcp(vultr_client) -> FastMCP:
@@ -161,7 +162,23 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
             Success message
         """
         zone_id = await get_cdn_zone_id(zone_identifier)
-        await vultr_client.delete_cdn_zone(zone_id)
+        try:
+            await vultr_client.delete_cdn_zone(zone_id)
+        except VultrResourceNotFoundError:
+            zones = await vultr_client.list_cdn_zones()
+            if zones:
+                zone_list = ", ".join(
+                    f"{z.get('origin_domain', 'unknown')} ({z.get('id')})" for z in zones
+                )
+                raise ValueError(
+                    f"CDN zone '{zone_identifier}' not found. "
+                    f"Available zones: {zone_list}."
+                ) from None
+            else:
+                raise ValueError(
+                    f"CDN zone '{zone_identifier}' not found. "
+                    f"No CDN zones exist in this account."
+                ) from None
         return f"Successfully deleted CDN zone {zone_identifier}"
 
     @mcp.tool()
@@ -272,7 +289,23 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
             Success message
         """
         zone_id = await get_cdn_zone_id(zone_identifier)
-        await vultr_client.delete_cdn_ssl_certificate(zone_id)
+        try:
+            await vultr_client.delete_cdn_ssl_certificate(zone_id)
+        except VultrResourceNotFoundError:
+            zones = await vultr_client.list_cdn_zones()
+            if zones:
+                zone_list = ", ".join(
+                    f"{z.get('origin_domain', 'unknown')} ({z.get('id')})" for z in zones
+                )
+                raise ValueError(
+                    f"CDN zone '{zone_identifier}' not found or has no SSL certificate. "
+                    f"Available zones: {zone_list}."
+                ) from None
+            else:
+                raise ValueError(
+                    f"CDN zone '{zone_identifier}' not found. "
+                    f"No CDN zones exist in this account."
+                ) from None
         return f"Successfully removed SSL certificate from CDN zone {zone_identifier}"
 
     @mcp.tool()

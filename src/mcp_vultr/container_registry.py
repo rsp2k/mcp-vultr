@@ -9,6 +9,7 @@ from typing import Any
 from fastmcp import Context, FastMCP
 
 from .notification_manager import NotificationManager
+from .server import VultrResourceNotFoundError
 
 
 def create_container_registry_mcp(vultr_client) -> FastMCP:
@@ -159,7 +160,23 @@ def create_container_registry_mcp(vultr_client) -> FastMCP:
             Success confirmation
         """
         registry_id = await get_registry_id(registry_identifier)
-        await vultr_client.delete_container_registry(registry_id)
+        try:
+            await vultr_client.delete_container_registry(registry_id)
+        except VultrResourceNotFoundError:
+            registries = await vultr_client.list_container_registries()
+            if registries:
+                reg_list = ", ".join(
+                    f"{r.get('name', 'unnamed')} ({r.get('id')})" for r in registries
+                )
+                raise ValueError(
+                    f"Container registry '{registry_identifier}' not found. "
+                    f"Available registries: {reg_list}."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Container registry '{registry_identifier}' not found. "
+                    f"No container registries exist in this account."
+                ) from None
 
         # Notify clients that container registry list has changed
         if ctx is not None:

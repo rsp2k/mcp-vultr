@@ -10,6 +10,7 @@ from fastmcp import Context, FastMCP
 
 from .load_balancer_analyzer import LoadBalancerAnalyzer
 from .notification_manager import NotificationManager
+from .server import VultrResourceNotFoundError
 
 
 def create_load_balancer_mcp(vultr_client) -> FastMCP:
@@ -404,9 +405,23 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
             Forwarding rule details
         """
         actual_id = await get_load_balancer_id(load_balancer_id)
-        return await vultr_client.get_load_balancer_forwarding_rule(
-            actual_id, forwarding_rule_id
-        )
+        try:
+            return await vultr_client.get_load_balancer_forwarding_rule(
+                actual_id, forwarding_rule_id
+            )
+        except VultrResourceNotFoundError:
+            rules = await vultr_client.list_load_balancer_forwarding_rules(actual_id)
+            if rules:
+                rule_list = ", ".join(str(r.get("id")) for r in rules)
+                raise ValueError(
+                    f"Forwarding rule '{forwarding_rule_id}' not found in load balancer '{load_balancer_id}'. "
+                    f"Available rule IDs: {rule_list}. Use lb_list_forwarding_rules to see full details."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Forwarding rule '{forwarding_rule_id}' not found. "
+                    f"Load balancer '{load_balancer_id}' has no forwarding rules."
+                ) from None
 
     @mcp.tool
     async def delete_forwarding_rule(
@@ -423,9 +438,23 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
             Status message confirming deletion
         """
         actual_id = await get_load_balancer_id(load_balancer_id)
-        await vultr_client.delete_load_balancer_forwarding_rule(
-            actual_id, forwarding_rule_id
-        )
+        try:
+            await vultr_client.delete_load_balancer_forwarding_rule(
+                actual_id, forwarding_rule_id
+            )
+        except VultrResourceNotFoundError:
+            rules = await vultr_client.list_load_balancer_forwarding_rules(actual_id)
+            if rules:
+                rule_list = ", ".join(str(r.get("id")) for r in rules)
+                raise ValueError(
+                    f"Forwarding rule '{forwarding_rule_id}' not found in load balancer '{load_balancer_id}'. "
+                    f"Available rule IDs: {rule_list}. Use lb_list_forwarding_rules to see full details."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Forwarding rule '{forwarding_rule_id}' not found. "
+                    f"Load balancer '{load_balancer_id}' has no forwarding rules."
+                ) from None
 
         # Notify clients that forwarding rules for this load balancer have changed
         if ctx is not None:

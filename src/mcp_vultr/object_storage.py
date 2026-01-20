@@ -10,6 +10,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from .object_storage_analyzer import ObjectStorageAnalyzer
+from .server import VultrResourceNotFoundError
 
 
 def create_object_storage_mcp(vultr_client) -> FastMCP:
@@ -151,7 +152,23 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
             Status message confirming deletion
         """
         actual_id = await get_object_storage_id(object_storage_id)
-        await vultr_client.delete_object_storage(actual_id)
+        try:
+            await vultr_client.delete_object_storage(actual_id)
+        except VultrResourceNotFoundError:
+            storages = await vultr_client.list_object_storage()
+            if storages:
+                storage_list = ", ".join(
+                    f"{s.get('label', 'unnamed')} ({s.get('id')})" for s in storages
+                )
+                raise ValueError(
+                    f"Object Storage '{object_storage_id}' not found. "
+                    f"Available: {storage_list}."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Object Storage '{object_storage_id}' not found. "
+                    f"No Object Storage instances exist in this account."
+                ) from None
         return {
             "status": "success",
             "message": f"Object Storage {object_storage_id} deleted successfully",

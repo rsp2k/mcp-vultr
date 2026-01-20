@@ -9,6 +9,7 @@ from typing import Any
 from fastmcp import Context, FastMCP
 
 from .notification_manager import NotificationManager
+from .server import VultrResourceNotFoundError
 
 
 def create_ssh_keys_mcp(vultr_client) -> FastMCP:
@@ -146,7 +147,21 @@ def create_ssh_keys_mcp(vultr_client) -> FastMCP:
             Status message confirming deletion
         """
         actual_id = await get_ssh_key_id(ssh_key_id)
-        await vultr_client.delete_ssh_key(actual_id)
+        try:
+            await vultr_client.delete_ssh_key(actual_id)
+        except VultrResourceNotFoundError:
+            keys = await vultr_client.list_ssh_keys()
+            if keys:
+                key_list = ", ".join(f"{k.get('name', 'unnamed')} ({k.get('id')})" for k in keys)
+                raise ValueError(
+                    f"SSH key '{ssh_key_id}' not found. "
+                    f"Available SSH keys: {key_list}."
+                ) from None
+            else:
+                raise ValueError(
+                    f"SSH key '{ssh_key_id}' not found. "
+                    f"No SSH keys exist in this account."
+                ) from None
 
         # Notify clients that SSH key list has changed
         if ctx is not None:

@@ -9,6 +9,7 @@ from typing import Any
 from fastmcp import Context, FastMCP
 
 from .notification_manager import NotificationManager
+from .server import VultrResourceNotFoundError
 
 
 def create_startup_scripts_mcp(vultr_client) -> FastMCP:
@@ -139,7 +140,23 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
             Success message
         """
         script_id = await get_startup_script_id(script_identifier)
-        await vultr_client.delete_startup_script(script_id)
+        try:
+            await vultr_client.delete_startup_script(script_id)
+        except VultrResourceNotFoundError:
+            scripts = await vultr_client.list_startup_scripts()
+            if scripts:
+                script_list = ", ".join(
+                    f"{s.get('name', 'unnamed')} ({s.get('id')})" for s in scripts
+                )
+                raise ValueError(
+                    f"Startup script '{script_identifier}' not found. "
+                    f"Available scripts: {script_list}."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Startup script '{script_identifier}' not found. "
+                    f"No startup scripts exist in this account."
+                ) from None
 
         # Notify clients that startup script list has changed
         if ctx is not None:

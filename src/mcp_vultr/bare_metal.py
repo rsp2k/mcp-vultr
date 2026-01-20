@@ -8,6 +8,7 @@ from typing import Any
 
 from fastmcp import FastMCP, Context
 from .notification_manager import NotificationManager
+from .server import VultrResourceNotFoundError
 
 
 def create_bare_metal_mcp(vultr_client) -> FastMCP:
@@ -176,7 +177,23 @@ def create_bare_metal_mcp(vultr_client) -> FastMCP:
             Success message
         """
         server_id = await get_bare_metal_id(server_identifier)
-        await vultr_client.delete_bare_metal_server(server_id)
+        try:
+            await vultr_client.delete_bare_metal_server(server_id)
+        except VultrResourceNotFoundError:
+            servers = await vultr_client.list_bare_metal_servers()
+            if servers:
+                server_list = ", ".join(
+                    f"{s.get('label', s.get('hostname', 'unnamed'))} ({s.get('id')})" for s in servers
+                )
+                raise ValueError(
+                    f"Bare metal server '{server_identifier}' not found. "
+                    f"Available servers: {server_list}."
+                ) from None
+            else:
+                raise ValueError(
+                    f"Bare metal server '{server_identifier}' not found. "
+                    f"No bare metal servers exist in this account."
+                ) from None
         return f"Successfully deleted bare metal server {server_identifier}"
 
     @mcp.tool()
