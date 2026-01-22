@@ -155,10 +155,25 @@ class VultrDNSServer:
 
                     # Raise specific exceptions based on status code
                     if response.status_code == 401:
-                        raise VultrAuthError(response.status_code, "Invalid API key")
-                    elif response.status_code == 403:
+                        # Parse Vultr's JSON error response
+                        try:
+                            error_data = response.json()
+                            error_detail = error_data.get("error", "Invalid API key")
+                        except Exception:
+                            error_detail = response.text.strip() or "Invalid API key"
                         raise VultrAuthError(
-                            response.status_code, "Insufficient permissions"
+                            response.status_code,
+                            f"{error_detail} - Check API key permissions at https://my.vultr.com/settings/#settingsapi"
+                        )
+                    elif response.status_code == 403:
+                        try:
+                            error_data = response.json()
+                            error_detail = error_data.get("error", "Insufficient permissions")
+                        except Exception:
+                            error_detail = response.text.strip() or "Insufficient permissions"
+                        raise VultrAuthError(
+                            response.status_code,
+                            f"{error_detail} - Check API key permissions at https://my.vultr.com/settings/#settingsapi"
                         )
                     elif response.status_code == 404:
                         raise VultrResourceNotFoundError(
