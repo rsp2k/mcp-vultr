@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-vultr"
-version = "2.3.1"
+version = "2.3.2"
 description = "A comprehensive Model Context Protocol (MCP) server for managing Vultr DNS records"
 readme = "README.md"
 license = {text = "MIT"}

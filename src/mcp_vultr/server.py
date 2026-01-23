@@ -143,7 +143,7 @@ class VultrDNSServer:
                     endpoint=endpoint,
                 )
 
-                if response.status_code not in [200, 201, 204]:
+                if response.status_code not in [200, 201, 202, 204]:
                     # Record failed API call metrics
                     record_api_call(
                         endpoint,
