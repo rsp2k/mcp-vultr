@@ -4,9 +4,30 @@ Vultr Plans FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr plans.
 """
 
+import json
 from typing import Any
 
 from fastmcp import FastMCP
+
+
+def _format_plan_compact(plan: dict[str, Any]) -> str:
+    """Format a single plan in compact table format."""
+    plan_id = plan.get("id", "unknown")
+    vcpus = plan.get("vcpu_count", 0)
+    ram_mb = plan.get("ram", 0)
+    ram_gb = ram_mb // 1024 if ram_mb >= 1024 else ram_mb
+    disk = plan.get("disk", 0)
+    disk_type = plan.get("disk_type", "SSD")
+    cost = plan.get("monthly_cost", 0)
+    locations = plan.get("locations", [])
+
+    # Format locations - show first 5, then count remaining
+    if len(locations) > 5:
+        loc_str = ", ".join(locations[:5]) + f" +{len(locations)-5} more"
+    else:
+        loc_str = ", ".join(locations) if locations else "none"
+
+    return f"{plan_id:<20} {vcpus:>2} CPU  {ram_gb:>3}GB RAM  {disk:>4}GB {disk_type:<4}  ${cost:>6.0f}/mo  [{loc_str}]"
 
 
 def create_plans_mcp(vultr_client) -> FastMCP:
@@ -22,17 +43,32 @@ def create_plans_mcp(vultr_client) -> FastMCP:
     mcp = FastMCP(name="vultr-plans")
 
     @mcp.tool()
-    async def list_plans(plan_type: str | None = None) -> list[dict[str, Any]]:
+    async def list_plans(
+        plan_type: str | None = None,
+        format: str = "compact",
+    ) -> str:
         """
-        List all available plans.
+        List all available plans. Supports compact table format for reduced token usage.
 
         Args:
             plan_type: Optional plan type filter (e.g., 'all', 'vc2', 'vhf', 'voc')
+            format: Output format - 'compact' (default, table) or 'json' (full details)
 
         Returns:
-            List of available plans
+            Plans in requested format
         """
-        return await vultr_client.list_plans(plan_type)
+        plans = await vultr_client.list_plans(plan_type)
+
+        if format == "compact":
+            type_label = plan_type.upper() if plan_type else "ALL"
+            lines = [f"; {type_label} plans ({len(plans)} available)"]
+            lines.append(f"; {'Plan ID':<20} {'CPU':>6}  {'RAM':>10}  {'Disk':>14}  {'Cost':>10}  Regions")
+            lines.append("; " + "-" * 90)
+            for plan in sorted(plans, key=lambda p: p.get("monthly_cost", 0)):
+                lines.append(_format_plan_compact(plan))
+            return "\n".join(lines)
+        else:
+            return json.dumps(plans)
 
     @mcp.tool()
     async def get_plan(plan_id: str) -> dict[str, Any]:
@@ -48,34 +84,43 @@ def create_plans_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_plan(plan_id)
 
     @mcp.tool()
-    async def list_vc2_plans() -> list[dict[str, Any]]:
+    async def list_vc2_plans(format: str = "compact") -> str:
         """
         List VC2 (Virtual Cloud Compute) plans.
 
+        Args:
+            format: Output format - 'compact' (default) or 'json'
+
         Returns:
-            List of VC2 plans
+            VC2 plans in requested format
         """
-        return await vultr_client.list_plans("vc2")
+        return await list_plans("vc2", format)
 
     @mcp.tool()
-    async def list_vhf_plans() -> list[dict[str, Any]]:
+    async def list_vhf_plans(format: str = "compact") -> str:
         """
         List VHF (High Frequency) plans.
 
+        Args:
+            format: Output format - 'compact' (default) or 'json'
+
         Returns:
-            List of VHF plans
+            VHF plans in requested format
         """
-        return await vultr_client.list_plans("vhf")
+        return await list_plans("vhf", format)
 
     @mcp.tool()
-    async def list_voc_plans() -> list[dict[str, Any]]:
+    async def list_voc_plans(format: str = "compact") -> str:
         """
         List VOC (Optimized Cloud) plans.
 
+        Args:
+            format: Output format - 'compact' (default) or 'json'
+
         Returns:
-            List of VOC plans
+            VOC plans in requested format
         """
-        return await vultr_client.list_plans("voc")
+        return await list_plans("voc", format)
 
     @mcp.tool()
     async def search_plans_by_specs(
@@ -83,7 +128,8 @@ def create_plans_mcp(vultr_client) -> FastMCP:
         min_ram: int | None = None,
         min_disk: int | None = None,
         max_monthly_cost: float | None = None,
-    ) -> list[dict[str, Any]]:
+        format: str = "compact",
+    ) -> str:
         """
         Search plans by specifications.
 
@@ -92,9 +138,10 @@ def create_plans_mcp(vultr_client) -> FastMCP:
             min_ram: Minimum RAM in MB
             min_disk: Minimum disk space in GB
             max_monthly_cost: Maximum monthly cost in USD
+            format: Output format - 'compact' (default) or 'json'
 
         Returns:
-            List of plans matching the criteria
+            Plans matching the criteria in requested format
         """
         all_plans = await vultr_client.list_plans()
         matching_plans = []
@@ -126,12 +173,31 @@ def create_plans_mcp(vultr_client) -> FastMCP:
 
             matching_plans.append(plan)
 
-        return matching_plans
+        if format == "compact":
+            filters = []
+            if min_vcpus:
+                filters.append(f"≥{min_vcpus} CPU")
+            if min_ram:
+                filters.append(f"≥{min_ram}MB RAM")
+            if min_disk:
+                filters.append(f"≥{min_disk}GB disk")
+            if max_monthly_cost:
+                filters.append(f"≤${max_monthly_cost}/mo")
+            filter_str = ", ".join(filters) if filters else "no filters"
+
+            lines = [f"; Plans matching: {filter_str} ({len(matching_plans)} found)"]
+            lines.append(f"; {'Plan ID':<20} {'CPU':>6}  {'RAM':>10}  {'Disk':>14}  {'Cost':>10}  Regions")
+            lines.append("; " + "-" * 90)
+            for plan in sorted(matching_plans, key=lambda p: p.get("monthly_cost", 0)):
+                lines.append(_format_plan_compact(plan))
+            return "\n".join(lines)
+        else:
+            return json.dumps(matching_plans)
 
     @mcp.tool()
     async def get_plan_by_type_and_spec(
-        plan_type: str, vcpus: int, ram_gb: int
-    ) -> list[dict[str, Any]]:
+        plan_type: str, vcpus: int, ram_gb: int, format: str = "compact"
+    ) -> str:
         """
         Get plans by type and specific vCPU/RAM combination.
 
@@ -139,9 +205,10 @@ def create_plans_mcp(vultr_client) -> FastMCP:
             plan_type: Plan type (vc2, vhf, voc)
             vcpus: Number of vCPUs
             ram_gb: RAM in GB
+            format: Output format - 'compact' (default) or 'json'
 
         Returns:
-            List of matching plans
+            Matching plans in requested format
         """
         plans = await vultr_client.list_plans(plan_type)
         matching_plans = []
@@ -152,7 +219,15 @@ def create_plans_mcp(vultr_client) -> FastMCP:
             ):  # Convert GB to MB
                 matching_plans.append(plan)
 
-        return matching_plans
+        if format == "compact":
+            lines = [f"; {plan_type.upper()} plans with {vcpus} CPU, {ram_gb}GB RAM ({len(matching_plans)} found)"]
+            lines.append(f"; {'Plan ID':<20} {'CPU':>6}  {'RAM':>10}  {'Disk':>14}  {'Cost':>10}  Regions")
+            lines.append("; " + "-" * 90)
+            for plan in sorted(matching_plans, key=lambda p: p.get("monthly_cost", 0)):
+                lines.append(_format_plan_compact(plan))
+            return "\n".join(lines)
+        else:
+            return json.dumps(matching_plans)
 
     @mcp.tool()
     async def get_cheapest_plan(plan_type: str | None = None) -> dict[str, Any]:
@@ -174,15 +249,16 @@ def create_plans_mcp(vultr_client) -> FastMCP:
         return cheapest
 
     @mcp.tool()
-    async def get_plans_by_region_availability(region: str) -> list[dict[str, Any]]:
+    async def get_plans_by_region_availability(region: str, format: str = "compact") -> str:
         """
         Get plans available in a specific region.
 
         Args:
             region: Region code (e.g., 'ewr', 'lax')
+            format: Output format - 'compact' (default) or 'json'
 
         Returns:
-            List of plans available in the specified region
+            Plans available in the specified region
         """
         all_plans = await vultr_client.list_plans()
         available_plans = []
@@ -192,18 +268,27 @@ def create_plans_mcp(vultr_client) -> FastMCP:
             if region in locations:
                 available_plans.append(plan)
 
-        return available_plans
+        if format == "compact":
+            lines = [f"; Plans available in {region.upper()} ({len(available_plans)} found)"]
+            lines.append(f"; {'Plan ID':<20} {'CPU':>6}  {'RAM':>10}  {'Disk':>14}  {'Cost':>10}  Regions")
+            lines.append("; " + "-" * 90)
+            for plan in sorted(available_plans, key=lambda p: p.get("monthly_cost", 0)):
+                lines.append(_format_plan_compact(plan))
+            return "\n".join(lines)
+        else:
+            return json.dumps(available_plans)
 
     @mcp.tool()
-    async def compare_plans(plan_ids: list[str]) -> list[dict[str, Any]]:
+    async def compare_plans(plan_ids: list[str], format: str = "compact") -> str:
         """
         Compare multiple plans side by side.
 
         Args:
             plan_ids: List of plan IDs to compare
+            format: Output format - 'compact' (default) or 'json'
 
         Returns:
-            List of plan details for comparison
+            Plan comparison in requested format
         """
         comparison = []
 
@@ -214,6 +299,17 @@ def create_plans_mcp(vultr_client) -> FastMCP:
             except Exception as e:
                 comparison.append({"id": plan_id, "error": str(e)})
 
-        return comparison
+        if format == "compact":
+            lines = [f"; Comparing {len(plan_ids)} plans"]
+            lines.append(f"; {'Plan ID':<20} {'CPU':>6}  {'RAM':>10}  {'Disk':>14}  {'Cost':>10}  Regions")
+            lines.append("; " + "-" * 90)
+            for plan in comparison:
+                if "error" in plan:
+                    lines.append(f"{plan.get('id', 'unknown'):<20} ERROR: {plan['error']}")
+                else:
+                    lines.append(_format_plan_compact(plan))
+            return "\n".join(lines)
+        else:
+            return json.dumps(comparison)
 
     return mcp
