@@ -25,11 +25,8 @@ def create_backups_mcp(vultr_client) -> FastMCP:
     @mcp.resource("backups://list")
     async def list_backups_resource() -> list[dict[str, Any]]:
         """List all backups in your Vultr account."""
-        try:
-            return await vultr_client.list_backups()
-        except Exception:
-            # If the API returns an error when no backups exist, return empty list
-            return []
+        # Don\'t swallow errors - let auth/permission errors propagate
+        return await vultr_client.list_backups()
 
     @mcp.resource("backups://{backup_id}")
     async def get_backup_resource(backup_id: str) -> dict[str, Any]:

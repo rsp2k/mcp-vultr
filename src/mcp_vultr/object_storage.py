@@ -64,11 +64,8 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
     @mcp.resource("object-storage://list")
     async def list_object_storage_resource() -> list[dict[str, Any]]:
         """List all Object Storage instances in your Vultr account."""
-        try:
-            return await vultr_client.list_object_storage()
-        except Exception:
-            # If the API returns an error when no object storage exists, return empty list
-            return []
+        # Don't swallow errors - let auth/permission errors propagate
+        return await vultr_client.list_object_storage()
 
     @mcp.resource("object-storage://{object_storage_id}")
     async def get_object_storage_resource(object_storage_id: str) -> dict[str, Any]:

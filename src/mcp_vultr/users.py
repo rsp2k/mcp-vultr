@@ -59,11 +59,8 @@ def create_users_mcp(vultr_client) -> FastMCP:
     @mcp.resource("users://list")
     async def list_users_resource() -> list[dict[str, Any]]:
         """List all users in your Vultr account."""
-        try:
-            return await vultr_client.list_users()
-        except Exception:
-            # If the API returns an error when no users exist, return empty list
-            return []
+        # Don\'t swallow errors - let auth/permission errors propagate
+        return await vultr_client.list_users()
 
     @mcp.resource("users://{user_id}")
     async def get_user_resource(user_id: str) -> dict[str, Any]:

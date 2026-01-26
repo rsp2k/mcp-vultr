@@ -59,11 +59,8 @@ def create_ssh_keys_mcp(vultr_client) -> FastMCP:
     @mcp.resource("ssh-keys://list")
     async def list_ssh_keys_resource() -> list[dict[str, Any]]:
         """List all SSH keys in your Vultr account."""
-        try:
-            return await vultr_client.list_ssh_keys()
-        except Exception:
-            # If the API returns an error when no SSH keys exist, return empty list
-            return []
+        # Don\'t swallow errors - let auth/permission errors propagate
+        return await vultr_client.list_ssh_keys()
 
     @mcp.resource("ssh-keys://{ssh_key_id}")
     async def get_ssh_key_resource(ssh_key_id: str) -> dict[str, Any]:

@@ -62,11 +62,8 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
     @mcp.resource("storage-gateways://list")
     async def list_gateways_resource() -> list[dict[str, Any]]:
         """List all storage gateways."""
-        try:
-            return await vultr_client.list_storage_gateways()
-        except Exception:
-            # If the API returns an error when no storage gateways exist, return empty list
-            return []
+        # Don\'t swallow errors - let auth/permission errors propagate
+        return await vultr_client.list_storage_gateways()
 
     @mcp.resource("storage-gateways://{gateway_identifier}")
     async def get_gateway_resource(gateway_identifier: str) -> dict[str, Any]:

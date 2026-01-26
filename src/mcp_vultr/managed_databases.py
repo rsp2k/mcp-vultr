@@ -62,11 +62,8 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
     @mcp.resource("databases://list")
     async def list_databases_resource() -> list[dict[str, Any]]:
         """List all managed databases in your Vultr account."""
-        try:
-            return await vultr_client.list_managed_databases()
-        except Exception:
-            # If the API returns an error when no databases exist, return empty list
-            return []
+        # Don\'t swallow errors - let auth/permission errors propagate
+        return await vultr_client.list_managed_databases()
 
     @mcp.resource("databases://{database_id}")
     async def get_database_resource(database_id: str) -> dict[str, Any]:

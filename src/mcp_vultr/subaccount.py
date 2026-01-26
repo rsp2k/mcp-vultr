@@ -123,11 +123,8 @@ def create_subaccount_mcp(vultr_client) -> FastMCP:
     @mcp.resource("subaccounts://list")
     async def list_subaccounts_resource() -> list[dict[str, Any]]:
         """List all subaccounts in your Vultr account."""
-        try:
-            return await vultr_client.list_subaccounts()
-        except Exception:
-            # If the API returns an error when no subaccounts exist, return empty list
-            return []
+        # Don\'t swallow errors - let auth/permission errors propagate
+        return await vultr_client.list_subaccounts()
 
     @mcp.resource("subaccounts://{subaccount_id}")
     async def get_subaccount_resource(subaccount_id: str) -> dict[str, Any]:

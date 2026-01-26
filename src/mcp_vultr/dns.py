@@ -31,11 +31,8 @@ def create_dns_mcp(vultr_client) -> FastMCP:
     @mcp.resource("domains://list")
     async def list_domains_resource() -> list[dict[str, Any]]:
         """List all DNS domains in your Vultr account."""
-        try:
-            return await vultr_client.list_domains()
-        except Exception:
-            # If the API returns an error when no domains exist, return empty list
-            return []
+        # Don\'t swallow errors - let auth/permission errors propagate
+        return await vultr_client.list_domains()
 
     @mcp.resource("domains://{domain}")
     async def get_domain_resource(domain: str) -> dict[str, Any]:

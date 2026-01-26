@@ -127,11 +127,8 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
     @mcp.resource("kubernetes://clusters")
     async def list_clusters_resource() -> list[dict[str, Any]]:
         """List all Kubernetes clusters in your Vultr account."""
-        try:
-            return await vultr_client.list_kubernetes_clusters()
-        except Exception:
-            # If the API returns an error when no clusters exist, return empty list
-            return []
+        # Don\'t swallow errors - let auth/permission errors propagate
+        return await vultr_client.list_kubernetes_clusters()
 
     @mcp.resource("kubernetes://cluster/{cluster_id}")
     async def get_cluster_resource(cluster_id: str) -> dict[str, Any]:

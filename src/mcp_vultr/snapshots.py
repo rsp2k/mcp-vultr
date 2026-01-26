@@ -90,11 +90,8 @@ def create_snapshots_mcp(vultr_client) -> FastMCP:
     @mcp.resource("snapshots://list")
     async def list_snapshots_resource() -> list[dict[str, Any]]:
         """List all snapshots in your Vultr account."""
-        try:
-            return await vultr_client.list_snapshots()
-        except Exception:
-            # If the API returns an error when no snapshots exist, return empty list
-            return []
+        # Don\'t swallow errors - let auth/permission errors propagate
+        return await vultr_client.list_snapshots()
 
     @mcp.resource("snapshots://{snapshot_id}")
     async def get_snapshot_resource(snapshot_id: str) -> dict[str, Any]:

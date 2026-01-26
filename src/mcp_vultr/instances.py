@@ -63,11 +63,8 @@ def create_instances_mcp(vultr_client) -> FastMCP:
     @mcp.resource("instances://list")
     async def list_instances_resource() -> list[dict[str, Any]]:
         """List all instances in your Vultr account."""
-        try:
-            return await vultr_client.list_instances()
-        except Exception:
-            # If the API returns an error when no instances exist, return empty list
-            return []
+        # Don\'t swallow errors - let auth/permission errors propagate
+        return await vultr_client.list_instances()
 
     @mcp.resource("instances://{instance_id}")
     async def get_instance_resource(instance_id: str) -> dict[str, Any]:

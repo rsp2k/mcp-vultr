@@ -88,11 +88,8 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
     @mcp.resource("vpcs://list")
     async def list_vpcs_resource() -> list[dict[str, Any]]:
         """List all VPCs."""
-        try:
-            return await vultr_client.list_vpcs()
-        except Exception:
-            # If the API returns an error when no VPCs exist, return empty list
-            return []
+        # Don\'t swallow errors - let auth/permission errors propagate
+        return await vultr_client.list_vpcs()
 
     @mcp.resource("vpcs://{vpc_identifier}")
     async def get_vpc_resource(vpc_identifier: str) -> dict[str, Any]:

@@ -84,11 +84,8 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
     @mcp.resource("reserved-ips://list")
     async def list_reserved_ips_resource() -> list[dict[str, Any]]:
         """List all reserved IPs."""
-        try:
-            return await vultr_client.list_reserved_ips()
-        except Exception:
-            # If the API returns an error when no reserved IPs exist, return empty list
-            return []
+        # Don\'t swallow errors - let auth/permission errors propagate
+        return await vultr_client.list_reserved_ips()
 
     @mcp.resource("reserved-ips://{reserved_ip}")
     async def get_reserved_ip_resource(reserved_ip: str) -> dict[str, Any]:

@@ -61,11 +61,8 @@ def create_load_balancer_mcp(vultr_client) -> FastMCP:
     @mcp.resource("load-balancers://list")
     async def list_load_balancers_resource() -> list[dict[str, Any]]:
         """List all load balancers in your Vultr account."""
-        try:
-            return await vultr_client.list_load_balancers()
-        except Exception:
-            # If the API returns an error when no load balancers exist, return empty list
-            return []
+        # Don\'t swallow errors - let auth/permission errors propagate
+        return await vultr_client.list_load_balancers()
 
     @mcp.resource("load-balancers://{load_balancer_id}")
     async def get_load_balancer_resource(load_balancer_id: str) -> dict[str, Any]:

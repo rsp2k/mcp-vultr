@@ -62,11 +62,8 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
     @mcp.resource("block-storage://list")
     async def list_volumes_resource() -> list[dict[str, Any]]:
         """List all block storage volumes."""
-        try:
-            return await vultr_client.list_block_storage()
-        except Exception:
-            # If the API returns an error when no block storage volumes exist, return empty list
-            return []
+        # Don\'t swallow errors - let auth/permission errors propagate
+        return await vultr_client.list_block_storage()
 
     @mcp.resource("block-storage://{volume_identifier}")
     async def get_volume_resource(volume_identifier: str) -> dict[str, Any]:

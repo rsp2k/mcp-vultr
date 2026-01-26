@@ -62,11 +62,8 @@ def create_container_registry_mcp(vultr_client) -> FastMCP:
     @mcp.resource("container-registry://list")
     async def list_registries_resource() -> list[dict[str, Any]]:
         """List all container registries."""
-        try:
-            return await vultr_client.list_container_registries()
-        except Exception:
-            # If the API returns an error when no registries exist, return empty list
-            return []
+        # Don\'t swallow errors - let auth/permission errors propagate
+        return await vultr_client.list_container_registries()
 
     @mcp.resource("container-registry://{registry_identifier}")
     async def get_registry_resource(registry_identifier: str) -> dict[str, Any]:
