@@ -80,6 +80,28 @@ def create_instances_mcp(vultr_client) -> FastMCP:
     # Instance management tools
 
     @mcp.tool
+    async def list_instances() -> list[dict[str, Any]]:
+        """List all instances in your Vultr account.
+
+        Returns:
+            List of instance objects with details including:
+            - id: Instance ID
+            - label: Instance label
+            - hostname: Instance hostname
+            - main_ip: Main IPv4 address
+            - region: Region code
+            - plan: Plan ID
+            - status: Instance status
+            - power_status: Power status
+            - ram: RAM in MB
+            - disk: Disk in GB
+            - vcpu_count: Number of vCPUs
+            - date_created: Creation date
+            - os: Operating system name
+        """
+        return await vultr_client.list_instances()
+
+    @mcp.tool
     async def create(
         region: str,
         plan: str,
