@@ -82,6 +82,28 @@ def create_dns_mcp(vultr_client) -> FastMCP:
 
     # DNS Domain tools
     @mcp.tool
+    async def list_domains(format: str = "compact") -> str:
+        """List all DNS domains in your Vultr account.
+
+        Args:
+            format: Output format - 'compact' (default, one domain per line) or 'json' (full details)
+
+        Returns:
+            All DNS domains in the requested format
+        """
+        domains = await vultr_client.list_domains()
+
+        if format == "compact":
+            if not domains:
+                return "; No DNS domains found"
+            lines = [f"; {len(domains)} DNS domain(s)"]
+            for d in domains:
+                lines.append(d.get("domain", ""))
+            return "\n".join(lines)
+        else:
+            return json.dumps(domains)
+
+    @mcp.tool
     async def get_domain(domain: str) -> dict[str, Any]:
         """Get details for a specific DNS domain.
 
