@@ -513,6 +513,19 @@ class VultrDNSServer:
         lines.append("$TTL 3600")
         lines.append("")
 
+        # Synthesize SOA — Vultr manages SOA internally and doesn't expose it
+        # via /records, but RFC 1035 requires zones to begin with one.
+        soa_serial = time.strftime("%Y%m%d", time.gmtime()) + "01"
+        lines.append(
+            f"@\t3600\tIN\tSOA\tns1.vultr.com. hostmaster.{domain}. ("
+        )
+        lines.append(f"\t\t\t\t{soa_serial}\t; serial")
+        lines.append("\t\t\t\t3600\t\t; refresh (1h)")
+        lines.append("\t\t\t\t1800\t\t; retry (30m)")
+        lines.append("\t\t\t\t604800\t\t; expire (1w)")
+        lines.append("\t\t\t\t300 )\t\t; minimum (5m)")
+        lines.append("")
+
         # Sort records by type for better organization
         record_types = ["SOA", "NS", "A", "AAAA", "CNAME", "MX", "TXT", "SRV"]
         sorted_records = []
@@ -525,9 +538,34 @@ class VultrDNSServer:
         remaining = [r for r in records if r.get("type") not in record_types]
         sorted_records.extend(remaining)
 
+        def _fqdn(hostname: str) -> str:
+            """Mark a hostname as fully qualified so $ORIGIN isn't appended.
+            Bare labels (no dot) are left alone; existing trailing dots preserved."""
+            if not hostname or hostname.endswith("."):
+                return hostname
+            if "." in hostname:
+                return hostname + "."
+            return hostname
+
+        def _txt_split(data: str, chunk: int = 255) -> str:
+            """RFC 1035 limits each TXT character-string to 255 bytes. Long
+            values (DKIM keys, etc.) must be split into multiple quoted strings.
+            If already split as `"a" "b"`, leave alone."""
+            content = data
+            if content.startswith('"') and content.endswith('"'):
+                if '" "' in content:
+                    return content  # already split
+                content = content[1:-1]
+            if len(content) <= chunk:
+                return f'"{content}"'
+            parts = [content[i:i + chunk] for i in range(0, len(content), chunk)]
+            return " ".join(f'"{p}"' for p in parts)
+
         # Convert records to zone file format
         for record in sorted_records:
-            name = record.get("name", "@")
+            # Vultr returns name="" for apex records; "" in a zone file means
+            # "same owner as previous line" — wrong. Use "@" for apex.
+            name = record.get("name") or "@"
             ttl = record.get("ttl", 3600)
             record_type = record.get("type")
             data = record.get("data", "")
@@ -535,28 +573,27 @@ class VultrDNSServer:
 
             # Handle different record types
             if record_type == "MX":
-                line = f"{name}\t{ttl}\tIN\t{record_type}\t{priority}\t{data}"
+                line = f"{name}\t{ttl}\tIN\t{record_type}\t{priority}\t{_fqdn(data)}"
             elif record_type == "SRV":
                 # SRV format: priority weight port target
                 srv_parts = data.split()
                 if len(srv_parts) >= 3:
                     weight = srv_parts[0] if len(srv_parts) > 3 else "0"
                     port = srv_parts[-2] if len(srv_parts) > 2 else "80"
-                    target = srv_parts[-1]
+                    target = _fqdn(srv_parts[-1])
                     line = f"{name}\t{ttl}\tIN\t{record_type}\t{priority}\t{weight}\t{port}\t{target}"
                 else:
-                    line = f"{name}\t{ttl}\tIN\t{record_type}\t{priority}\t{data}"
+                    line = f"{name}\t{ttl}\tIN\t{record_type}\t{priority}\t{_fqdn(data)}"
             elif record_type == "TXT":
-                # Ensure TXT data is quoted
-                if not (data.startswith('"') and data.endswith('"')):
-                    data = f'"{data}"'
-                line = f"{name}\t{ttl}\tIN\t{record_type}\t{data}"
+                line = f"{name}\t{ttl}\tIN\t{record_type}\t{_txt_split(data)}"
+            elif record_type in ("NS", "CNAME", "PTR"):
+                line = f"{name}\t{ttl}\tIN\t{record_type}\t{_fqdn(data)}"
             else:
                 line = f"{name}\t{ttl}\tIN\t{record_type}\t{data}"
 
             lines.append(line)
 
-        return "\n".join(lines)
+        return "\n".join(lines) + "\n"
 
     async def import_zone_file(
         self, domain: str, zone_data: str, dry_run: bool = False
