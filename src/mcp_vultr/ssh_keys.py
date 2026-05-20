@@ -4,6 +4,7 @@ Vultr SSH Keys FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr SSH keys.
 """
 
+import json
 from typing import Any
 
 from fastmcp import Context, FastMCP
@@ -74,6 +75,58 @@ def create_ssh_keys_mcp(vultr_client) -> FastMCP:
 
     # SSH Key tools
     # SSH Key management tools
+
+    @mcp.tool(name="list")
+    async def list_keys(format: str = "compact") -> str:
+        """List all SSH keys in your Vultr account.
+
+        Args:
+            format: Output format - 'compact' (default, one key per line) or 'json' (full details)
+
+        Returns:
+            All SSH keys in the requested format
+        """
+        keys = await vultr_client.list_ssh_keys()
+
+        if format == "compact":
+            if not keys:
+                return "; No SSH keys found"
+            lines = [f"; {len(keys)} SSH key(s)"]
+            for k in keys:
+                name = k.get("name", "unnamed")
+                key_id = k.get("id", "")
+                lines.append(f"{name}\t{key_id}")
+            return "\n".join(lines)
+        else:
+            return json.dumps(keys)
+
+    @mcp.tool(name="get")
+    async def get_key(ssh_key_id: str) -> dict[str, Any]:
+        """Get details for a specific SSH key.
+
+        Args:
+            ssh_key_id: The SSH key ID or name (e.g., "my-laptop-key" or UUID)
+
+        Returns:
+            SSH key details including name, public key, and creation date
+        """
+        try:
+            actual_id = await get_ssh_key_id(ssh_key_id)
+        except ValueError:
+            keys = await vultr_client.list_ssh_keys()
+            if keys:
+                key_list = ", ".join(
+                    f"{k.get('name', 'unnamed')} ({k.get('id')})" for k in keys
+                )
+                raise ValueError(
+                    f"SSH key '{ssh_key_id}' not found. "
+                    f"Available SSH keys: {key_list}."
+                ) from None
+            raise ValueError(
+                f"SSH key '{ssh_key_id}' not found. "
+                f"No SSH keys exist in this account."
+            ) from None
+        return await vultr_client.get_ssh_key(actual_id)
 
     @mcp.tool
     async def create(
