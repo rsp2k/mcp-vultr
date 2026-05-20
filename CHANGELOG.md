@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-05-19
+
+### Added
+- **SSH Keys**: `ssh_key_list` and `ssh_key_get` tools for direct invocation
+  (previously only available as MCP resources). The `list` tool supports
+  `format="compact"` (default, `name<TAB>id` per line) or `format="json"`.
+  The `get` tool resolves by name or UUID and emits a friendly
+  "Available SSH keys: …" listing on a miss.
+- **DNS**: `dns_list_domains` tool with `format="compact"` (default) or
+  `format="json"`, mirroring the existing `dns_list_records` pattern.
+
+### Fixed
+- **Zone-file export** (RFC 1035 compliance):
+  - Synthesizes an SOA record at the top of every exported zone (Vultr
+    manages SOA internally and doesn't return it via `/records`).
+  - Fully-qualifies MX, NS, CNAME, SRV, and PTR rdata (appends trailing
+    dot so `$ORIGIN` isn't accidentally re-appended on import).
+  - Splits TXT records over 255 characters into multiple quoted strings.
+  - Apex records now render as `@` instead of an empty owner (which means
+    "same as previous line" in zone-file grammar).
+
+### Security / Hygiene
+- Replaced two illustrative UUIDs in README CLI examples with
+  RFC-style `00000000-...` placeholders.
+
 ## [1.1.0] - 2025-01-16
 
 ### Added
