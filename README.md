@@ -364,8 +364,8 @@ mcp-vultr k8s get-costs production-cluster             # Cost analysis!
 
 ```bash
 # 😤 The old way (UUIDs everywhere)
-vultr instance stop cb676a46-66fd-4dfb-b839-443f2e6c0b60
-vultr firewall rule add 5f2a4b6c-7b8d-4e9f-a1b2-3c4d5e6f7a8b --port 443
+vultr instance stop 00000000-0000-0000-0000-000000000001
+vultr firewall rule add 00000000-0000-0000-0000-000000000002 --port 443
 
 # 🎉 The Vultr MCP way (human names!)
 mcp-vultr instances stop web-server  
