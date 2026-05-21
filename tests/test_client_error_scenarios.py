@@ -139,7 +139,7 @@ class TestRecordOperationErrors:
             mock_update.side_effect = VultrResourceNotFoundError(404, "Record not found")
 
             with pytest.raises(VultrResourceNotFoundError):
-                await client.update_record("example.com", "nonexistent_id", name="www", data="192.168.1.1")
+                await client.update_record("example.com", "nonexistent_id", name="www", value="192.168.1.1")
 
     @pytest.mark.asyncio
     async def test_delete_record_permission_error(self, client):

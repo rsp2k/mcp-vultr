@@ -404,7 +404,6 @@ class TestRecordMethods:
         """Test updating a DNS record."""
         server = VultrDNSServer(mock_api_key)
         expected_payload = {
-            "type": "A",
             "name": "www",
             "data": "192.168.1.200",
             "ttl": 600,
@@ -414,7 +413,7 @@ class TestRecordMethods:
             mock_request.return_value = {"id": "record-123"}
 
             result = await server.update_record(
-                "example.com", "record-123", "A", "www", "192.168.1.200", ttl=600
+                "example.com", "record-123", name="www", data="192.168.1.200", ttl=600
             )
             assert result == {"id": "record-123"}
             mock_request.assert_called_once_with(
@@ -515,7 +514,7 @@ class TestServerIntegration:
 
             # 4. Update the record
             update_result = await server.update_record(
-                "example.com", "new-record", "A", "www", "192.168.1.200"
+                "example.com", "new-record", name="www", data="192.168.1.200"
             )
             assert update_result["data"] == "192.168.1.200"
 

@@ -101,12 +101,17 @@ class TestVultrDNSClient:
         with patch("mcp_vultr.client.VultrDNSServer", return_value=mock_vultr_client):
             client = VultrDNSClient(mock_api_key)
             result = await client.update_record(
-                "example.com", "record-123", "A", "www", "192.168.1.200", 600
+                "example.com", "record-123", "www", "192.168.1.200", 600
             )
 
             assert result is not None
             mock_vultr_client.update_record.assert_called_once_with(
-                "example.com", "record-123", "A", "www", "192.168.1.200", 600, None
+                "example.com",
+                "record-123",
+                name="www",
+                data="192.168.1.200",
+                ttl=600,
+                priority=None,
             )
 
     @pytest.mark.asyncio
