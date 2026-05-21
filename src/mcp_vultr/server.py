@@ -334,15 +334,22 @@ class VultrDNSServer:
         self,
         domain: str,
         record_id: str,
-        record_type: str,
-        name: str,
-        data: str,
+        name: str | None = None,
+        data: str | None = None,
         ttl: int | None = None,
         priority: int | None = None,
     ) -> dict[str, Any]:
-        """Update an existing DNS record."""
-        payload = {"type": record_type, "name": name, "data": data}
+        """Update an existing DNS record.
 
+        All fields except ``domain`` and ``record_id`` are optional; only
+        provided fields are sent to the Vultr PATCH endpoint. Record type
+        is fixed at create time and cannot be changed via PATCH.
+        """
+        payload: dict[str, Any] = {}
+        if name is not None:
+            payload["name"] = name
+        if data is not None:
+            payload["data"] = data
         if ttl is not None:
             payload["ttl"] = ttl
         if priority is not None:
@@ -5343,15 +5350,14 @@ def create_mcp_server(api_key: str | None = None) -> Server:
                             "type": "string",
                             "description": "The unique identifier of the record to update",
                         },
-                        "record_type": {
-                            "type": "string",
-                            "description": "New record type (A, AAAA, CNAME, MX, TXT, NS, SRV)",
-                        },
                         "name": {
                             "type": "string",
-                            "description": "New record name/subdomain",
+                            "description": "New record name/subdomain (optional)",
                         },
-                        "data": {"type": "string", "description": "New record value"},
+                        "data": {
+                            "type": "string",
+                            "description": "New record value (optional)",
+                        },
                         "ttl": {
                             "type": "integer",
                             "description": "New TTL in seconds (60-86400, optional)",
@@ -5361,7 +5367,7 @@ def create_mcp_server(api_key: str | None = None) -> Server:
                             "description": "New priority for MX/SRV records (optional)",
                         },
                     },
-                    "required": ["domain", "record_id", "record_type", "name", "data"],
+                    "required": ["domain", "record_id"],
                 },
             ),
             Tool(
@@ -5512,13 +5518,12 @@ def create_mcp_server(api_key: str | None = None) -> Server:
             elif name == "update_dns_record":
                 domain = arguments["domain"]
                 record_id = arguments["record_id"]
-                record_type = arguments["record_type"]
-                name = arguments["name"]
-                data = arguments["data"]
+                name = arguments.get("name")
+                data = arguments.get("data")
                 ttl = arguments.get("ttl")
                 priority = arguments.get("priority")
                 result = await vultr_client.update_record(
-                    domain, record_id, record_type, name, data, ttl, priority
+                    domain, record_id, name, data, ttl, priority
                 )
                 return [TextContent(type="text", text=json.dumps(result))]
 

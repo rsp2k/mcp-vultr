@@ -97,9 +97,8 @@ class VultrDNSClient:
         self,
         domain: str,
         record_id: str,
-        record_type: str,
-        name: str,
-        value: str,
+        name: str | None = None,
+        value: str | None = None,
         ttl: int | None = None,
         priority: int | None = None,
     ) -> dict[str, Any]:
@@ -109,14 +108,13 @@ class VultrDNSClient:
         Args:
             domain: Domain name
             record_id: ID of record to update
-            record_type: Type of record
-            name: Record name/subdomain
-            value: Record value
+            name: Record name/subdomain (optional)
+            value: Record value (optional)
             ttl: Time to live (optional)
             priority: Priority for MX/SRV records (optional)
         """
         return await self.server.update_record(
-            domain, record_id, record_type, name, value, ttl, priority
+            domain, record_id, name=name, data=value, ttl=ttl, priority=priority
         )
 
     async def remove_record(self, domain: str, record_id: str) -> bool:
