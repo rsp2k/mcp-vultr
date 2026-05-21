@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1] - 2026-05-19
+
+### Fixed
+- **Critical: `dns_update_record` corrupted records on partial updates.**
+  The MCP wrapper in `dns.py` passed positional args to a client method
+  whose signature required `record_type` at position 3 — but the wrapper
+  had no such parameter. Every positional arg shifted left by one: a
+  caller passing only `data=...` ended up writing that IP into the
+  `name` field of the target record (renaming the record) while leaving
+  the actual `data` unchanged.
+- Dropped the `record_type` parameter from `VultrDNSServer.update_record`
+  and `VultrDNSClient.update_record` entirely. Vultr's PATCH endpoint
+  does not allow changing a record's type after creation, so the field
+  was dead weight (and was the source of the positional misalignment).
+- All fields except `domain` and `record_id` are now properly optional;
+  only provided fields are sent in the PATCH payload, matching Vultr's
+  PATCH semantics.
+- The legacy low-level MCP `update_dns_record` tool schema in
+  `server.py` had `record_type, name, data` listed as required;
+  corrected to only require `domain` and `record_id`.
+
+### Test
+- Updated `test_update_record` in `test_vultr_server.py` and
+  `test_update_record_method` in `test_client.py` to reflect the
+  corrected signatures.
+- Fixed a pre-existing test bug in `test_client_error_scenarios.py`
+  that passed `data=` to `client.update_record` (its kwarg is `value=`).
+
 ## [2.4.0] - 2026-05-19
 
 ### Added
