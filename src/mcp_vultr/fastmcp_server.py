@@ -226,9 +226,10 @@ def run_server(api_key: str | None = None, transport: str | None = None, enable_
         oauth_config = OAuthConfig.from_env()
         enable_oauth = oauth_config.enabled
     
-    # Print version info for debugging/verification
+    # Banner goes to stderr: under the stdio transport stdout is the JSON-RPC
+    # channel and any stray text there breaks strict clients.
     server_type = "OAuth-enabled" if enable_oauth else "standard"
-    print(f"🚀 Starting mcp-vultr v{__version__} ({server_type})")
+    print(f"🚀 Starting mcp-vultr v{__version__} ({server_type})", file=sys.stderr)
 
     if enable_oauth:
         mcp = create_oauth_vultr_mcp_server(api_key)

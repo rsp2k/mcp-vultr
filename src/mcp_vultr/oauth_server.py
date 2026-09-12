@@ -5,7 +5,9 @@ This module creates a FastMCP server with OAuth/OIDC authentication support,
 maintaining backward compatibility with environment variable API keys.
 """
 
+import functools
 import os
+import sys
 from typing import Optional, Dict, Any
 from fastmcp import FastMCP
 
@@ -48,6 +50,9 @@ from .storage_gateways import create_storage_gateways_mcp
 from .subaccount import create_subaccount_mcp
 from .users import create_users_mcp
 from .service_collections import create_service_collections_mcp, ServiceCollectionStore
+
+# Diagnostics go to stderr; stdout is the JSON-RPC channel under stdio.
+_say = functools.partial(print, file=sys.stderr)
 
 
 class OAuthAwareVultrServer:
@@ -134,14 +139,14 @@ def create_oauth_enhanced_vultr_server(api_key: Optional[str] = None) -> FastMCP
     # Create OAuth-aware Vultr server
     vultr_server = OAuthAwareVultrServer(api_key)
     
-    print(f"🔐 OAuth Configuration:")
-    print(f"   Enabled: {oauth_config.enabled}")
+    _say(f"🔐 OAuth Configuration:")
+    _say(f"   Enabled: {oauth_config.enabled}")
     if oauth_config.enabled:
-        print(f"   Issuer: {oauth_config.issuer_url}")
-        print(f"   Client: {oauth_config.client_id}")
-        print(f"   JWKS URL: {oauth_config.jwks_url}")
+        _say(f"   Issuer: {oauth_config.issuer_url}")
+        _say(f"   Client: {oauth_config.client_id}")
+        _say(f"   JWKS URL: {oauth_config.jwks_url}")
     else:
-        print(f"   Using fallback API key: {'✓' if api_key else '✗'}")
+        _say(f"   Using fallback API key: {'✓' if api_key else '✗'}")
     
     # Create and mount all service modules with OAuth awareness
     # For now, we'll use the fallback client - full OAuth integration would require
@@ -255,15 +260,15 @@ def run_oauth_server(api_key: Optional[str] = None, transport: Optional[str] = N
     
     oauth_config = OAuthConfig.from_env()
     
-    print(f"🚀 Starting mcp-vultr OAuth server v{__version__}")
-    print(f"🔐 OAuth Mode: {'Enabled' if oauth_config.enabled else 'Disabled (fallback mode)'}")
+    _say(f"🚀 Starting mcp-vultr OAuth server v{__version__}")
+    _say(f"🔐 OAuth Mode: {'Enabled' if oauth_config.enabled else 'Disabled (fallback mode)'}")
     
     if oauth_config.enabled and not oauth_config.client_secret:
-        print("⚠️  Warning: OAuth enabled but OAUTH_CLIENT_SECRET not set")
+        _say("⚠️  Warning: OAuth enabled but OAUTH_CLIENT_SECRET not set")
     
     if not api_key and not oauth_config.enabled:
-        print("❌ Error: No API key available and OAuth is disabled")
-        print("   Set VULTR_API_KEY or enable OAuth with OAUTH_ENABLED=true")
+        _say("❌ Error: No API key available and OAuth is disabled")
+        _say("   Set VULTR_API_KEY or enable OAuth with OAUTH_ENABLED=true")
         return
     
     # Create and run server
@@ -273,8 +278,8 @@ def run_oauth_server(api_key: Optional[str] = None, transport: Optional[str] = N
     if not transport:
         transport = "stdio"  # Default for MCP clients
     
-    print(f"🌐 Transport: {transport}")
-    print(f"🔑 API Key: {'✓ Configured' if api_key else '✗ OAuth-only mode'}")
+    _say(f"🌐 Transport: {transport}")
+    _say(f"🔑 API Key: {'✓ Configured' if api_key else '✗ OAuth-only mode'}")
     
     mcp.run(transport=transport)
 
