@@ -17,8 +17,11 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Set, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
+import sys
+
 import httpx
 
+from .http_config import client_kwargs
 from .oauth_auth import (
     UserContext, 
     Permission, 
@@ -516,7 +519,7 @@ class APIKeyBroker:
         
         try:
             # Execute API call using ephemeral Vultr key
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(**client_kwargs()) as client:
                 headers = {
                     "Authorization": f"Bearer {ephemeral_key.vultr_api_key}",
                     "Content-Type": "application/json"
@@ -690,7 +693,7 @@ class APIKeyBroker:
         # Calculate expiration date
         expiry_date = datetime.utcnow() + timedelta(hours=expiry_hours)
         
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(**client_kwargs()) as client:
             headers = {
                 "Authorization": f"Bearer {self.master_api_key}",
                 "Content-Type": "application/json"
@@ -777,7 +780,8 @@ class APIKeyBroker:
             await self.audit_logger(entry)
     
     async def _default_audit_logger(self, entry: AuditLogEntry) -> None:
-        """Default audit logger - prints to stdout."""
-        
+        """Default audit logger - prints to stderr (stdout is the MCP channel)."""
+
         print(f"AUDIT: {entry.timestamp} | {entry.user_id} | {entry.operation} | "
-              f"{entry.resource_type}:{entry.resource_id} | {'SUCCESS' if entry.success else 'FAILED'}")
+              f"{entry.resource_type}:{entry.resource_id} | {'SUCCESS' if entry.success else 'FAILED'}",
+              file=sys.stderr)

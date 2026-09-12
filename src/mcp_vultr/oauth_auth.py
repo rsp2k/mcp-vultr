@@ -16,6 +16,8 @@ from enum import Enum
 from fastmcp import FastMCP
 from contextlib import asynccontextmanager
 
+from .http_config import client_kwargs
+
 
 class Permission(Enum):
     """Vultr permission levels."""
@@ -260,7 +262,7 @@ class OAuthAuthenticator:
     async def get_jwks(self) -> Dict[str, Any]:
         """Fetch and cache JWKS from Keycloak."""
         if self._jwks_cache is None:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(**client_kwargs()) as client:
                 response = await client.get(self.config.jwks_url)
                 response.raise_for_status()
                 self._jwks_cache = response.json()
