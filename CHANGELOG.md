@@ -3,7 +3,49 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and this project uses [CalVer](https://calver.org/) (`YYYY.MM.DD`, PEP 440) from 2026.09.12 onward;
+earlier releases followed Semantic Versioning.
+
+## [2026.09.12] - 2026-09-12
+
+Versioning switches to CalVer (`YYYY.MM.DD`, PEP 440) from this release
+on. The date says when the package was last tested against the Vultr
+API and the FastMCP framework, which is the question people actually
+ask when something misbehaves. PEP 440 orders `2026.09.12` after every
+`2.x` release, so upgrades resolve normally.
+
+### Fixed
+- **Server crashed at startup under FastMCP 4.** The dependency was
+  declared as `fastmcp>=0.1.0`, so fresh installs (`uvx mcp-vultr`)
+  resolved FastMCP 4.0.x, where `FastMCP.mount()` takes `namespace=`
+  instead of `prefix=`. Every sub-server mount raised
+  `TypeError: mount() got an unexpected keyword argument 'prefix'`
+  before the server spoke MCP, and clients only saw
+  `MCP error -32000: Connection closed`. The dependency is now pinned to
+  `fastmcp>=2.11,<3`. A follow-up release migrates to FastMCP 4.
+
+### Added
+- **SOCKS5 and HTTP proxy support via `VULTR_PROXY`.** Set
+  `VULTR_PROXY=socks5h://127.0.0.1:1080` (or `socks5://`, `http://`,
+  `https://`) to route every outbound Vultr API call through a proxy.
+  Useful when the API is only reachable from an allowlisted network,
+  paired with `ssh -D`.
+- `VULTR_PROXY=direct` (also `none` / `off`) forces a direct connection
+  and ignores ambient `HTTP_PROXY` / `ALL_PROXY` variables. Previously
+  those variables were silently honoured by httpx's `trust_env` default
+  with no way to opt out and no way to see that it was happening.
+- New `mcp_vultr.http_config` module centralising httpx client
+  configuration. All four `httpx.AsyncClient` construction sites
+  (`server.py`, `api_key_broker.py` ×2, `oauth_auth.py`) now resolve
+  proxy settings identically through `client_kwargs()`.
+- `http_config.describe()` reports the active proxy configuration, and
+  proxy credentials are redacted from all log output.
+
+### Changed
+- Dependency bumped from `httpx>=0.24.0` to `httpx[socks]>=0.26.0`. The
+  `socks` extra pulls in `socksio` for SOCKS5 support; 0.26 is the floor
+  for the modern singular `proxy=` client argument (`proxies=` was
+  removed in httpx 0.28).
 
 ## [2.4.1] - 2026-05-19
 
