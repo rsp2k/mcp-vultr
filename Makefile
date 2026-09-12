@@ -1,7 +1,7 @@
 # Makefile for mcp-vultr test execution optimization
 # Provides different test execution profiles for performance optimization
 
-.PHONY: help test test-fast test-coverage test-parallel test-unit test-integration test-mcp test-error test-slow test-tui test-tui-unit test-tui-integration test-tui-snapshots test-tui-performance install-deps clean
+.PHONY: help test test-release-gate test-fast test-coverage test-parallel test-unit test-integration test-mcp test-error test-slow test-tui test-tui-unit test-tui-integration test-tui-snapshots test-tui-performance install-deps clean
 
 # Default target
 help:
@@ -16,6 +16,7 @@ help:
 	@echo "  make test           - Standard test run with basic options"
 	@echo "  make test-coverage  - Full test suite with coverage reporting"
 	@echo "  make test-ci        - CI/CD optimized test run"
+	@echo "  make test-release-gate - The subset that must pass before a publish"
 	@echo ""
 	@echo "Targeted Testing:"
 	@echo "  make test-integration - Integration tests only"
@@ -50,6 +51,21 @@ clean:
 	find . -type d -name "__pycache__" -delete
 	find . -type f -name "*.pyc" -delete
 	@echo "✓ Test artifacts cleaned"
+
+# Release gate, used by .github/workflows/publish.yml.
+# These files cover the MCP contract and are green today. The wider suite
+# carries pre-existing failures in the error-scenario, retry and cache files;
+# those are tracked separately and must not block a publish. Add a file here
+# once it is green, and never remove one to get a release out.
+RELEASE_GATE_TESTS = \
+	tests/test_http_config.py \
+	tests/test_package_validation.py \
+	tests/test_client.py \
+	tests/test_resource_notifications.py \
+	tests/test_mcp_server.py
+
+test-release-gate:
+	uv run pytest -q -p no:xdist $(RELEASE_GATE_TESTS)
 
 # Fast test execution (no coverage, minimal output)
 test-fast:

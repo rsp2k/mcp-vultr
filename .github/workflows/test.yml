@@ -17,7 +17,7 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
     
@@ -43,9 +43,9 @@ jobs:
     
     - name: Upload coverage to Codecov
       if: matrix.python-version == '3.11'
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v5
       with:
-        file: ./coverage.xml
+        files: ./coverage.xml
         fail_ci_if_error: true
 
   build:
@@ -56,7 +56,7 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: "3.11"
     
@@ -86,7 +86,7 @@ jobs:
     
     steps:
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
     
@@ -102,13 +102,13 @@ jobs:
     
     - name: Test CLI installation
       run: |
-        vultr-dns-mcp --help
-        vultr-dns-mcp --version
+        vultr-cli --help
+        vultr-cli --version
     
     - name: Test package imports
       run: |
-        python -c "from vultr_dns_mcp import VultrDNSClient, create_mcp_server; print('✅ Package imports successful')"
-        python -c "from vultr_dns_mcp.cli import main; print('✅ CLI imports successful')"
+        python -c "from mcp_vultr import VultrDNSClient, create_vultr_mcp_server; print('Package imports successful')"
+        python -c "from mcp_vultr.cli_main import cli; print('CLI imports successful')"
 
   security:
     runs-on: ubuntu-latest
@@ -117,7 +117,7 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: "3.11"
     
