@@ -498,6 +498,11 @@ class TestFastMCPDNSToolsIntegration:
         """Create a DNS FastMCP server with mocked client."""
         return create_dns_mcp(mock_vultr_client)
 
+    @pytest.fixture
+    async def dns_tools(self, dns_mcp_server):
+        """Get DNS tools from the FastMCP server."""
+        return await dns_mcp_server.get_tools()
+
     @pytest.mark.asyncio
     async def test_record_lifecycle_workflow(self, dns_mcp_server, mock_vultr_client):
         """Test complete record lifecycle: create -> get -> update -> delete."""
@@ -575,7 +580,7 @@ class TestFastMCPDNSToolsIntegration:
         mock_vultr_client.delete_record.assert_called_once_with(domain, record_id)
 
     @pytest.mark.asyncio
-    async def test_error_propagation_consistency(self, dns_mcp_server, mock_vultr_client):
+    async def test_error_propagation_consistency(self, dns_tools, mock_vultr_client):
         """Test that all three tools consistently propagate errors."""
         domain = "error-test.com"
         record_id = "error-record-123"

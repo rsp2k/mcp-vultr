@@ -43,8 +43,10 @@ jobs:
       with:
         python-version: ${{ env.PYTHON_VERSION }}
 
+    # dev carries ruff. Naming it explicitly rather than leaning on uv
+    # installing the default dependency-group.
     - name: Install dependencies
-      run: uv sync --extra test
+      run: uv sync --extra dev --extra test
 
     - name: Lint for hard errors (undefined names, syntax)
       run: uv run ruff check --select F821,F822,F823,E9 src tests
