@@ -5,6 +5,7 @@ This module provides systematic resource change notifications for FastMCP
 to ensure clients receive updates when tools modify Vultr resources.
 """
 
+import sys
 from typing import Any
 
 from fastmcp import Context
@@ -163,17 +164,20 @@ class NotificationManager:
                             formatted_resources.append(resource_pattern)
 
                     print(
-                        f"🔄 Resource notification: {operation} affected {formatted_resources}"
+                        f"🔄 Resource notification: {operation} affected {formatted_resources}",
+                        file=sys.stderr,
                     )
                 else:
                     print(
-                        f"🔄 Resource notification: {operation} (no specific resources mapped)"
+                        f"🔄 Resource notification: {operation} (no specific resources mapped)",
+                        file=sys.stderr,
                     )
 
         except Exception as e:
             # Don't let notification failures break the main operation
             print(
-                f"⚠️ Warning: Failed to send resource change notification for {operation}: {e}"
+                f"⚠️ Warning: Failed to send resource change notification for {operation}: {e}",
+                file=sys.stderr,
             )
 
     @staticmethod

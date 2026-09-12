@@ -17,6 +17,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Resource, TextContent, Tool
 
 from .cache import CacheManager
+from .http_config import client_kwargs
 from .metrics import record_api_call
 from .retry import NetworkError, RateLimitError, retry_api_call
 from .vultr_logging import get_logger, log_api_request
@@ -121,7 +122,7 @@ class VultrDNSServer:
             has_params=params is not None,
         )
 
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with httpx.AsyncClient(**client_kwargs(timeout=timeout)) as client:
             try:
                 response = await client.request(
                     method=method,

@@ -198,6 +198,36 @@ vultr-mcp-server
 
 **That's it!** You now have 335+ Vultr management tools available through natural language in Claude Code.
 
+### 🧦 **Proxy Support (optional)**
+
+Route every outbound Vultr API call through an HTTP or SOCKS5 proxy by setting `VULTR_PROXY`:
+
+```bash
+# 🧅 SOCKS5, resolving DNS proxy-side (socks5h)
+export VULTR_PROXY="socks5h://127.0.0.1:1080"
+
+# 🔒 SOCKS5 with credentials
+export VULTR_PROXY="socks5://user:pass@bastion.internal:1080"
+
+# 🌐 A plain HTTP proxy works too
+export VULTR_PROXY="http://198.51.100.1:3128"
+
+# 🚫 Force a direct connection, ignoring ambient HTTP_PROXY/ALL_PROXY
+export VULTR_PROXY="direct"
+```
+
+Handy with `ssh -D 1080 bastion` when the Vultr API is only reachable from an allowlisted network.
+
+| Value | Effect |
+|-------|--------|
+| `socks5://host:port` | SOCKS5, DNS resolved locally |
+| `socks5h://host:port` | SOCKS5, DNS resolved by the proxy |
+| `http://host:port` / `https://host:port` | Standard HTTP proxy |
+| `direct`, `none`, `off` | Connect directly and ignore ambient proxy variables |
+| *unset* | Fall back to `ALL_PROXY` / `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` |
+
+`VULTR_PROXY` takes precedence over the ambient variables, so you can proxy this package without touching the rest of your shell. Proxy credentials are redacted from logs.
+
 ---
 
 ## ✨ **What's New in v2.1.0**

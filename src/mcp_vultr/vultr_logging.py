@@ -6,31 +6,48 @@ observability and debugging capabilities.
 """
 
 import logging
+import os
 import sys
 from typing import Any
 
 import structlog
 
+#: Environment variable that sets the log level (DEBUG, INFO, WARNING, ERROR).
+LOG_LEVEL_ENV_VAR = "MCP_VULTR_LOG_LEVEL"
+
+#: Default level when the environment does not say otherwise.
+DEFAULT_LOG_LEVEL = "WARNING"
+
 
 def configure_logging(
-    level: str = "INFO", json_logs: bool = False, service_name: str = "mcp-vultr"
+    level: str | None = None,
+    json_logs: bool = False,
+    service_name: str = "mcp-vultr",
 ) -> structlog.BoundLogger:
     """
     Configure structured logging for the application.
 
+    All log output goes to **stderr**. Under the stdio MCP transport stdout is
+    the JSON-RPC channel, and anything else written there corrupts the stream.
+
     Args:
-        level: Logging level (DEBUG, INFO, WARNING, ERROR)
+        level: Logging level (DEBUG, INFO, WARNING, ERROR). Defaults to
+            ``MCP_VULTR_LOG_LEVEL`` from the environment, then ``WARNING``.
         json_logs: Whether to output JSON formatted logs
         service_name: Service name to include in logs
 
     Returns:
         Configured structlog logger
     """
+    if level is None:
+        level = os.environ.get(LOG_LEVEL_ENV_VAR, DEFAULT_LOG_LEVEL)
+    numeric_level = getattr(logging, level.upper(), logging.WARNING)
+
     # Configure standard library logging
     logging.basicConfig(
         format="%(message)s",
-        stream=sys.stdout,
-        level=getattr(logging, level.upper()),
+        stream=sys.stderr,
+        level=numeric_level,
     )
 
     # Configure structlog
@@ -50,10 +67,8 @@ def configure_logging(
 
     structlog.configure(
         processors=processors,
-        wrapper_class=structlog.make_filtering_bound_logger(
-            getattr(logging, level.upper())
-        ),
-        logger_factory=structlog.PrintLoggerFactory(),
+        wrapper_class=structlog.make_filtering_bound_logger(numeric_level),
+        logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
         cache_logger_on_first_use=True,
     )
 
@@ -62,6 +77,21 @@ def configure_logging(
     logger = logger.bind(service=service_name)
 
     return logger
+
+
+def _ensure_configured() -> None:
+    """
+    Apply the stderr configuration unless something already configured structlog.
+
+    structlog's out-of-the-box configuration prints every level to stdout.
+    Modules in this package create loggers at import time, so without this
+    guard the first debug line lands on stdout before the MCP handshake.
+    """
+    if not structlog.is_configured():
+        configure_logging()
+
+
+_ensure_configured()
 
 
 def get_logger(name: str = None) -> structlog.BoundLogger:

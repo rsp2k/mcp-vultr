@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-vultr"
-version = "2.4.1"
+version = "2026.09.12"
 description = "A comprehensive Model Context Protocol (MCP) server for managing Vultr DNS records"
 readme = "README.md"
 license = {text = "MIT"}
@@ -43,8 +43,16 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "fastmcp>=0.1.0",
-    "httpx>=0.24.0",
+    # Upper bound is load-bearing. FastMCP 4.0 renamed the mount() keyword
+    # from `prefix` to `namespace`, and this package mounts 28 sub-servers
+    # with `prefix=`. Unpinned, uvx resolves 4.x and every server fails at
+    # import with "mount() got an unexpected keyword argument 'prefix'" —
+    # which reads like a broken install rather than a dependency drift.
+    # Lift this only together with migrating those call sites.
+    "fastmcp>=2.11,<3",
+    # socks extra pulls in socksio for socks5:// and socks5h:// proxy support;
+    # 0.26 is the floor for the modern singular `proxy=` client argument
+    "httpx[socks]>=0.26.0",
     "httpcore>=1.0.0",  # Explicit httpx transport dependency
     "pydantic>=2.0.0",
     "click>=8.0.0",
