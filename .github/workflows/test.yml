@@ -108,7 +108,7 @@ jobs:
         uv venv --python "${{ matrix.python-version }}" .probe-venv
         uv pip install --python .probe-venv/bin/python dist/*.whl
         .probe-venv/bin/vultr-cli --version
-        .probe-venv/bin/python -c "from mcp_vultr import VultrDNSClient, create_vultr_mcp_server; print('imports ok')"
+        .probe-venv/bin/python -c "from mcp_vultr import VultrDNSClient, create_mcp_server; print('imports ok')"
         uv run --no-project python scripts/stdio_probe.py .probe-venv/bin/mcp-vultr
 
   security:
