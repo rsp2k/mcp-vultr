@@ -17,6 +17,7 @@ published package, along with five other tools.
 """
 
 import ast
+import json
 import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -177,4 +178,6 @@ async def test_gateway_status_tool_and_resource_agree():
         via_resource = await c.read_resource(f"storage-gateways://{GATEWAY_ID}/status")
 
     assert via_tool.data["operational_status"]["is_active"] is True
-    assert via_resource[0].text == via_tool.content[0].text
+    # Compare parsed payloads: the tool and the resource serialize through
+    # different encoders, so the JSON spacing differs on FastMCP 4.
+    assert json.loads(via_resource[0].text) == json.loads(via_tool.content[0].text)
