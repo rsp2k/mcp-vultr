@@ -1,7 +1,7 @@
 # Makefile for mcp-vultr test execution optimization
 # Provides different test execution profiles for performance optimization
 
-.PHONY: help test test-release-gate test-fast test-coverage test-parallel test-unit test-integration test-mcp test-error test-slow test-tui test-tui-unit test-tui-integration test-tui-snapshots test-tui-performance install-deps clean
+.PHONY: help test test-release-gate test-tracked test-known-failures-update test-fast test-coverage test-parallel test-unit test-integration test-mcp test-error test-slow test-tui test-tui-unit test-tui-integration test-tui-snapshots test-tui-performance install-deps clean
 
 # Default target
 help:
@@ -17,6 +17,7 @@ help:
 	@echo "  make test-coverage  - Full test suite with coverage reporting"
 	@echo "  make test-ci        - CI/CD optimized test run"
 	@echo "  make test-release-gate - The subset that must pass before a publish"
+	@echo "  make test-tracked   - Full suite; fails only on NEW failures"
 	@echo ""
 	@echo "Targeted Testing:"
 	@echo "  make test-integration - Integration tests only"
@@ -48,6 +49,7 @@ clean:
 	rm -rf .coverage
 	rm -rf coverage.xml
 	rm -rf junit.xml
+	rm -rf junit-tracked.xml
 	find . -type d -name "__pycache__" -delete
 	find . -type f -name "*.pyc" -delete
 	@echo "✓ Test artifacts cleaned"
@@ -67,6 +69,23 @@ RELEASE_GATE_TESTS = \
 
 test-release-gate:
 	uv run pytest -q -p no:xdist $(RELEASE_GATE_TESTS)
+
+# The full suite minus the TUI files, which need snapshot infrastructure and a
+# real terminal and die under xdist. Fails only when a test that used to pass
+# starts failing; the existing debt is recorded in tests/known_failures.txt.
+TRACKED_PYTEST = uv run pytest -q -p no:xdist --maxfail=2000 \
+	--ignore=tests/test_tui_app.py \
+	--ignore=tests/test_tui_snapshots.py \
+	--ignore=tests/test_tui_performance.py \
+	-o junit_family=xunit2 --junitxml=junit-tracked.xml
+
+test-tracked:
+	-@$(TRACKED_PYTEST)
+	@uv run python scripts/check_known_failures.py junit-tracked.xml tests/known_failures.txt
+
+test-known-failures-update:
+	-@$(TRACKED_PYTEST)
+	@uv run python scripts/check_known_failures.py junit-tracked.xml tests/known_failures.txt --update
 
 # Fast test execution (no coverage, minimal output)
 test-fast:

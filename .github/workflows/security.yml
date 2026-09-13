@@ -1,76 +1,90 @@
 name: Security
 
+# Every step here used to carry `continue-on-error: true`, so the workflow was
+# green whether or not anything was wrong. It also called `safety check`, which
+# now requires an account and exits 64, and `ruff --format`, a flag removed in
+# current ruff. None of that was visible because nothing could fail.
+#
+# Now: findings in our own code block, dependency advisories are reported to
+# the job summary. Push and pull-request scanning lives in test.yml; this
+# workflow exists for the daily run, which is what catches an advisory
+# published against a dependency we did not change.
+
 on:
-  push:
-    branches: [main]
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
   pull_request:
     branches: [main]
-  schedule:
-    # Run security scans daily at 2 AM UTC
-    - cron: '0 2 * * *'
+
+env:
+  PYTHON_VERSION: "3.12"
 
 jobs:
   security-scan:
+    name: Security scan
     runs-on: ubuntu-latest
-    name: Security Scan
-    
+    if: github.event_name != 'pull_request'
     steps:
     - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-    
+
     - name: Install uv
-      uses: astral-sh/setup-uv@v3
+      uses: astral-sh/setup-uv@v6
       with:
-        version: "latest"
-    
-    - name: Install dependencies
-      run: uv sync --extra dev
-    
-    - name: Run Bandit security scan
-      run: |
-        uv run bandit -r src/ -f json -o bandit-results.json || true
-        uv run bandit -r src/ -f txt
-      continue-on-error: true
-    
-    - name: Upload Bandit results
-      uses: actions/upload-artifact@v4
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Bandit (high severity blocks)
+      run: uvx bandit -r src -q --severity-level high
+
+    - name: Bandit (full report)
       if: always()
-      with:
-        name: bandit-results
-        path: bandit-results.json
-        retention-days: 30
-    
-    - name: Run Safety scan
       run: |
-        uv run safety check --json --output safety-results.json || true
-        uv run safety check
-      continue-on-error: true
-    
-    - name: Upload Safety results
-      uses: actions/upload-artifact@v4
+        {
+          echo "## Bandit"
+          echo '```'
+          uvx bandit -r src -q -f txt 2>&1 | tail -40 || true
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Ruff security rules (report)
       if: always()
-      with:
-        name: safety-results
-        path: safety-results.json
-        retention-days: 30
-    
-    - name: Run Ruff security checks
       run: |
-        uv run ruff check src/ --select S --format github
-      continue-on-error: true
+        {
+          echo "## Ruff security rules (flake8-bandit)"
+          echo '```'
+          uvx ruff check src --select S --output-format concise 2>&1 | tail -40 || true
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: pip-audit (report)
+      if: always()
+      run: |
+        uv export --no-hashes --no-dev --format requirements-txt > requirements-audit.txt
+        uvx pip-audit --progress-spinner off -r requirements-audit.txt \
+          --format markdown -o audit.md || true
+        {
+          echo "## Dependency advisories"
+          echo ""
+          if [ -s audit.md ]; then cat audit.md; else echo "None reported."; fi
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload audit report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: dependency-audit
+        path: audit.md
+        retention-days: 30
+        if-no-files-found: ignore
 
   dependency-review:
+    name: Dependency review
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-    - name: 'Checkout Repository'
-      uses: actions/checkout@v4
-    
-    - name: 'Dependency Review'
+    - uses: actions/checkout@v4
+
+    - name: Dependency review
       uses: actions/dependency-review-action@v4
       with:
         fail-on-severity: moderate

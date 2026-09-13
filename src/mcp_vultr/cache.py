@@ -65,9 +65,11 @@ class CacheManager:
         """
         key_data = {"method": method, "endpoint": endpoint, "params": params or {}}
 
-        # Create a stable hash of the key data
+        # Create a stable hash of the key data. MD5 is a cache-key digest here,
+        # not a security primitive; usedforsecurity=False says so to auditors
+        # and keeps this working on FIPS-enabled builds.
         key_string = json.dumps(key_data, sort_keys=True)
-        return hashlib.md5(key_string.encode()).hexdigest()
+        return hashlib.md5(key_string.encode(), usedforsecurity=False).hexdigest()
 
     def _get_cache(self, endpoint: str) -> TTLCache:
         """

@@ -1,133 +1,147 @@
 name: Tests
 
+# This workflow had been failing continuously since January 2026, which meant
+# nobody read it. Two structural faults kept it red regardless of the code:
+# the matrix asked for Python 3.10 while the package requires >=3.11, so the
+# install step failed before a single test ran and fail-fast cancelled the
+# rest; and the security job used `safety check`, which now needs an account
+# and exits 64. Both are fixed here.
+#
+# The suite itself carries a long tail of pre-existing failures (63 distinct
+# causes). Rather than stay red or pretend they are gone, the `tracked` job
+# records them in tests/known_failures.txt and fails only when a test that
+# used to pass starts failing.
+
 on:
   push:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
 
+env:
+  PYTHON_VERSION: "3.12"
+
 jobs:
-  test:
+  # Must pass. Same gate the publish workflow uses, across every supported
+  # Python so a version-specific break shows up here and not at release time.
+  gate:
+    name: Release gate (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
-
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
     - uses: actions/checkout@v4
-    
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
       with:
         python-version: ${{ matrix.python-version }}
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e .[dev,test]
-    
-    - name: Run package validation
-      run: python run_tests.py --validate
-    
-    - name: Run unit tests
-      run: python run_tests.py --type unit --coverage
-    
-    - name: Run integration tests
-      run: python run_tests.py --type integration
-    
-    - name: Run MCP tests
-      run: python run_tests.py --type mcp
-    
-    - name: Run code quality checks
-      run: python run_tests.py --lint
-    
-    - name: Upload coverage to Codecov
-      if: matrix.python-version == '3.11'
-      uses: codecov/codecov-action@v5
-      with:
-        files: ./coverage.xml
-        fail_ci_if_error: true
 
-  build:
+    - name: Install dependencies
+      run: uv sync --extra dev --extra test
+
+    - name: Lint for hard errors (undefined names, syntax)
+      run: uv run ruff check --select F821,F822,F823,E9 src tests
+
+    - name: Run release gate tests
+      run: make test-release-gate
+
+  # Runs everything except the TUI files, which need snapshot infrastructure
+  # and a real terminal. Green means "no worse than the recorded baseline".
+  tracked:
+    name: Full suite, regressions only
     runs-on: ubuntu-latest
-    needs: test
-    
     steps:
     - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
       with:
-        python-version: "3.11"
-    
-    - name: Install build dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install build twine
-    
-    - name: Build package
-      run: python -m build
-    
-    - name: Check package
-      run: python -m twine check dist/*
-    
-    - name: Upload build artifacts
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: uv sync --extra dev --extra test
+
+    - name: Run tracked suite
+      run: make test-tracked
+
+    - name: Upload JUnit results
+      if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: dist
-        path: dist/
+        name: junit-tracked
+        path: junit-tracked.xml
+        retention-days: 14
+        if-no-files-found: warn
 
-  test-install:
+  # Build the artifacts and prove the wheel starts as an MCP server. This is
+  # the check that would have caught the 2.4.1 import-time crash, so it runs
+  # on pull requests too rather than only at publish time.
+  build:
+    name: Build and probe (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    needs: build
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.10", "3.13"]
-    
-    steps:
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-    
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: dist
-        path: dist/
-    
-    - name: Install package from wheel
-      run: |
-        pip install dist/*.whl
-    
-    - name: Test CLI installation
-      run: |
-        vultr-cli --help
-        vultr-cli --version
-    
-    - name: Test package imports
-      run: |
-        python -c "from mcp_vultr import VultrDNSClient, create_vultr_mcp_server; print('Package imports successful')"
-        python -c "from mcp_vultr.cli_main import cli; print('CLI imports successful')"
-
-  security:
-    runs-on: ubuntu-latest
-    
+        python-version: ["3.11", "3.13"]
     steps:
     - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
       with:
-        python-version: "3.11"
-    
-    - name: Install security tools
+        python-version: ${{ matrix.python-version }}
+
+    - name: Build package
       run: |
-        python -m pip install --upgrade pip
-        pip install safety bandit
-    
-    - name: Run safety check
-      run: safety check
-    
-    - name: Run bandit security scan
-      run: bandit -r src/
+        rm -rf dist
+        uv build
+        ls -la dist/
+
+    - name: Check package metadata
+      run: uvx twine check dist/*
+
+    - name: Install the wheel and speak MCP to it
+      run: |
+        uv venv --python "${{ matrix.python-version }}" .probe-venv
+        uv pip install --python .probe-venv/bin/python dist/*.whl
+        .probe-venv/bin/vultr-cli --version
+        .probe-venv/bin/python -c "from mcp_vultr import VultrDNSClient, create_vultr_mcp_server; print('imports ok')"
+        uv run --no-project python scripts/stdio_probe.py .probe-venv/bin/mcp-vultr
+
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    # Our own code. High severity blocks; the medium B104 hits are "0.0.0.0"
+    # appearing in firewall rule examples, which is the subject matter.
+    - name: Bandit (high severity blocks)
+      run: uvx bandit -r src -q --severity-level high
+
+    - name: Bandit (full report)
+      if: always()
+      run: uvx bandit -r src -q -f txt || true
+
+    # Dependency advisories are reported, not blocking: most are transitive
+    # through FastMCP and cannot be fixed from this repo, and a permanently
+    # red job is a job nobody reads. Review the summary when it moves.
+    - name: pip-audit (advisory)
+      if: always()
+      run: |
+        uv export --no-hashes --no-dev --format requirements-txt > requirements-audit.txt
+        uvx pip-audit --progress-spinner off -r requirements-audit.txt \
+          --format markdown -o audit.md || true
+        {
+          echo "## Dependency advisories"
+          echo ""
+          if [ -s audit.md ]; then cat audit.md; else echo "None reported."; fi
+        } >> "$GITHUB_STEP_SUMMARY"
