@@ -148,3 +148,6 @@ Thumbs.db
 .env.development
 .env.test
 .env.production
+
+# JUnit XML from `make test-tracked`
+junit-tracked.xml
