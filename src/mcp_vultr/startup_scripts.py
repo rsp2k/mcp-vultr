@@ -55,6 +55,11 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
         """
         return await vultr_client.list_startup_scripts()
 
+    async def _get_startup_script(script_identifier: str) -> dict[str, Any]:
+        """Fetch one startup script. Shared by the tool and by other tools."""
+        script_id = await get_startup_script_id(script_identifier)
+        return await vultr_client.get_startup_script(script_id)
+
     @mcp.tool()
     async def get_startup_script(script_identifier: str) -> dict[str, Any]:
         """
@@ -67,8 +72,7 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
         Returns:
             Startup script details
         """
-        script_id = await get_startup_script_id(script_identifier)
-        return await vultr_client.get_startup_script(script_id)
+        return await _get_startup_script(script_identifier)
 
     @mcp.tool()
     async def create_startup_script(
@@ -306,7 +310,7 @@ systemctl restart sshd
         Returns:
             Script content
         """
-        script = await get_startup_script(script_identifier)
+        script = await _get_startup_script(script_identifier)
         return script.get("script", "")
 
     return mcp

@@ -184,16 +184,8 @@ def create_marketplace_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_marketplace_app_variables(image_id)
 
     # Marketplace tools
-    @mcp.tool
-    async def get_application(app_id: str) -> dict[str, Any]:
-        """Get detailed information about a specific application.
-
-        Args:
-            app_id: The application ID, name, short_name, or image_id (e.g., "wordpress", "openlitespeed-wordpress")
-
-        Returns:
-            Detailed application information
-        """
+    async def _get_application(app_id: str) -> dict[str, Any]:
+        """Look up one application. Shared by the tool and by other tools."""
         # Get the actual identifier
         identifier = await get_application_id(app_id)
 
@@ -204,6 +196,18 @@ def create_marketplace_mcp(vultr_client) -> FastMCP:
                 return app
 
         raise ValueError(f"Application '{app_id}' not found")
+
+    @mcp.tool
+    async def get_application(app_id: str) -> dict[str, Any]:
+        """Get detailed information about a specific application.
+
+        Args:
+            app_id: The application ID, name, short_name, or image_id (e.g., "wordpress", "openlitespeed-wordpress")
+
+        Returns:
+            Detailed application information
+        """
+        return await _get_application(app_id)
 
     @mcp.tool
     async def search_applications(
@@ -292,7 +296,7 @@ def create_marketplace_mcp(vultr_client) -> FastMCP:
         Returns:
             Deployment guidance including application details and requirements
         """
-        app = await get_application(app_id)
+        app = await _get_application(app_id)
 
         guide = {
             "application": app,

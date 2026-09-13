@@ -42,6 +42,21 @@ def create_plans_mcp(vultr_client) -> FastMCP:
     """
     mcp = FastMCP(name="vultr-plans")
 
+    async def _list_plans(plan_type: str | None, format: str) -> str:
+        """Render the plan list. Shared by the tool and the per-type tools."""
+        plans = await vultr_client.list_plans(plan_type)
+
+        if format == "compact":
+            type_label = plan_type.upper() if plan_type else "ALL"
+            lines = [f"; {type_label} plans ({len(plans)} available)"]
+            lines.append(f"; {'Plan ID':<20} {'CPU':>6}  {'RAM':>10}  {'Disk':>14}  {'Cost':>10}  Regions")
+            lines.append("; " + "-" * 90)
+            for plan in sorted(plans, key=lambda p: p.get("monthly_cost", 0)):
+                lines.append(_format_plan_compact(plan))
+            return "\n".join(lines)
+        else:
+            return json.dumps(plans)
+
     @mcp.tool()
     async def list_plans(
         plan_type: str | None = None,
@@ -57,18 +72,7 @@ def create_plans_mcp(vultr_client) -> FastMCP:
         Returns:
             Plans in requested format
         """
-        plans = await vultr_client.list_plans(plan_type)
-
-        if format == "compact":
-            type_label = plan_type.upper() if plan_type else "ALL"
-            lines = [f"; {type_label} plans ({len(plans)} available)"]
-            lines.append(f"; {'Plan ID':<20} {'CPU':>6}  {'RAM':>10}  {'Disk':>14}  {'Cost':>10}  Regions")
-            lines.append("; " + "-" * 90)
-            for plan in sorted(plans, key=lambda p: p.get("monthly_cost", 0)):
-                lines.append(_format_plan_compact(plan))
-            return "\n".join(lines)
-        else:
-            return json.dumps(plans)
+        return await _list_plans(plan_type, format)
 
     @mcp.tool()
     async def get_plan(plan_id: str) -> dict[str, Any]:
@@ -94,7 +98,7 @@ def create_plans_mcp(vultr_client) -> FastMCP:
         Returns:
             VC2 plans in requested format
         """
-        return await list_plans("vc2", format)
+        return await _list_plans("vc2", format)
 
     @mcp.tool()
     async def list_vhf_plans(format: str = "compact") -> str:
@@ -107,7 +111,7 @@ def create_plans_mcp(vultr_client) -> FastMCP:
         Returns:
             VHF plans in requested format
         """
-        return await list_plans("vhf", format)
+        return await _list_plans("vhf", format)
 
     @mcp.tool()
     async def list_voc_plans(format: str = "compact") -> str:
@@ -120,7 +124,7 @@ def create_plans_mcp(vultr_client) -> FastMCP:
         Returns:
             VOC plans in requested format
         """
-        return await list_plans("voc", format)
+        return await _list_plans("voc", format)
 
     @mcp.tool()
     async def search_plans_by_specs(

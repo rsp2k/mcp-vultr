@@ -83,7 +83,7 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
             gateway_identifier: The gateway label or ID
         """
         await get_storage_gateway_id(gateway_identifier)
-        return await get_gateway_status(gateway_identifier)
+        return await _get_gateway_status(gateway_identifier)
 
     # Storage Gateway management tools
 
@@ -277,18 +277,8 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         gateways = await vultr_client.list_storage_gateways()
         return [gateway for gateway in gateways if gateway.get("status") == status]
 
-    @mcp.tool
-    async def get_gateway_status(gateway_identifier: str) -> dict[str, Any]:
-        """Get comprehensive status information for a storage gateway.
-
-        Smart identifier resolution: Use gateway label or ID.
-
-        Args:
-            gateway_identifier: Gateway label or ID
-
-        Returns:
-            Detailed status including health, exports, and network configuration
-        """
+    async def _get_gateway_status(gateway_identifier: str) -> dict[str, Any]:
+        """Build the gateway status payload. Shared by the tool and the resource."""
         gateway_id = await get_storage_gateway_id(gateway_identifier)
         gateway = await vultr_client.get_storage_gateway(gateway_id)
 
@@ -337,6 +327,20 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
         }
 
         return status_info
+
+    @mcp.tool
+    async def get_gateway_status(gateway_identifier: str) -> dict[str, Any]:
+        """Get comprehensive status information for a storage gateway.
+
+        Smart identifier resolution: Use gateway label or ID.
+
+        Args:
+            gateway_identifier: Gateway label or ID
+
+        Returns:
+            Detailed status including health, exports, and network configuration
+        """
+        return await _get_gateway_status(gateway_identifier)
 
     @mcp.tool
     async def get_mount_instructions(gateway_identifier: str) -> dict[str, Any]:
