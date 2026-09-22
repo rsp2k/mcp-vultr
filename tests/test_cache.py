@@ -47,7 +47,13 @@ class TestCacheManager:
         assert cache_manager.general_cache.maxsize == 250  # max_size // 4
         
         # Check initial stats
-        expected_stats = {"hits": 0, "misses": 0, "evictions": 0, "sets": 0}
+        expected_stats = {
+            "hits": 0,
+            "misses": 0,
+            "evictions": 0,
+            "sets": 0,
+            "invalidations": 0,
+        }
         assert cache_manager.stats == expected_stats
 
     def test_init_custom_parameters(self):
@@ -315,6 +321,7 @@ class TestCacheManager:
             "misses": 0,
             "evictions": 0,
             "sets": 0,
+            "invalidations": 0,
             "domain_cache_size": 0,
             "record_cache_size": 0,
             "general_cache_size": 0,

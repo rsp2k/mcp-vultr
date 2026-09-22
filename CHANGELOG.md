@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project uses [CalVer](https://calver.org/) (`YYYY.MM.DD`, PEP 440) from 2026.09.12 onward;
 earlier releases followed Semantic Versioning.
 
+## [2026.09.21] - 2026-09-21
+
+### Fixed
+- **Six tools crashed with `'FunctionTool' object is not callable`.**
+  `@mcp.tool()` returns a `FunctionTool` on FastMCP 2.x, not the function
+  it decorates, so any tool whose body called a sibling tool by name
+  failed the moment it was invoked. Affected
+  `get_startup_script_content`, `list_vc2_plans`, `list_vhf_plans`,
+  `list_voc_plans`, `get_application_deployment_guide`, and the
+  `storage-gateways://{id}/status` resource. Each shared body moved into
+  a plain helper that the tool and its callers both call, so the fix
+  does not depend on what the decorator returns. Tool names, resource
+  URIs and templates are unchanged.
+- **A successful write was followed by stale reads.** Nothing on the
+  write path invalidated the response cache, so a create or delete was
+  followed by up to the cache TTL (300s by default) of listings that did
+  not reflect it. Reported from live use: two firewall rules were created
+  successfully and were reachable, while the rule listing kept returning
+  the pre-create result. That reads as a *failed* write rather than a
+  stale one, and the obvious recovery is to issue the create again,
+  which ends in duplicate grants; the same shape on a delete invites a
+  second delete.
+
+  Every successful non-GET now invalidates the reads it can affect.
+  Invalidation happens in `VultrDNSServer._make_request`, so it covers
+  every resource rather than only DNS, and it matches on whole path
+  segments: writing to `/firewalls/g1/rules` clears that listing and
+  `/firewalls`, and leaves `/firewalls/g2/rules` alone.
+  `CacheManager.get_stats()` gained an `invalidations` counter.
+
 ## [2026.09.12] - 2026-09-12
 
 Versioning switches to CalVer (`YYYY.MM.DD`, PEP 440) from this release

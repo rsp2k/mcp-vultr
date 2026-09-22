@@ -48,8 +48,18 @@ class CacheManager:
         self.record_cache = TTLCache(maxsize=max_size // 2, ttl=record_ttl)
         self.general_cache = TTLCache(maxsize=max_size // 4, ttl=default_ttl)
 
+        # key -> endpoint, so a write can find the reads it invalidates.
+        # The cached values keep their plain shape; this sits alongside.
+        self._key_endpoints: dict[str, str] = {}
+
         # Track cache statistics
-        self.stats = {"hits": 0, "misses": 0, "evictions": 0, "sets": 0}
+        self.stats = {
+            "hits": 0,
+            "misses": 0,
+            "evictions": 0,
+            "sets": 0,
+            "invalidations": 0,
+        }
 
     def _generate_key(self, method: str, endpoint: str, params: dict = None) -> str:
         """
@@ -146,6 +156,7 @@ class CacheManager:
 
         try:
             cache[key] = value
+            self._key_endpoints[key] = endpoint
             self.stats["sets"] += 1
             logger.debug(
                 "Cache set",
@@ -155,6 +166,62 @@ class CacheManager:
             )
         except Exception as e:
             logger.warning("Cache set failed", key=key, error=str(e))
+
+    @staticmethod
+    def _segments(endpoint: str) -> list[str]:
+        """Path segments of an endpoint, ignoring any query string."""
+        return [seg for seg in endpoint.split("?")[0].split("/") if seg]
+
+    @classmethod
+    def _touches(cls, written: str, cached: str) -> bool:
+        """
+        True if a write to `written` can change what a GET of `cached` returns.
+
+        Compares whole path segments, so /firewalls/g1/rules does not match
+        /firewalls/g2/rules, while /instances does match /instances/abc/start.
+        Either being a prefix of the other counts: creating a record changes
+        the collection listing, and updating one changes both it and the list.
+        """
+        a, b = cls._segments(written), cls._segments(cached)
+        n = min(len(a), len(b))
+        return n > 0 and a[:n] == b[:n]
+
+    def invalidate_endpoint(self, endpoint: str) -> int:
+        """
+        Drop cached reads that a write to `endpoint` may have invalidated.
+
+        Called for every successful non-GET request. Without it a create is
+        followed by up to `ttl` seconds of listings that omit the new object,
+        which reads as a failed write rather than a stale one.
+
+        Args:
+            endpoint: The endpoint that was written to
+
+        Returns:
+            Number of cache entries dropped
+        """
+        removed = 0
+
+        for key, cached_endpoint in list(self._key_endpoints.items()):
+            cache = self._get_cache(cached_endpoint)
+
+            # Expired under its TTL already; drop the dangling index entry.
+            if key not in cache:
+                self._key_endpoints.pop(key, None)
+                continue
+
+            if self._touches(endpoint, cached_endpoint):
+                cache.pop(key, None)
+                self._key_endpoints.pop(key, None)
+                removed += 1
+
+        if removed:
+            self.stats["invalidations"] += removed
+            logger.debug(
+                "Cache invalidated after write", endpoint=endpoint, entries=removed
+            )
+
+        return removed
 
     def invalidate(self, pattern: str = None) -> None:
         """
@@ -168,6 +235,7 @@ class CacheManager:
             self.domain_cache.clear()
             self.record_cache.clear()
             self.general_cache.clear()
+            self._key_endpoints.clear()
             logger.info("All caches cleared")
         else:
             # Clear specific entries (simplified - would need more sophisticated matching)

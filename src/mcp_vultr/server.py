@@ -192,6 +192,11 @@ class VultrDNSServer:
                 # Cache successful GET requests
                 if method.upper() == "GET" and result:
                     self.cache.set(method, endpoint, params, result)
+                elif method.upper() != "GET":
+                    # Every mutation funnels through here, so one call covers
+                    # DNS, firewall, instances and the rest. A 204 DELETE has
+                    # an empty result and still has to invalidate.
+                    self.cache.invalidate_endpoint(endpoint)
 
                 # Record successful API call metrics
                 record_api_call(

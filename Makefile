@@ -65,7 +65,8 @@ RELEASE_GATE_TESTS = \
 	tests/test_client.py \
 	tests/test_resource_notifications.py \
 	tests/test_mcp_server.py \
-	tests/test_tool_internal_calls.py
+	tests/test_tool_internal_calls.py \
+	tests/test_cache_invalidation.py
 
 test-release-gate:
 	uv run pytest -q -p no:xdist $(RELEASE_GATE_TESTS)
