@@ -6,7 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project uses [CalVer](https://calver.org/) (`YYYY.MM.DD`, PEP 440) from 2026.09.12 onward;
 earlier releases followed Semantic Versioning.
 
-## [Unreleased]
+## [2026.09.21.1] - 2026-09-21
+
+Same-day follow-up to 2026.09.21, which is published and immutable. The
+fourth segment is a plain release segment, not a PEP 440 post-release,
+so it sorts after 2026.09.21 and installs normally.
 
 ### Added
 - **Automatic backup schedules.** `backup_get_schedule` and

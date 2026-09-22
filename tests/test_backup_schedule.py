@@ -28,8 +28,8 @@ INSTANCES = [
     {"id": WEB_ID, "label": "web", "hostname": "web-01", "main_ip": "203.0.113.5"},
     # Two hosts answering to the same hostname, the migration case that makes
     # first-match resolution dangerous.
-    {"id": DUPE_A, "label": "mail-new", "hostname": "mcfeely", "main_ip": "203.0.113.6"},
-    {"id": DUPE_B, "label": "mail-old", "hostname": "mcfeely", "main_ip": "203.0.113.7"},
+    {"id": DUPE_A, "label": "mail-new", "hostname": "mail", "main_ip": "203.0.113.6"},
+    {"id": DUPE_B, "label": "mail-old", "hostname": "mail", "main_ip": "203.0.113.7"},
 ]
 
 
@@ -221,7 +221,7 @@ class TestRefusals:
 
     async def test_ambiguous_hostname_is_refused_not_guessed(self, api):
         """
-        Two hosts answering to 'mcfeely' must not resolve to whichever is first.
+        Two hosts answering to the same name must not resolve to whichever is first.
 
         This is the shape that nearly stopped a live mail host during a
         decommission: the old and new box shared a name, and a first-match
@@ -232,7 +232,7 @@ class TestRefusals:
                 await c.call_tool(
                     "set_schedule",
                     {
-                        "instance_identifier": "mcfeely",
+                        "instance_identifier": "mail",
                         "schedule_type": "daily",
                         "hour": 3,
                     },
