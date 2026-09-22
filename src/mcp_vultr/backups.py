@@ -13,6 +13,7 @@ from typing import Any
 
 from fastmcp import Context, FastMCP
 
+from .lookup import resolve_id
 from .notification_manager import NotificationManager
 
 #: Schedule types Vultr accepts. The `daily_alt_*` pair means "every other
@@ -35,17 +36,12 @@ def create_backups_mcp(vultr_client) -> FastMCP:
     """
     mcp = FastMCP(name="vultr-backups")
 
-    def is_uuid_format(value: str) -> bool:
-        """Check if a string looks like a UUID."""
-        return bool(len(value) == 36 and value.count("-") == 4)
-
     async def resolve_instance_id(identifier: str) -> str:
         """
         Resolve an instance label, hostname or UUID to an instance ID.
 
-        Refuses an ambiguous name rather than picking one. Two hosts sharing a
-        label during a migration is normal, and silently choosing one of them
-        is how a schedule change lands on the wrong machine.
+        Refuses an ambiguous name rather than picking one. See
+        mcp_vultr.lookup for why.
 
         Args:
             identifier: Instance label, hostname, or UUID
@@ -56,32 +52,12 @@ def create_backups_mcp(vultr_client) -> FastMCP:
         Raises:
             ValueError: If nothing matches, or more than one thing does
         """
-        if is_uuid_format(identifier):
-            return identifier
-
-        instances = await vultr_client.list_instances()
-        matches = [
-            inst
-            for inst in instances
-            if inst.get("label") == identifier or inst.get("hostname") == identifier
-        ]
-
-        if not matches:
-            raise ValueError(
-                f"No instance found with label or hostname '{identifier}'"
-            )
-        if len(matches) > 1:
-            listed = ", ".join(
-                f"{inst.get('id')} ({inst.get('label') or 'unlabeled'}"
-                f"{', ' + inst['main_ip'] if inst.get('main_ip') else ''})"
-                for inst in matches
-            )
-            raise ValueError(
-                f"'{identifier}' matches {len(matches)} instances: {listed}. "
-                f"Pass the instance ID to say which one you mean."
-            )
-
-        return matches[0]["id"]
+        return await resolve_id(
+            identifier,
+            vultr_client.list_instances,
+            ("label", "hostname"),
+            "Instance",
+        )
 
     def validate_schedule(
         schedule_type: str, hour: int | None, dow: int | None, dom: int | None

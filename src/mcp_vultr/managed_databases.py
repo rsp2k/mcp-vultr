@@ -12,6 +12,7 @@ from fastmcp import FastMCP
 
 from .database_analyzer import DatabaseAnalyzer
 from .server import VultrResourceNotFoundError
+from .lookup import resolve_id
 
 
 def create_managed_databases_mcp(vultr_client) -> FastMCP:
@@ -27,11 +28,6 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
     mcp = FastMCP(name="vultr-managed-databases")
     database_analyzer = DatabaseAnalyzer(vultr_client)
 
-    # Helper function to check if a string looks like a UUID
-    def is_uuid_format(s: str) -> bool:
-        """Check if a string looks like a UUID."""
-        return bool(len(s) == 36 and s.count("-") == 4)
-
     # Helper function to get database ID from label or UUID
     async def get_database_id(identifier: str) -> str:
         """
@@ -45,18 +41,16 @@ def create_managed_databases_mcp(vultr_client) -> FastMCP:
 
         Raises:
             ValueError: If the database is not found
+
+        A name matching more than one is refused rather than resolved to
+        whichever came back first. See mcp_vultr.lookup for why.
         """
-        # If it looks like a UUID, return it as-is
-        if is_uuid_format(identifier):
-            return identifier
-
-        # Otherwise, search for it by label
-        databases = await vultr_client.list_managed_databases()
-        for database in databases:
-            if database.get("label") == identifier:
-                return database["id"]
-
-        raise ValueError(f"Database '{identifier}' not found (searched by label)")
+        return await resolve_id(
+            identifier,
+            vultr_client.list_managed_databases,
+            ("label",),
+            "Managed database",
+        )
 
     # Database resources
     @mcp.resource("databases://list")

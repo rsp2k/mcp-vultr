@@ -10,6 +10,7 @@ from fastmcp import Context, FastMCP
 
 from .notification_manager import NotificationManager
 from .server import VultrResourceNotFoundError
+from .lookup import resolve_id
 
 
 def create_vpcs_mcp(vultr_client) -> FastMCP:
@@ -45,18 +46,16 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
 
         Raises:
             ValueError: If the VPC is not found
+
+        A name matching more than one is refused rather than resolved to
+        whichever came back first. See mcp_vultr.lookup for why.
         """
-        # If it looks like a UUID, return as-is
-        if is_uuid_format(identifier):
-            return identifier
-
-        # Search by description
-        vpcs = await vultr_client.list_vpcs()
-        for vpc in vpcs:
-            if vpc.get("description") == identifier:
-                return vpc["id"]
-
-        raise ValueError(f"VPC '{identifier}' not found")
+        return await resolve_id(
+            identifier,
+            vultr_client.list_vpcs,
+            ("description",),
+            "VPC",
+        )
 
     # Helper function to get VPC 2.0 ID from description or ID
     async def get_vpc2_id(identifier: str) -> str:
@@ -71,18 +70,16 @@ def create_vpcs_mcp(vultr_client) -> FastMCP:
 
         Raises:
             ValueError: If the VPC 2.0 is not found
+
+        A name matching more than one is refused rather than resolved to
+        whichever came back first. See mcp_vultr.lookup for why.
         """
-        # If it looks like a UUID, return as-is
-        if is_uuid_format(identifier):
-            return identifier
-
-        # Search by description
-        vpc2s = await vultr_client.list_vpc2s()
-        for vpc2 in vpc2s:
-            if vpc2.get("description") == identifier:
-                return vpc2["id"]
-
-        raise ValueError(f"VPC 2.0 '{identifier}' not found")
+        return await resolve_id(
+            identifier,
+            vultr_client.list_vpc2s,
+            ("description",),
+            "VPC 2.0",
+        )
 
     # VPC resources
     @mcp.resource("vpcs://list")

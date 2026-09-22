@@ -95,7 +95,7 @@ class TestReadSchedule:
 
     async def test_unknown_name_is_reported(self, api):
         async with Client(api["mcp"]) as c:
-            with pytest.raises(ToolError, match="No instance found"):
+            with pytest.raises(ToolError, match="not found"):
                 await c.call_tool("get_schedule", {"instance_identifier": "nope"})
 
 

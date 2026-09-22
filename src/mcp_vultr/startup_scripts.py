@@ -10,6 +10,7 @@ from fastmcp import Context, FastMCP
 
 from .notification_manager import NotificationManager
 from .server import VultrResourceNotFoundError
+from .lookup import resolve_id
 
 
 def create_startup_scripts_mcp(vultr_client) -> FastMCP:
@@ -34,16 +35,17 @@ def create_startup_scripts_mcp(vultr_client) -> FastMCP:
 
     # Helper function to get startup script ID from name or ID
     async def get_startup_script_id(identifier: str) -> str:
-        """Get the startup script ID from name or existing ID."""
-        if is_uuid_format(identifier):
-            return identifier
+        """Get the startup script ID from name or existing ID.
 
-        scripts = await vultr_client.list_startup_scripts()
-        for script in scripts:
-            if script.get("name") == identifier:
-                return script["id"]
-
-        raise ValueError(f"Startup script '{identifier}' not found")
+        A name matching more than one is refused rather than resolved to
+        whichever came back first. See mcp_vultr.lookup for why.
+        """
+        return await resolve_id(
+            identifier,
+            vultr_client.list_startup_scripts,
+            ("name",),
+            "Startup script",
+        )
 
     @mcp.tool()
     async def list_startup_scripts() -> list[dict[str, Any]]:

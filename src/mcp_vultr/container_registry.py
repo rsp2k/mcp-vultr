@@ -10,6 +10,7 @@ from fastmcp import Context, FastMCP
 
 from .notification_manager import NotificationManager
 from .server import VultrResourceNotFoundError
+from .lookup import resolve_id
 
 
 def create_container_registry_mcp(vultr_client) -> FastMCP:
@@ -45,18 +46,16 @@ def create_container_registry_mcp(vultr_client) -> FastMCP:
 
         Raises:
             ValueError: If the registry is not found
+
+        A name matching more than one is refused rather than resolved to
+        whichever came back first. See mcp_vultr.lookup for why.
         """
-        # If it looks like a UUID, return as-is
-        if is_uuid_format(identifier):
-            return identifier
-
-        # Search by name
-        registries = await vultr_client.list_container_registries()
-        for registry in registries:
-            if registry.get("name") == identifier:
-                return registry["id"]
-
-        raise ValueError(f"Container registry '{identifier}' not found")
+        return await resolve_id(
+            identifier,
+            vultr_client.list_container_registries,
+            ("name",),
+            "Container registry",
+        )
 
     # Container Registry resources
     @mcp.resource("container-registry://list")

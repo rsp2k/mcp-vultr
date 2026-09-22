@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project uses [CalVer](https://calver.org/) (`YYYY.MM.DD`, PEP 440) from 2026.09.12 onward;
 earlier releases followed Semantic Versioning.
 
+## [Unreleased]
+
+### Added
+- **`instance_list` and `instance_get`.** The instance module had create,
+  delete, start, stop, reboot, reinstall, update, bandwidth and the
+  IPv4/IPv6 listers, but nothing that enumerated instances or returned
+  one instance's detail, so agents doing fleet work fell back to the raw
+  REST API. `instance_list` defaults to a compact one-line-per-instance
+  format carrying id, label, hostname, region, plan, power state and
+  main IP; pass `format="json"` for the full objects.
+- `mcp_vultr.lookup`, one place that turns a label, description,
+  hostname or name into a resource ID.
+
+### Changed
+- **A name matching more than one resource is now an error.** Every
+  service module resolved names by returning the first match, in 22
+  separate copies of the same loop. Two resources sharing a label is
+  routine during a migration, and the failure was silent: the call
+  succeeded against whichever the API happened to list first. It nearly
+  stopped a live mail host during a decommission, where the retired and
+  replacement instances answered to the same hostname.
+
+  All 22 resolvers now refuse an ambiguous name and list the candidates
+  with their IDs and IPs so the caller can pick one. This covers
+  instances, firewall groups, snapshots, VPCs, load balancers,
+  Kubernetes clusters, block storage, object storage, SSH keys, startup
+  scripts, storage gateways, CDN zones, container registries, managed
+  databases, bare metal servers, subaccounts, users and inference
+  subscriptions.
+
+  **This is a behaviour change.** A call that previously succeeded
+  against an arbitrary one of several same-named resources now fails
+  with a message naming them. Passing an ID is unaffected and still
+  costs no lookup.
+- `instance_get` unwraps the API envelope, matching `instance_list`.
+  `VultrDNSServer.get_instance()` still returns the raw response.
+
 ## [2026.09.21.1] - 2026-09-21
 
 Same-day follow-up to 2026.09.21, which is published and immutable. The

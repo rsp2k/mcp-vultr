@@ -10,6 +10,7 @@ from typing import Any
 from fastmcp import Context, FastMCP
 
 from .notification_manager import NotificationManager
+from .lookup import resolve_id
 
 
 def create_users_mcp(vultr_client) -> FastMCP:
@@ -24,11 +25,6 @@ def create_users_mcp(vultr_client) -> FastMCP:
     """
     mcp = FastMCP(name="vultr-users")
 
-    # Helper function to check if a string looks like a UUID
-    def is_uuid_format(s: str) -> bool:
-        """Check if a string looks like a UUID."""
-        return bool(len(s) == 36 and s.count("-") == 4)
-
     # Helper function to get user ID from email or UUID
     async def get_user_id(identifier: str) -> str:
         """
@@ -42,18 +38,16 @@ def create_users_mcp(vultr_client) -> FastMCP:
 
         Raises:
             ValueError: If the user is not found
+
+        A name matching more than one is refused rather than resolved to
+        whichever came back first. See mcp_vultr.lookup for why.
         """
-        # If it looks like a UUID, return it as-is
-        if is_uuid_format(identifier):
-            return identifier
-
-        # Otherwise, search for it by email
-        users = await vultr_client.list_users()
-        for user in users:
-            if user.get("email") == identifier:
-                return user["id"]
-
-        raise ValueError(f"User '{identifier}' not found (searched by email)")
+        return await resolve_id(
+            identifier,
+            vultr_client.list_users,
+            ("email",),
+            "User",
+        )
 
     # User resources
     @mcp.resource("users://list")

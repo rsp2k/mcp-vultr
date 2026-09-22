@@ -11,6 +11,7 @@ from fastmcp import FastMCP
 
 from .object_storage_analyzer import ObjectStorageAnalyzer
 from .server import VultrResourceNotFoundError
+from .lookup import resolve_id
 
 
 def create_object_storage_mcp(vultr_client) -> FastMCP:
@@ -47,18 +48,16 @@ def create_object_storage_mcp(vultr_client) -> FastMCP:
 
         Raises:
             ValueError: If the Object Storage is not found
+
+        A name matching more than one is refused rather than resolved to
+        whichever came back first. See mcp_vultr.lookup for why.
         """
-        # If it looks like a UUID, return it as-is
-        if is_uuid_format(identifier):
-            return identifier
-
-        # Otherwise, search for it by label
-        storages = await vultr_client.list_object_storage()
-        for storage in storages:
-            if storage.get("label") == identifier:
-                return storage["id"]
-
-        raise ValueError(f"Object Storage '{identifier}' not found (searched by label)")
+        return await resolve_id(
+            identifier,
+            vultr_client.list_object_storage,
+            ("label",),
+            "Object storage",
+        )
 
     # Object Storage resources
     @mcp.resource("object-storage://list")

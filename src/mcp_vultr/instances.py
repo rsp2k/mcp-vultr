@@ -4,10 +4,12 @@ Vultr Instances FastMCP Module.
 This module contains FastMCP tools and resources for managing Vultr instances.
 """
 
+import json
 from typing import Any
 
 from fastmcp import Context, FastMCP
 
+from .lookup import resolve_id
 from .notification_manager import NotificationManager
 
 
@@ -23,15 +25,12 @@ def create_instances_mcp(vultr_client) -> FastMCP:
     """
     mcp = FastMCP(name="vultr-instances")
 
-    # Helper function to check if a string looks like a UUID
-    def is_uuid_format(s: str) -> bool:
-        """Check if a string looks like a UUID."""
-        return bool(len(s) == 36 and s.count("-") == 4)
-
-    # Helper function to get instance ID from label or hostname
     async def get_instance_id(identifier: str) -> str:
         """
         Get the instance ID from a label, hostname, or UUID.
+
+        A name matching more than one instance is refused rather than resolved
+        to whichever came back first. See mcp_vultr.lookup for why.
 
         Args:
             identifier: Instance label, hostname, or UUID
@@ -40,23 +39,13 @@ def create_instances_mcp(vultr_client) -> FastMCP:
             The instance ID (UUID)
 
         Raises:
-            ValueError: If the instance is not found
+            ValueError: If no instance matches, or more than one does
         """
-        # If it looks like a UUID, return it as-is
-        if is_uuid_format(identifier):
-            return identifier
-
-        # Otherwise, search for it by label or hostname
-        instances = await vultr_client.list_instances()
-        for instance in instances:
-            if (
-                instance.get("label") == identifier
-                or instance.get("hostname") == identifier
-            ):
-                return instance["id"]
-
-        raise ValueError(
-            f"Instance '{identifier}' not found (searched by label and hostname)"
+        return await resolve_id(
+            identifier,
+            vultr_client.list_instances,
+            ("label", "hostname"),
+            "Instance",
         )
 
     # Instance resources
@@ -77,6 +66,62 @@ def create_instances_mcp(vultr_client) -> FastMCP:
         return await vultr_client.get_instance(actual_id)
 
     # Instance tools
+    # The explicit names keep these as instance_list / instance_get once
+    # mounted; a function literally named `list` would shadow the builtin for
+    # the whole factory and break every list[...] annotation in it.
+    @mcp.tool(name="list")
+    async def list_instances(format: str = "compact") -> str:
+        """List all instances in your account.
+
+        Args:
+            format: 'compact' (default, one line per instance) or 'json'
+
+        Returns:
+            Instances with id, label, hostname, region, plan, power state and
+            main IP. Compact format is far cheaper in tokens for fleet work.
+        """
+        instances = await vultr_client.list_instances()
+
+        if format != "compact":
+            return json.dumps(instances)
+
+        if not instances:
+            return "; No instances found"
+
+        lines = [f"; {len(instances)} instance(s)"]
+        lines.append(
+            f"; {'ID':<36}  {'LABEL':<20} {'HOSTNAME':<20} "
+            f"{'REGION':<8} {'PLAN':<18} {'POWER':<10} MAIN IP"
+        )
+        for inst in sorted(instances, key=lambda i: (i.get("label") or "")):
+            lines.append(
+                f"{inst.get('id', ''):<36}  {(inst.get('label') or '-'):<20} "
+                f"{(inst.get('hostname') or '-'):<20} {(inst.get('region') or '-'):<8} "
+                f"{(inst.get('plan') or '-'):<18} "
+                f"{(inst.get('power_status') or inst.get('status') or '-'):<10} "
+                f"{inst.get('main_ip') or '-'}"
+            )
+        return "\n".join(lines)
+
+    @mcp.tool(name="get")
+    async def get_instance(instance_id: str) -> dict[str, Any]:
+        """Get full details of a single instance.
+
+        Smart identifier resolution: use the instance ID, label or hostname.
+        A name matching more than one instance is refused rather than guessed.
+
+        Args:
+            instance_id: The instance ID, label, or hostname
+
+        Returns:
+            The instance, including power state, region, plan, IPs and tags
+        """
+        actual_id = await get_instance_id(instance_id)
+        result = await vultr_client.get_instance(actual_id)
+        # The client unwraps list_instances but not get_instance, so peel the
+        # envelope here rather than handing callers {"instance": {...}}.
+        return result.get("instance", result)
+
     # Instance management tools
 
     @mcp.tool

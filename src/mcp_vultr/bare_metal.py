@@ -9,6 +9,7 @@ from typing import Any
 from fastmcp import FastMCP, Context
 from .notification_manager import NotificationManager
 from .server import VultrResourceNotFoundError
+from .lookup import resolve_id
 
 
 def create_bare_metal_mcp(vultr_client) -> FastMCP:
@@ -33,19 +34,17 @@ def create_bare_metal_mcp(vultr_client) -> FastMCP:
 
     # Helper function to get bare metal server ID from label or ID
     async def get_bare_metal_id(identifier: str) -> str:
-        """Get the bare metal server ID from label or existing ID."""
-        if is_uuid_format(identifier):
-            return identifier
+        """Get the bare metal server ID from label or existing ID.
 
-        servers = await vultr_client.list_bare_metal_servers()
-        for server in servers:
-            if (
-                server.get("label") == identifier
-                or server.get("hostname") == identifier
-            ):
-                return server["id"]
-
-        raise ValueError(f"Bare metal server '{identifier}' not found")
+        A name matching more than one is refused rather than resolved to
+        whichever came back first. See mcp_vultr.lookup for why.
+        """
+        return await resolve_id(
+            identifier,
+            vultr_client.list_bare_metal_servers,
+            ("label", "hostname"),
+            "Bare metal server",
+        )
 
     @mcp.tool()
     async def list_bare_metal_servers() -> list[dict[str, Any]]:

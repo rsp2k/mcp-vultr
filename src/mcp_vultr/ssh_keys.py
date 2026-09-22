@@ -11,6 +11,7 @@ from fastmcp import Context, FastMCP
 
 from .notification_manager import NotificationManager
 from .server import VultrResourceNotFoundError
+from .lookup import resolve_id
 
 
 def create_ssh_keys_mcp(vultr_client) -> FastMCP:
@@ -25,11 +26,6 @@ def create_ssh_keys_mcp(vultr_client) -> FastMCP:
     """
     mcp = FastMCP(name="vultr-ssh-keys")
 
-    # Helper function to check if a string looks like a UUID
-    def is_uuid_format(s: str) -> bool:
-        """Check if a string looks like a UUID."""
-        return bool(len(s) == 36 and s.count("-") == 4)
-
     # Helper function to get SSH key ID from name
     async def get_ssh_key_id(identifier: str) -> str:
         """
@@ -43,18 +39,16 @@ def create_ssh_keys_mcp(vultr_client) -> FastMCP:
 
         Raises:
             ValueError: If the SSH key is not found
+
+        A name matching more than one is refused rather than resolved to
+        whichever came back first. See mcp_vultr.lookup for why.
         """
-        # If it looks like a UUID, return it as-is
-        if is_uuid_format(identifier):
-            return identifier
-
-        # Otherwise, search for it by name
-        ssh_keys = await vultr_client.list_ssh_keys()
-        for key in ssh_keys:
-            if key.get("name") == identifier:
-                return key["id"]
-
-        raise ValueError(f"SSH key '{identifier}' not found")
+        return await resolve_id(
+            identifier,
+            vultr_client.list_ssh_keys,
+            ("name",),
+            "SSH key",
+        )
 
     # SSH Key resources
     @mcp.resource("ssh-keys://list")

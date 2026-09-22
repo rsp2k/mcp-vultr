@@ -10,6 +10,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from .server import VultrResourceNotFoundError
+from .lookup import resolve_id
 
 
 def create_storage_gateways_mcp(vultr_client) -> FastMCP:
@@ -45,18 +46,16 @@ def create_storage_gateways_mcp(vultr_client) -> FastMCP:
 
         Raises:
             ValueError: If the storage gateway is not found
+
+        A name matching more than one is refused rather than resolved to
+        whichever came back first. See mcp_vultr.lookup for why.
         """
-        # If it looks like a UUID, return as-is
-        if is_uuid_format(identifier):
-            return identifier
-
-        # Search by label
-        gateways = await vultr_client.list_storage_gateways()
-        for gateway in gateways:
-            if gateway.get("label") == identifier:
-                return gateway["id"]
-
-        raise ValueError(f"Storage gateway '{identifier}' not found")
+        return await resolve_id(
+            identifier,
+            vultr_client.list_storage_gateways,
+            ("label",),
+            "Storage gateway",
+        )
 
     # Storage Gateway resources
     @mcp.resource("storage-gateways://list")

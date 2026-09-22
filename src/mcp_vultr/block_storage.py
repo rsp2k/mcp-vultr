@@ -10,6 +10,7 @@ from fastmcp import Context, FastMCP
 
 from .notification_manager import NotificationManager
 from .server import VultrResourceNotFoundError
+from .lookup import resolve_id
 
 
 def create_block_storage_mcp(vultr_client) -> FastMCP:
@@ -45,18 +46,16 @@ def create_block_storage_mcp(vultr_client) -> FastMCP:
 
         Raises:
             ValueError: If the block storage volume is not found
+
+        A name matching more than one is refused rather than resolved to
+        whichever came back first. See mcp_vultr.lookup for why.
         """
-        # If it looks like a UUID, return as-is
-        if is_uuid_format(identifier):
-            return identifier
-
-        # Search by label
-        volumes = await vultr_client.list_block_storage()
-        for volume in volumes:
-            if volume.get("label") == identifier:
-                return volume["id"]
-
-        raise ValueError(f"Block storage volume '{identifier}' not found")
+        return await resolve_id(
+            identifier,
+            vultr_client.list_block_storage,
+            ("label",),
+            "Block storage volume",
+        )
 
     # Block Storage resources
     @mcp.resource("block-storage://list")

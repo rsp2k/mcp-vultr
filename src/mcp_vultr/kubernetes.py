@@ -11,6 +11,7 @@ from fastmcp import Context, FastMCP
 from .kubernetes_analyzer import KubernetesAnalyzer
 from .notification_manager import NotificationManager
 from .server import VultrResourceNotFoundError
+from .lookup import resolve_id
 
 
 def create_kubernetes_mcp(vultr_client) -> FastMCP:
@@ -47,16 +48,16 @@ def create_kubernetes_mcp(vultr_client) -> FastMCP:
 
         Raises:
             ValueError: If the cluster is not found
+
+        A name matching more than one is refused rather than resolved to
+        whichever came back first. See mcp_vultr.lookup for why.
         """
-        if is_uuid_format(identifier):
-            return identifier
-
-        clusters = await vultr_client.list_kubernetes_clusters()
-        for cluster in clusters:
-            if cluster.get("label") == identifier:
-                return cluster["id"]
-
-        raise ValueError(f"Kubernetes cluster '{identifier}' not found")
+        return await resolve_id(
+            identifier,
+            vultr_client.list_kubernetes_clusters,
+            ("label",),
+            "Kubernetes cluster",
+        )
 
     # Helper function to get node pool ID from label within a cluster
     async def get_nodepool_id(

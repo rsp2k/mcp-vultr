@@ -10,6 +10,7 @@ from fastmcp import FastMCP
 
 from .cdn_analyzer import CDNAnalyzer
 from .server import VultrResourceNotFoundError
+from .lookup import resolve_id
 
 
 def create_cdn_mcp(vultr_client) -> FastMCP:
@@ -35,19 +36,17 @@ def create_cdn_mcp(vultr_client) -> FastMCP:
 
     # Helper function to get CDN zone ID from domain or ID
     async def get_cdn_zone_id(identifier: str) -> str:
-        """Get the CDN zone ID from origin domain or existing ID."""
-        if is_uuid_format(identifier):
-            return identifier
+        """Get the CDN zone ID from origin domain or existing ID.
 
-        zones = await vultr_client.list_cdn_zones()
-        for zone in zones:
-            if (
-                zone.get("origin_domain") == identifier
-                or zone.get("cdn_domain") == identifier
-            ):
-                return zone["id"]
-
-        raise ValueError(f"CDN zone '{identifier}' not found")
+        A name matching more than one is refused rather than resolved to
+        whichever came back first. See mcp_vultr.lookup for why.
+        """
+        return await resolve_id(
+            identifier,
+            vultr_client.list_cdn_zones,
+            ("origin_domain", "cdn_domain"),
+            "CDN zone",
+        )
 
     @mcp.tool()
     async def list_cdn_zones() -> list[dict[str, Any]]:

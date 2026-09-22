@@ -10,6 +10,7 @@ from fastmcp import Context, FastMCP
 
 from .notification_manager import NotificationManager
 from .server import VultrResourceNotFoundError
+from .lookup import resolve_id
 
 
 def create_reserved_ips_mcp(vultr_client) -> FastMCP:
@@ -44,11 +45,6 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
                 return rip["id"]
         raise ValueError(f"Reserved IP {ip_address} not found")
 
-    # Helper function to check if a string looks like a UUID
-    def is_uuid_format(s: str) -> bool:
-        """Check if a string looks like a UUID."""
-        return bool(len(s) == 36 and s.count("-") == 4)
-
     # Helper function to get instance ID from label or hostname
     async def get_instance_id(identifier: str) -> str:
         """
@@ -62,22 +58,15 @@ def create_reserved_ips_mcp(vultr_client) -> FastMCP:
 
         Raises:
             ValueError: If the instance is not found
+
+        A name matching more than one is refused rather than resolved to
+        whichever came back first. See mcp_vultr.lookup for why.
         """
-        # If it looks like a UUID, return it as-is
-        if is_uuid_format(identifier):
-            return identifier
-
-        # Otherwise, search for it by label or hostname
-        instances = await vultr_client.list_instances()
-        for instance in instances:
-            if (
-                instance.get("label") == identifier
-                or instance.get("hostname") == identifier
-            ):
-                return instance["id"]
-
-        raise ValueError(
-            f"Instance '{identifier}' not found (searched by label and hostname)"
+        return await resolve_id(
+            identifier,
+            vultr_client.list_instances,
+            ("label", "hostname"),
+            "Instance",
         )
 
     # Reserved IP resources
