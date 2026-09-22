@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project uses [CalVer](https://calver.org/) (`YYYY.MM.DD`, PEP 440) from 2026.09.12 onward;
 earlier releases followed Semantic Versioning.
 
+## [Unreleased]
+
+### Added
+- **Automatic backup schedules.** `backup_get_schedule` and
+  `backup_set_schedule` read and write the per-instance schedule
+  (`/instances/{id}/backup-schedule`), plus a
+  `backups://schedule/{instance}` resource. Types are `daily`, `weekly`,
+  `monthly`, `daily_alt_even` and `daily_alt_odd`; all times are UTC.
+  The `backups` module previously carried a comment saying no backup
+  management tools were available in the API, which was not correct.
+- `backup_list_all` and `backup_get` expose the existing backup
+  resources as tools as well.
+- `VultrDNSServer.get_backup_schedule()` and `set_backup_schedule()`.
+
+### Changed
+- `backup_set_schedule` **refuses an instance name that matches more
+  than one instance** and names the candidates, rather than acting on
+  whichever comes first. Reported from a decommission where a live and a
+  retired host both answered to the same hostname. The existing
+  instance tools still resolve first-match; this is the pattern they
+  should move to.
+- Schedule arguments are validated before the call: unknown type, hour
+  outside 0-23, day-of-month outside 1-28, and weekly or monthly
+  without its day selector are all rejected locally with a message
+  saying what to pass. `dow` is deliberately not range-checked, because
+  Vultr's own tooling documents it inconsistently (0-6 in the CLI, 1-7
+  elsewhere); read the schedule back to confirm the day.
+
 ## [2026.09.21] - 2026-09-21
 
 ### Fixed

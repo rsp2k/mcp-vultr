@@ -897,6 +897,62 @@ class VultrDNSServer:
         result = await self._make_request("GET", "/instances")
         return result.get("instances", [])
 
+    async def get_backup_schedule(self, instance_id: str) -> dict[str, Any]:
+        """
+        Get the automatic backup schedule for an instance.
+
+        All times are UTC.
+
+        Args:
+            instance_id: The instance ID
+
+        Returns:
+            Schedule object with enabled, type, hour, dow, dom and
+            next_scheduled_time_utc. `enabled` is False when the instance has
+            backups turned off, in which case the other fields are unset.
+        """
+        result = await self._make_request(
+            "GET", f"/instances/{instance_id}/backup-schedule"
+        )
+        return result.get("backup_schedule", result)
+
+    async def set_backup_schedule(
+        self,
+        instance_id: str,
+        schedule_type: str,
+        hour: int | None = None,
+        dow: int | None = None,
+        dom: int | None = None,
+    ) -> dict[str, Any]:
+        """
+        Set the automatic backup schedule for an instance.
+
+        All times are UTC. Enabling backups themselves is a separate concern:
+        use update_instance(backups=True).
+
+        Args:
+            instance_id: The instance ID
+            schedule_type: One of daily, weekly, monthly, daily_alt_even,
+                daily_alt_odd
+            hour: Hour of day, 0-23
+            dow: Day of week, for weekly schedules
+            dom: Day of month, 1-28, for monthly schedules
+
+        Returns:
+            The API response
+        """
+        data: dict[str, Any] = {"type": schedule_type}
+        if hour is not None:
+            data["hour"] = hour
+        if dow is not None:
+            data["dow"] = dow
+        if dom is not None:
+            data["dom"] = dom
+
+        return await self._make_request(
+            "POST", f"/instances/{instance_id}/backup-schedule", data
+        )
+
     async def get_instance(self, instance_id: str) -> dict[str, Any]:
         """
         Get information about a specific instance.
